@@ -43,12 +43,22 @@ class ReplitSidecarSigner implements StorageSigner {
     
     console.log(`[ReplitSidecarSigner] Signing URL for bucket: ${params.bucketName}, object: ${params.objectName}`);
     
+    // Get Replit action token for authentication
+    const actionToken = process.env.REPLIT_ACTION_TOKEN || process.env.REPL_ACTION_TOKEN || process.env.REPL_IDENTITY;
+    
+    if (!actionToken) {
+      throw new Error(
+        "Missing Replit action token. Set REPLIT_ACTION_TOKEN, REPL_ACTION_TOKEN, or ensure REPL_IDENTITY is available."
+      );
+    }
+    
     const response = await fetch(
       `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Action-Token": actionToken,
         },
         body: JSON.stringify(request),
       }
@@ -447,6 +457,25 @@ export class ObjectStorageService {
       method,
       ttlSec,
     });
+  }
+
+  async uploadFromBuffer(
+    objectPath: string,
+    buffer: Buffer,
+    contentType: string
+  ): Promise<string> {
+    const { bucketName, objectName } = parseObjectPath(objectPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    await file.save(buffer, {
+      contentType,
+      metadata: {
+        contentType,
+      },
+    });
+
+    return `https://storage.googleapis.com/${bucketName}/${objectName}`;
   }
 }
 

@@ -401,6 +401,44 @@ const uploadMultiple = multer({
 // Backward compatibility - default to single file upload
 const upload = uploadSingle;
 
+// Multer configuration for EA file uploads (50MB limit, only EA files)
+const uploadEA = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const allowedExt = ['.ex4', '.ex5', '.mq4', '.mq5'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (allowedExt.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only .ex4, .ex5, .mq4, and .mq5 files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+    files: 1
+  }
+});
+
+// Multer configuration for screenshot uploads (5MB limit, only images)
+const uploadScreenshot = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (allowedExt.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1
+  }
+});
+
 export async function registerRoutes(app: Express): Promise<Express> {
   console.log('[REGISTER ROUTES] Starting route registration');
   
@@ -16495,8 +16533,8 @@ export async function registerRoutes(app: Express): Promise<Express> {
   // EA MARKETPLACE FILE UPLOAD ENDPOINTS
   // ============================================================================
   
-  // Endpoint to generate presigned URL for EA file uploads
-  app.post("/api/marketplace/upload-ea", isAuthenticated, marketplaceActionLimiter, async (req, res) => {
+  // Endpoint for direct EA file uploads
+  app.post("/api/marketplace/upload-ea", isAuthenticated, marketplaceActionLimiter, uploadEA.single('file'), async (req, res) => {
     let authenticatedUserId: string;
     
     try {
@@ -16506,58 +16544,39 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
 
     try {
-      const { fileName } = req.body;
-      
-      if (!fileName || typeof fileName !== 'string') {
-        return res.status(400).json({ error: "fileName is required" });
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
       }
 
-      // Validate file extension
-      const allowedExt = ['.ex4', '.ex5', '.mq4', '.mq5'];
-      const ext = path.extname(fileName).toLowerCase();
+      const file = req.file;
+      const ext = path.extname(file.originalname).toLowerCase();
       
-      if (!allowedExt.includes(ext)) {
-        return res.status(415).json({ 
-          error: 'Invalid file type. Only .ex4, .ex5, .mq4, and .mq5 files are allowed' 
-        });
-      }
-
-      // Initialize object storage service
       const objectStorage = new ObjectStorageService();
       
-      // Generate unique EA file path - use dynamic bucket path
       const eaId = crypto.randomUUID();
       const privateDir = objectStorage.getPrivateObjectDir();
       const objectPath = `${privateDir}/marketplace/ea/${eaId}/${eaId}${ext}`;
       
-      console.log("[EA Upload] privateDir:", privateDir);
-      console.log("[EA Upload] objectPath:", objectPath);
-      
-      // Generate presigned PUT URL (valid for 15 minutes)
-      const uploadURL = await objectStorage.signObjectURL({
+      await objectStorage.uploadFromBuffer(
         objectPath,
-        method: "PUT",
-        ttlSec: 900,
-      });
+        file.buffer,
+        file.mimetype
+      );
       
-      console.log("[EA Upload] Generated uploadURL:", uploadURL.substring(0, 100) + "...");
-      
-      // Return the presigned URL and file path
       return res.json({
         success: true,
-        uploadURL,
         filePath: `/objects/marketplace/ea/${eaId}/${eaId}${ext}`,
         contentId: eaId,
       });
       
     } catch (error: any) {
-      console.error("[EA Upload Presign] Error:", error);
-      return res.status(500).json({ error: "Failed to generate upload URL" });
+      console.error("[EA Upload] Error:", error);
+      return res.status(500).json({ error: "Failed to upload EA file" });
     }
   });
 
-  // Endpoint to generate presigned URL for screenshot uploads
-  app.post("/api/marketplace/upload-screenshot", isAuthenticated, marketplaceActionLimiter, async (req, res) => {
+  // Endpoint for direct screenshot uploads
+  app.post("/api/marketplace/upload-screenshot", isAuthenticated, marketplaceActionLimiter, uploadScreenshot.single('file'), async (req, res) => {
     let authenticatedUserId: string;
     
     try {
@@ -16567,59 +16586,41 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
 
     try {
-      const { fileName, eaId } = req.body;
-      
-      if (!fileName || typeof fileName !== 'string') {
-        return res.status(400).json({ error: "fileName is required" });
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
       }
 
-      // Validate file extension
-      const allowedExt = ['.jpg', '.jpeg', '.png', '.webp'];
-      const ext = path.extname(fileName).toLowerCase();
+      const file = req.file;
+      const { eaId } = req.body;
+      const ext = path.extname(file.originalname).toLowerCase();
       
-      if (!allowedExt.includes(ext)) {
-        return res.status(415).json({ 
-          error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed' 
-        });
-      }
-
-      // Initialize object storage service
       const objectStorage = new ObjectStorageService();
       
-      // Generate unique screenshot path - use dynamic bucket path
       const screenshotId = crypto.randomUUID();
       const privateDir = objectStorage.getPrivateObjectDir();
       const objectPath = eaId 
         ? `${privateDir}/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
         : `${privateDir}/marketplace/screenshots/${screenshotId}${ext}`;
       
-      console.log("[Screenshot Upload] privateDir:", privateDir);
-      console.log("[Screenshot Upload] objectPath:", objectPath);
-      
-      // Generate presigned PUT URL (valid for 15 minutes)
-      const uploadURL = await objectStorage.signObjectURL({
+      await objectStorage.uploadFromBuffer(
         objectPath,
-        method: "PUT",
-        ttlSec: 900,
-      });
+        file.buffer,
+        file.mimetype
+      );
       
-      console.log("[Screenshot Upload] Generated uploadURL:", uploadURL.substring(0, 100) + "...");
-      
-      // Return the presigned URL and file path
       const filePath = eaId
         ? `/objects/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
         : `/objects/marketplace/screenshots/${screenshotId}${ext}`;
       
       return res.json({
         success: true,
-        uploadURL,
         filePath,
         screenshotId,
       });
       
     } catch (error: any) {
-      console.error("[Screenshot Upload Presign] Error:", error);
-      return res.status(500).json({ error: "Failed to generate upload URL" });
+      console.error("[Screenshot Upload] Error:", error);
+      return res.status(500).json({ error: "Failed to upload screenshot" });
     }
   });
 
