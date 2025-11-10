@@ -55,15 +55,15 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 // Import default category images - use relative imports for stock images
-const defaultEAImage = "/api/static/stock_images/automated_trading_ro_e6dc98af.jpg";
-const scalpingImage = "/api/static/stock_images/scalping_trading_fas_1d092148.jpg";
-const gridImage = "/api/static/stock_images/grid_trading_strateg_fb77417b.jpg";
-const newsImage = "/api/static/stock_images/news_trading_economi_249f9021.jpg";
-const trendImage = "/api/static/stock_images/trend_following_trad_d6214ad7.jpg";
-const martingaleImage = "/api/static/stock_images/martingale_strategy__e1ae2a64.jpg";
-const chartImage = "/api/static/stock_images/forex_trading_chart__47634fdd.jpg";
-const indicatorImage = "/api/static/stock_images/forex_trading_chart__9d7e0276.jpg";
-const templateImage = "/api/static/stock_images/forex_trading_chart__69ad25ee.jpg";
+const defaultEAImage = "/api/static/stock_images/automated_trading_ro_0d991591.jpg";
+const scalpingImage = "/api/static/stock_images/scalping_trading_fas_de4e64b2.jpg";
+const gridImage = "/api/static/stock_images/grid_trading_strateg_e3a4c62f.jpg";
+const newsImage = "/api/static/stock_images/news_trading_economi_3f79be44.jpg";
+const trendImage = "/api/static/stock_images/trend_following_trad_25625633.jpg";
+const martingaleImage = "/api/static/stock_images/martingale_strategy__f6497cd3.jpg";
+const chartImage = "/api/static/stock_images/forex_trading_chart__fd545134.jpg";
+const indicatorImage = "/api/static/stock_images/forex_trading_chart__749ccb1f.jpg";
+const templateImage = "/api/static/stock_images/forex_trading_chart__24fe7cca.jpg";
 
 interface Content {
   id: string;
