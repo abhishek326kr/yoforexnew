@@ -342,10 +342,37 @@ YoForex uses Google Cloud Storage for file uploads (EA files, screenshots, user 
 ### Automatic Detection
 
 The system automatically detects the environment:
-- **On Replit**: Uses Replit's sidecar endpoint (`http://127.0.0.1:1106`) - no additional configuration needed
+- **On Replit**: Uses Replit's sidecar endpoint (`http://127.0.0.1:1106`) - requires bucket ID
 - **On other servers**: Uses direct Google Cloud Storage SDK with service account credentials
 
 You can override auto-detection with the `STORAGE_MODE` environment variable if needed.
+
+### Replit-Specific Configuration
+
+**CRITICAL:** On Replit, you **MUST** use the bucket **ID** (UUID format), not the display name.
+
+#### Finding Your Bucket ID
+
+1. Open Replit Object Storage panel
+2. Click on your bucket (e.g., "yoforex-files")
+3. Copy the bucket ID from the URL:
+   ```
+   https://replit.com/@username/replname#object-storage/e119-91b8-4694-be75-9590cf2b82f8
+                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                          This is your bucket ID
+   ```
+
+#### Setting PRIVATE_OBJECT_DIR on Replit
+
+```bash
+# ✅ CORRECT (bucket ID format)
+PRIVATE_OBJECT_DIR=/e119-91b8-4694-be75-9590cf2b82f8/content
+
+# ❌ WRONG (display name format - will cause 401 errors)
+PRIVATE_OBJECT_DIR=/yoforex-files/content
+```
+
+**Why:** Replit's sidecar authentication endpoint only authorizes requests using bucket IDs, not display names. Using display names will result in `401 Unauthorized` errors.
 
 ### Setting Up Google Cloud Storage (Non-Replit Deployments)
 
@@ -412,12 +439,15 @@ GOOGLE_APPLICATION_CREDENTIALS=/var/www/yoforex/config/yoforex-gcs-key.json
 GCS_PROJECT_ID=your-gcp-project-id
 
 # Private object directory (bucket name + path)
+# Note: Use bucket NAME (not ID) for non-Replit deployments
 PRIVATE_OBJECT_DIR=/yoforex-files/content
 ```
 
-**Important:** The bucket name is extracted from `PRIVATE_OBJECT_DIR`:
-- Format: `/bucket-name/path`
-- Example: `/yoforex-files/content` uses bucket `yoforex-files`
+**Important:** The bucket identifier is extracted from `PRIVATE_OBJECT_DIR`:
+- **On Replit**: Must use bucket ID format (UUID)
+  - Example: `/e119-91b8-4694-be75-9590cf2b82f8/content`
+- **On other servers**: Use bucket name (display name)
+  - Example: `/yoforex-files/content`
 
 #### Step 4: Set Permissions
 

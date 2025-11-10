@@ -41,6 +41,8 @@ class ReplitSidecarSigner implements StorageSigner {
       expires_at: new Date(Date.now() + params.ttlSec * 1000).toISOString(),
     };
     
+    console.log(`[ReplitSidecarSigner] Signing URL for bucket: ${params.bucketName}, object: ${params.objectName}`);
+    
     const response = await fetch(
       `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
       {
@@ -53,9 +55,21 @@ class ReplitSidecarSigner implements StorageSigner {
     );
     
     if (!response.ok) {
+      const isBucketIdFormat = /^[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(params.bucketName);
+      
+      if (response.status === 401 && !isBucketIdFormat) {
+        throw new Error(
+          `Authentication failed (401) - PRIVATE_OBJECT_DIR must use bucket ID, not display name.\n` +
+          `Current bucket: "${params.bucketName}" (looks like display name)\n` +
+          `Required format: /xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/content\n` +
+          `Fix: Update PRIVATE_OBJECT_DIR in Replit Secrets to use your bucket ID from the Object Storage panel.`
+        );
+      }
+      
       throw new Error(
-        `Failed to sign object URL via Replit sidecar, errorcode: ${response.status}, ` +
-          `make sure you're running on Replit`
+        `Failed to sign object URL via Replit sidecar, errorcode: ${response.status}\n` +
+        `Bucket: ${params.bucketName}, Object: ${params.objectName}\n` +
+        `Make sure PRIVATE_OBJECT_DIR uses bucket ID format (not display name).`
       );
     }
 
@@ -240,9 +254,33 @@ export class ObjectStorageService {
     if (!dir) {
       throw new Error(
         "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var (e.g., /yoforex-files/content)."
+          "tool and set PRIVATE_OBJECT_DIR env var.\n" +
+          "On Replit: Use bucket ID format (e.g., /xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/content)\n" +
+          "On other servers: Use bucket name format (e.g., /your-bucket-name/content)"
       );
     }
+    
+    // Validate bucket ID format on Replit
+    const mode = detectStorageMode();
+    if (mode === 'replit') {
+      const { bucketName } = parseObjectPath(dir);
+      const isBucketIdFormat = /^[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(bucketName);
+      
+      if (!isBucketIdFormat) {
+        console.error(
+          `[ObjectStorage] ERROR: PRIVATE_OBJECT_DIR must use bucket ID on Replit.\n` +
+          `Current value: "${dir}"\n` +
+          `Bucket extracted: "${bucketName}" (invalid - looks like display name)\n` +
+          `Required format: /xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/content\n` +
+          `Fix: Update PRIVATE_OBJECT_DIR in Replit Secrets with your bucket ID from the Object Storage panel.`
+        );
+        throw new Error(
+          `Invalid PRIVATE_OBJECT_DIR: Must use bucket ID (not display name) on Replit.\n` +
+          `Current: "${bucketName}" → Expected: "xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`
+        );
+      }
+    }
+    
     return dir;
   }
 
