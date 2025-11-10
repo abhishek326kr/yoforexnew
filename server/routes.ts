@@ -20709,5 +20709,104 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
 
+  // ========== SMTP Testing Endpoints (Admin Only) ==========
+
+  // GET /api/admin/smtp/status - Check SMTP configuration status
+  app.get("/api/admin/smtp/status", isAdminMiddleware, async (req, res) => {
+    try {
+      const smtpHost = process.env.SMTP_HOST || '';
+      const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+      const smtpUser = process.env.SMTP_USER || '';
+      const smtpPassword = process.env.SMTP_PASSWORD || '';
+      const fromEmail = process.env.SMTP_FROM_EMAIL || '';
+      const fromName = process.env.SMTP_FROM_NAME || 'YoForex';
+
+      const configured = !!(smtpHost && smtpPort && smtpUser && smtpPassword);
+
+      res.json({
+        configured,
+        host: smtpHost || 'Not configured',
+        port: smtpPort,
+        user: smtpUser ? `${smtpUser.substring(0, 3)}***${smtpUser.substring(smtpUser.length - 3)}` : 'Not configured',
+        fromEmail: fromEmail || 'Not configured',
+        fromName: fromName
+      });
+    } catch (error) {
+      console.error('[SMTP Status] Error:', error);
+      res.status(500).json({ error: 'Failed to get SMTP status' });
+    }
+  });
+
+  // POST /api/admin/smtp/test-connection - Test SMTP connection
+  app.post("/api/admin/smtp/test-connection", isAdminMiddleware, async (req, res) => {
+    try {
+      console.log('[SMTP Test] Testing connection...');
+      const result = await emailService.verifyConnection();
+      
+      if (result.success) {
+        console.log('[SMTP Test] Connection successful');
+        res.json(result);
+      } else {
+        console.error('[SMTP Test] Connection failed:', result.details);
+        res.status(500).json(result);
+      }
+    } catch (error: any) {
+      console.error('[SMTP Test] Unexpected error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Unexpected error testing SMTP connection',
+        details: {
+          error: error.message
+        }
+      });
+    }
+  });
+
+  // POST /api/admin/smtp/send-test - Send test email
+  app.post("/api/admin/smtp/send-test", isAdminMiddleware, async (req, res) => {
+    try {
+      const { to, subject, message } = req.body;
+
+      if (!to || typeof to !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Email address is required'
+        });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(to)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid email address format'
+        });
+      }
+
+      console.log(`[SMTP Test] Sending test email to ${to}...`);
+      
+      // Use custom subject if provided, otherwise use default
+      const customMessage = message || subject ? 
+        `${subject ? `Subject: ${subject}\n\n` : ''}${message || ''}` : 
+        undefined;
+
+      const result = await emailService.sendTestEmail(to, customMessage);
+      
+      if (result.success) {
+        console.log(`[SMTP Test] Email sent successfully, messageId: ${result.messageId}`);
+        res.json(result);
+      } else {
+        console.error(`[SMTP Test] Failed to send email:`, result.error);
+        res.status(500).json(result);
+      }
+    } catch (error: any) {
+      console.error('[SMTP Test] Unexpected error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Unexpected error sending test email'
+      });
+    }
+  });
+
   return app;
 }

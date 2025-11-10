@@ -2371,5 +2371,116 @@ export const emailService = {
     };
     
     await this.sendWeeklyActivitySummary(email, username, stats);
+  },
+
+  async sendTestEmail(
+    to: string,
+    customMessage?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const timestamp = new Date().toISOString();
+      const content = `
+        <div style="text-align: center; padding: 20px 0;">
+          <div style="display: inline-block; background: #f0fdf4; border: 2px solid #86efac; border-radius: 12px; padding: 24px; margin: 16px 0;">
+            <h2 style="color: #16a34a; margin: 0 0 12px 0; font-size: 24px;">✅ SMTP Test Successful</h2>
+            <p style="color: #374151; font-size: 16px; line-height: 1.5; margin: 0;">
+              This is a test email from the YoForex email system.
+            </p>
+          </div>
+        </div>
+        
+        ${customMessage ? `
+          <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h3 style="color: #111827; margin: 0 0 12px 0; font-size: 18px;">Test Message</h3>
+            <p style="color: #374151; font-size: 16px; line-height: 1.5; margin: 0;">
+              ${escapeHtml(customMessage)}
+            </p>
+          </div>
+        ` : ''}
+        
+        <div style="background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #111827; margin: 0 0 16px 0; font-size: 18px;">System Information</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; color: #6b7280;">Timestamp:</td>
+              <td style="padding: 8px 0; color: #111827; font-family: monospace; font-size: 14px;">${timestamp}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #6b7280;">System:</td>
+              <td style="padding: 8px 0; color: #111827; font-weight: 600;">YoForex Email Service</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #6b7280;">SMTP Host:</td>
+              <td style="padding: 8px 0; color: #111827; font-weight: 600;">${process.env.SMTP_HOST || 'smtp.hostinger.com'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #6b7280;">From Email:</td>
+              <td style="padding: 8px 0; color: #111827; font-weight: 600;">${process.env.SMTP_FROM_EMAIL || 'Not configured'}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="text-align: center; margin: 24px 0;">
+          <p style="color: #16a34a; font-size: 18px; font-weight: 600; margin: 0;">
+            ✓ Email system is working correctly
+          </p>
+          <p style="color: #6b7280; font-size: 14px; margin: 8px 0 0 0;">
+            You can now send emails to your users with confidence.
+          </p>
+        </div>
+      `;
+
+      const { html } = await createEmailTemplate(content, {
+        recipientEmail: to,
+        templateKey: 'smtp_test',
+        subject: 'YoForex SMTP Test Email'
+      });
+
+      const info = await transporter.sendMail({
+        from: `"${process.env.SMTP_FROM_NAME || 'YoForex'}" <${process.env.SMTP_FROM_EMAIL}>`,
+        to,
+        subject: 'YoForex SMTP Test Email',
+        html
+      });
+
+      console.log(`[EmailService] Test email sent successfully to ${to}, messageId: ${info.messageId}`);
+      
+      return {
+        success: true,
+        messageId: info.messageId
+      };
+    } catch (error: any) {
+      console.error('[EmailService] Failed to send test email:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to send test email'
+      };
+    }
+  },
+
+  async verifyConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+    try {
+      await transporter.verify();
+      return {
+        success: true,
+        message: 'SMTP connection verified successfully',
+        details: {
+          host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+          port: parseInt(process.env.SMTP_PORT || '465'),
+          secure: true,
+          user: process.env.SMTP_USER
+        }
+      };
+    } catch (error: any) {
+      console.error('[EmailService] SMTP verification failed:', error);
+      return {
+        success: false,
+        message: 'SMTP connection failed',
+        details: {
+          error: error.message,
+          code: error.code
+        }
+      };
+    }
   }
 };

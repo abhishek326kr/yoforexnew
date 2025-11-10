@@ -41,9 +41,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash, Send, Megaphone } from "lucide-react";
+import { Plus, Edit, Trash, Send, Megaphone, Mail, CheckCircle2, XCircle, Circle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Announcement = {
   id: number;
@@ -104,6 +105,14 @@ export default function CommunicationsPage() {
     audience: {},
     scheduledAt: "",
   });
+
+  // SMTP state
+  const [testEmail, setTestEmail] = useState("");
+  const [testSubject, setTestSubject] = useState("");
+  const [testMessage, setTestMessage] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [lastTestResult, setLastTestResult] = useState<any>(null);
+  const [lastConnectionTest, setLastConnectionTest] = useState<any>(null);
 
   // Fetch announcements with 10s auto-refresh
   const { data: announcements = [], isLoading: announcementsLoading } = useQuery<Announcement[]>({
@@ -226,6 +235,54 @@ export default function CommunicationsPage() {
     },
   });
 
+  // SMTP queries and mutations
+  const { data: smtpStatus, isLoading: smtpStatusLoading } = useQuery<any>({
+    queryKey: ["/api/admin/smtp/status"],
+    refetchInterval: 30000,
+  });
+
+  const testConnectionMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/smtp/test-connection", {}),
+    onSuccess: (data: any) => {
+      setConnectionStatus(data.success ? 'success' : 'error');
+      setLastConnectionTest(data);
+      toast({
+        title: data.success ? "Connection successful" : "Connection failed",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: (error: any) => {
+      setConnectionStatus('error');
+      setLastConnectionTest({ success: false, message: error.message });
+      toast({ title: "Connection test failed", variant: "destructive" });
+    },
+  });
+
+  const sendTestEmailMutation = useMutation({
+    mutationFn: (data: { to: string; subject?: string; message?: string }) =>
+      apiRequest("POST", "/api/admin/smtp/send-test", data),
+    onSuccess: (data: any) => {
+      setLastTestResult(data);
+      toast({
+        title: data.success ? "Test email sent" : "Send failed",
+        description: data.success 
+          ? `Email sent successfully to ${testEmail}` 
+          : data.error,
+        variant: data.success ? "default" : "destructive",
+      });
+      if (data.success) {
+        setTestEmail("");
+        setTestSubject("");
+        setTestMessage("");
+      }
+    },
+    onError: (error: any) => {
+      setLastTestResult({ success: false, error: error.message });
+      toast({ title: "Failed to send test email", variant: "destructive" });
+    },
+  });
+
   const resetAnnouncementForm = () => {
     setAnnouncementForm({
       title: "",
@@ -313,6 +370,10 @@ export default function CommunicationsPage() {
             </TabsTrigger>
             <TabsTrigger value="campaigns" className="data-[state=active]:bg-gray-700" data-testid="tab-campaigns">
               Email Campaigns
+            </TabsTrigger>
+            <TabsTrigger value="smtp" className="data-[state=active]:bg-gray-700" data-testid="tab-smtp">
+              <Mail className="mr-2 h-4 w-4" />
+              SMTP Settings
             </TabsTrigger>
           </TabsList>
 
@@ -662,6 +723,205 @@ export default function CommunicationsPage() {
                   </TableBody>
                 </Table>
               )}
+            </div>
+          </TabsContent>
+
+          {/* SMTP Settings Tab */}
+          <TabsContent value="smtp" data-testid="tab-content-smtp">
+            <div className="space-y-6">
+              {/* SMTP Status Card */}
+              <Card className="bg-gray-800 border-gray-700" data-testid="card-smtp-status">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Mail className="h-5 w-5" />
+                    SMTP Configuration Status
+                  </CardTitle>
+                  <CardDescription className="text-gray-400">
+                    Current email system configuration and connection status
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {smtpStatusLoading ? (
+                    <div className="text-gray-400">Loading SMTP status...</div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-gray-400 text-sm">Configuration Status</Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            {smtpStatus?.configured ? (
+                              <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-500" />
+                            )}
+                            <span className={`font-semibold ${smtpStatus?.configured ? 'text-green-400' : 'text-red-400'}`}>
+                              {smtpStatus?.configured ? 'Configured' : 'Not Configured'}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-gray-400 text-sm">Connection Status</Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            {connectionStatus === 'success' && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                            {connectionStatus === 'error' && <XCircle className="h-5 w-5 text-red-500" />}
+                            {connectionStatus === 'idle' && <Circle className="h-5 w-5 text-gray-500" />}
+                            <span className={`font-semibold ${
+                              connectionStatus === 'success' ? 'text-green-400' :
+                              connectionStatus === 'error' ? 'text-red-400' :
+                              'text-gray-400'
+                            }`}>
+                              {connectionStatus === 'success' ? 'Connected' :
+                               connectionStatus === 'error' ? 'Failed' :
+                               'Not Tested'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-700">
+                        <div>
+                          <Label className="text-gray-400 text-sm">SMTP Host</Label>
+                          <p className="text-white font-mono text-sm mt-1" data-testid="text-smtp-host">
+                            {smtpStatus?.host || 'Not configured'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-400 text-sm">Port</Label>
+                          <p className="text-white font-mono text-sm mt-1" data-testid="text-smtp-port">
+                            {smtpStatus?.port || 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-400 text-sm">SMTP User</Label>
+                          <p className="text-white font-mono text-sm mt-1" data-testid="text-smtp-user">
+                            {smtpStatus?.user || 'Not configured'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-gray-400 text-sm">From Email</Label>
+                          <p className="text-white font-mono text-sm mt-1" data-testid="text-smtp-from-email">
+                            {smtpStatus?.fromEmail || 'Not configured'}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-gray-400 text-sm">From Name</Label>
+                          <p className="text-white font-mono text-sm mt-1" data-testid="text-smtp-from-name">
+                            {smtpStatus?.fromName || 'YoForex'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {lastConnectionTest && (
+                        <div className={`p-4 rounded-md mt-4 ${lastConnectionTest.success ? 'bg-green-900/20 border border-green-700' : 'bg-red-900/20 border border-red-700'}`}>
+                          <p className={`font-semibold ${lastConnectionTest.success ? 'text-green-400' : 'text-red-400'}`}>
+                            Last Connection Test: {lastConnectionTest.message}
+                          </p>
+                          {lastConnectionTest.details && (
+                            <pre className="text-xs mt-2 text-gray-400 overflow-auto">
+                              {JSON.stringify(lastConnectionTest.details, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      )}
+
+                      <Button
+                        onClick={() => testConnectionMutation.mutate()}
+                        disabled={testConnectionMutation.isPending || !smtpStatus?.configured}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                        data-testid="button-test-connection"
+                      >
+                        {testConnectionMutation.isPending ? 'Testing...' : 'Test Connection'}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Send Test Email Card */}
+              <Card className="bg-gray-800 border-gray-700" data-testid="card-send-test-email">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Send className="h-5 w-5" />
+                    Send Test Email
+                  </CardTitle>
+                  <CardDescription className="text-gray-400">
+                    Send a test email to verify your SMTP configuration
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="test-email" className="text-gray-400">Recipient Email Address</Label>
+                    <Input
+                      id="test-email"
+                      type="email"
+                      value={testEmail}
+                      onChange={(e) => setTestEmail(e.target.value)}
+                      placeholder="recipient@example.com"
+                      className="bg-gray-700 border-gray-600 text-white mt-1"
+                      data-testid="input-test-email"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="test-subject" className="text-gray-400">Subject (Optional)</Label>
+                    <Input
+                      id="test-subject"
+                      value={testSubject}
+                      onChange={(e) => setTestSubject(e.target.value)}
+                      placeholder="Custom subject (default: YoForex SMTP Test Email)"
+                      className="bg-gray-700 border-gray-600 text-white mt-1"
+                      data-testid="input-test-subject"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="test-message" className="text-gray-400">Custom Message (Optional)</Label>
+                    <Textarea
+                      id="test-message"
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      placeholder="Add a custom message to the test email..."
+                      className="bg-gray-700 border-gray-600 text-white min-h-[100px] mt-1"
+                      data-testid="input-test-message"
+                    />
+                  </div>
+
+                  {lastTestResult && (
+                    <div className={`p-4 rounded-md ${lastTestResult.success ? 'bg-green-900/20 border border-green-700' : 'bg-red-900/20 border border-red-700'}`}>
+                      <p className={`font-semibold ${lastTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                        {lastTestResult.success ? '✓ Email sent successfully!' : '✗ Failed to send email'}
+                      </p>
+                      {lastTestResult.messageId && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Message ID: {lastTestResult.messageId}
+                        </p>
+                      )}
+                      {lastTestResult.error && (
+                        <p className="text-xs text-red-400 mt-1">
+                          Error: {lastTestResult.error}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={() => sendTestEmailMutation.mutate({
+                      to: testEmail,
+                      subject: testSubject || undefined,
+                      message: testMessage || undefined
+                    })}
+                    disabled={!testEmail || sendTestEmailMutation.isPending || !smtpStatus?.configured}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    data-testid="button-send-test-email"
+                  >
+                    {sendTestEmailMutation.isPending ? 'Sending...' : 'Send Test Email'}
+                  </Button>
+
+                  <p className="text-xs text-gray-500 text-center">
+                    A professionally formatted test email will be sent using YoForex branding
+                  </p>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>
