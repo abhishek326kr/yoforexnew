@@ -86,32 +86,32 @@ export default function StatsBar({ initialStats }: StatsBarProps) {
 
   return (
     <div className="border-y bg-muted/30">
-      <div className="container max-w-7xl mx-auto px-4 py-1">
+      <div className="container max-w-7xl mx-auto px-4 py-2">
         <div className="flex items-center justify-between">
-          <div className="text-[10px] text-muted-foreground">Platform Statistics</div>
+          <div className="text-xs text-muted-foreground">Platform Statistics</div>
           <RefreshButton 
             onRefresh={async () => { await refetch(); }}
             size="icon"
             variant="ghost"
-            className="h-5 w-5 -mr-1"
+            className="h-6 w-6 -mr-1"
           />
         </div>
-        {/* Ultra-compact grid layout */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2">
+        {/* Compact grid layout */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
           {stats.map((stat) => (
-            <div key={stat.key} className="bg-card/50 hover:bg-card/70 transition-colors rounded-sm px-2 py-1">
-              {/* Ultra-compact inline layout */}
+            <div key={stat.key} className="bg-card/50 hover:bg-card/70 transition-colors rounded-sm px-3 py-2">
+              {/* Compact inline layout */}
               <div className="flex flex-col items-center justify-center text-center">
-                {/* Tiny icon */}
-                <div className="bg-primary/10 dark:bg-primary/20 rounded-sm p-1 flex items-center justify-center">
-                  <stat.icon className="h-3 w-3 text-primary dark:text-primary" />
+                {/* Icon */}
+                <div className="bg-primary/10 dark:bg-primary/20 rounded-sm p-1.5 flex items-center justify-center">
+                  <stat.icon className="h-4 w-4 text-primary dark:text-primary" />
                 </div>
-                {/* Compact value text */}
-                <div className="text-sm font-semibold leading-none mt-1" data-testid={`text-stat-${stat.key}`} suppressHydrationWarning>
+                {/* Value text */}
+                <div className="text-base font-semibold leading-none mt-1.5" data-testid={`text-stat-${stat.key}`} suppressHydrationWarning>
                   {stat.value}
                 </div>
-                {/* Tiny label text */}
-                <div className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5">{stat.label}</div>
+                {/* Label text */}
+                <div className="text-xs text-muted-foreground font-medium leading-tight mt-1">{stat.label}</div>
               </div>
             </div>
           ))}
