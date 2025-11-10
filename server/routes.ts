@@ -16525,9 +16525,10 @@ export async function registerRoutes(app: Express): Promise<Express> {
       // Initialize object storage service
       const objectStorage = new ObjectStorageService();
       
-      // Generate unique EA file path
+      // Generate unique EA file path - use dynamic bucket path
       const eaId = crypto.randomUUID();
-      const objectPath = `/yoforex-files/content/marketplace/ea/${eaId}/${eaId}${ext}`;
+      const privateDir = objectStorage.getPrivateObjectDir();
+      const objectPath = `${privateDir}/marketplace/ea/${eaId}/${eaId}${ext}`;
       
       // Generate presigned PUT URL (valid for 15 minutes)
       const uploadURL = await objectStorage.signObjectURL({
@@ -16580,11 +16581,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
       // Initialize object storage service
       const objectStorage = new ObjectStorageService();
       
-      // Generate unique screenshot path
+      // Generate unique screenshot path - use dynamic bucket path
       const screenshotId = crypto.randomUUID();
+      const privateDir = objectStorage.getPrivateObjectDir();
       const objectPath = eaId 
-        ? `/yoforex-files/content/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
-        : `/yoforex-files/content/marketplace/screenshots/${screenshotId}${ext}`;
+        ? `${privateDir}/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
+        : `${privateDir}/marketplace/screenshots/${screenshotId}${ext}`;
       
       // Generate presigned PUT URL (valid for 15 minutes)
       const uploadURL = await objectStorage.signObjectURL({
