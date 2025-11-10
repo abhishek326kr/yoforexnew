@@ -328,6 +328,181 @@ openssl rand -base64 32
 
 ---
 
+## Object Storage Configuration
+
+YoForex uses Google Cloud Storage for file uploads (EA files, screenshots, user avatars, etc.). The system automatically detects whether it's running on Replit or an external server and uses the appropriate authentication method.
+
+### Storage Modes
+
+| Mode | Platform | Authentication | Auto-Detect |
+|------|----------|----------------|-------------|
+| **replit** | Replit | Sidecar endpoint | ✅ Yes |
+| **gcs** | AWS/VPS/Docker | Service Account | ✅ Yes |
+
+### Automatic Detection
+
+The system automatically detects the environment:
+- **On Replit**: Uses Replit's sidecar endpoint (`http://127.0.0.1:1106`) - no additional configuration needed
+- **On other servers**: Uses direct Google Cloud Storage SDK with service account credentials
+
+You can override auto-detection with the `STORAGE_MODE` environment variable if needed.
+
+### Setting Up Google Cloud Storage (Non-Replit Deployments)
+
+#### Step 1: Create Google Cloud Storage Bucket
+
+1. **Go to Google Cloud Console:**
+   - Navigate to: https://console.cloud.google.com/storage
+   - Select your project or create a new one
+
+2. **Create a new bucket:**
+   ```bash
+   # Using gcloud CLI (or use web console)
+   gcloud storage buckets create gs://yoforex-files \
+     --project=YOUR_PROJECT_ID \
+     --location=us-central1 \
+     --uniform-bucket-level-access
+   ```
+
+3. **Recommended bucket settings:**
+   - **Name**: `yoforex-files` (or your preferred name)
+   - **Location**: Choose region closest to your server
+   - **Storage class**: Standard
+   - **Access control**: Uniform
+
+#### Step 2: Create Service Account
+
+1. **Create service account:**
+   ```bash
+   gcloud iam service-accounts create yoforex-storage \
+     --display-name="YoForex Storage Service Account" \
+     --project=YOUR_PROJECT_ID
+   ```
+
+2. **Grant bucket permissions:**
+   ```bash
+   gcloud storage buckets add-iam-policy-binding gs://yoforex-files \
+     --member="serviceAccount:yoforex-storage@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/storage.objectAdmin"
+   ```
+
+3. **Create and download key:**
+   ```bash
+   gcloud iam service-accounts keys create ~/yoforex-gcs-key.json \
+     --iam-account=yoforex-storage@YOUR_PROJECT_ID.iam.gserviceaccount.com
+   ```
+
+4. **Copy key to your server:**
+   ```bash
+   scp ~/yoforex-gcs-key.json ubuntu@your-server:/var/www/yoforex/config/
+   ```
+
+#### Step 3: Configure Environment Variables
+
+Add these variables to your `.env.production` or environment:
+
+```bash
+# Object Storage Configuration
+STORAGE_MODE=gcs  # Optional - auto-detects, but you can force it
+
+# Path to service account JSON file
+GOOGLE_APPLICATION_CREDENTIALS=/var/www/yoforex/config/yoforex-gcs-key.json
+
+# Google Cloud Project ID
+GCS_PROJECT_ID=your-gcp-project-id
+
+# Private object directory (bucket name + path)
+PRIVATE_OBJECT_DIR=/yoforex-files/content
+```
+
+**Important:** The bucket name is extracted from `PRIVATE_OBJECT_DIR`:
+- Format: `/bucket-name/path`
+- Example: `/yoforex-files/content` uses bucket `yoforex-files`
+
+#### Step 4: Set Permissions
+
+```bash
+# Secure the service account key file
+sudo chown www-data:www-data /var/www/yoforex/config/yoforex-gcs-key.json
+sudo chmod 600 /var/www/yoforex/config/yoforex-gcs-key.json
+```
+
+#### Step 5: Test Configuration
+
+```bash
+# Start your application
+pm2 restart all
+
+# Check logs for storage mode
+pm2 logs | grep "ObjectStorage"
+# Should see: "[ObjectStorage] Auto-detected storage mode: gcs"
+# Or: "[ObjectStorage] Using configured storage mode: gcs"
+
+# Test file upload through the application
+# Navigate to /marketplace/publish and try uploading a file
+```
+
+### Troubleshooting Storage Issues
+
+#### Error: "Could not load the default credentials"
+
+**Cause:** Service account key file not found or not accessible
+
+**Solution:**
+```bash
+# Verify file exists
+ls -la /var/www/yoforex/config/yoforex-gcs-key.json
+
+# Check environment variable
+echo $GOOGLE_APPLICATION_CREDENTIALS
+
+# Verify file permissions
+sudo chmod 600 /var/www/yoforex/config/yoforex-gcs-key.json
+```
+
+#### Error: "Access denied to bucket"
+
+**Cause:** Service account doesn't have proper permissions
+
+**Solution:**
+```bash
+# Grant storage admin role
+gcloud storage buckets add-iam-policy-binding gs://yoforex-files \
+  --member="serviceAccount:yoforex-storage@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+```
+
+#### Error: "Bucket does not exist"
+
+**Cause:** Bucket name mismatch or bucket not created
+
+**Solution:**
+```bash
+# List buckets
+gcloud storage buckets list --project=YOUR_PROJECT_ID
+
+# Verify PRIVATE_OBJECT_DIR matches your bucket name
+# Example: PRIVATE_OBJECT_DIR=/yoforex-files/content
+#          Bucket name should be: yoforex-files
+```
+
+### Cost Optimization
+
+**Free Tier:** Google Cloud Storage offers 5GB free per month
+
+**Typical usage:**
+- EA files: ~1-10 MB each
+- Screenshots: ~100-500 KB each
+- Storage for 1000 EAs: ~5-15 GB
+- Monthly cost (beyond free tier): ~$0.50-$2.00
+
+**Recommendations:**
+- Use Standard storage class for active files
+- Set lifecycle policies to delete old temp files
+- Monitor usage in GCP Console
+
+---
+
 ## SSL/DNS Configuration
 
 ### Nginx Configuration

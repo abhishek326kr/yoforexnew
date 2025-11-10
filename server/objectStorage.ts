@@ -1,5 +1,5 @@
 // Object Storage Service for YoForex EA file uploads
-// Based on Replit Object Storage blueprint (blueprint:javascript_object_storage)
+// Supports both Replit sidecar and direct GCS authentication
 import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
@@ -13,25 +13,6 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-// The object storage client is used to interact with the object storage service.
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
-
 export class ObjectNotFoundError extends Error {
   constructor() {
     super("Object not found");
@@ -40,11 +21,201 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
-// The object storage service is used to interact with the object storage service.
+interface SignURLParams {
+  bucketName: string;
+  objectName: string;
+  method: "GET" | "PUT" | "DELETE" | "HEAD";
+  ttlSec: number;
+}
+
+interface StorageSigner {
+  signURL(params: SignURLParams): Promise<string>;
+}
+
+class ReplitSidecarSigner implements StorageSigner {
+  async signURL(params: SignURLParams): Promise<string> {
+    const request = {
+      bucket_name: params.bucketName,
+      object_name: params.objectName,
+      method: params.method,
+      expires_at: new Date(Date.now() + params.ttlSec * 1000).toISOString(),
+    };
+    
+    const response = await fetch(
+      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(
+        `Failed to sign object URL via Replit sidecar, errorcode: ${response.status}, ` +
+          `make sure you're running on Replit`
+      );
+    }
+
+    const { signed_url: signedURL } = await response.json();
+    return signedURL;
+  }
+}
+
+class DirectGCSSigner implements StorageSigner {
+  private storage: Storage;
+
+  constructor() {
+    const projectId = process.env.GCS_PROJECT_ID;
+    const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+    if (!projectId && !keyFilename) {
+      console.warn(
+        "[ObjectStorage] Warning: Running in GCS mode but credentials not configured. " +
+        "Set GOOGLE_APPLICATION_CREDENTIALS and GCS_PROJECT_ID environment variables."
+      );
+      console.warn(
+        "[ObjectStorage] Falling back to default Google Cloud credentials (Application Default Credentials)."
+      );
+    }
+
+    try {
+      this.storage = new Storage({
+        projectId: projectId || undefined,
+        keyFilename: keyFilename || undefined,
+      });
+    } catch (error: any) {
+      console.error(
+        "[ObjectStorage] Failed to initialize Google Cloud Storage client:",
+        error.message
+      );
+      throw new Error(
+        "Failed to initialize Google Cloud Storage. " +
+        "Ensure GOOGLE_APPLICATION_CREDENTIALS and GCS_PROJECT_ID are set correctly. " +
+        "Error: " + error.message
+      );
+    }
+  }
+
+  async signURL(params: SignURLParams): Promise<string> {
+    const bucket = this.storage.bucket(params.bucketName);
+    const file = bucket.file(params.objectName);
+
+    const actionMap: Record<string, 'read' | 'write' | 'delete'> = {
+      GET: 'read',
+      HEAD: 'read',
+      PUT: 'write',
+      DELETE: 'delete',
+    };
+
+    const [url] = await file.getSignedUrl({
+      version: 'v4',
+      action: actionMap[params.method] || 'read',
+      expires: Date.now() + (params.ttlSec * 1000),
+    });
+
+    return url;
+  }
+}
+
+function detectStorageMode(): 'replit' | 'gcs' {
+  const explicitMode = process.env.STORAGE_MODE?.toLowerCase();
+  
+  if (explicitMode === 'replit' || explicitMode === 'gcs') {
+    console.log(`[ObjectStorage] Using explicit STORAGE_MODE: ${explicitMode}`);
+    return explicitMode;
+  }
+
+  const isReplit = !!(
+    process.env.REPL_ID ||
+    process.env.REPL_SLUG ||
+    process.env.REPLIT_DEPLOYMENT ||
+    process.env.REPLIT_DB_URL
+  );
+
+  const mode = isReplit ? 'replit' : 'gcs';
+  console.log(`[ObjectStorage] Auto-detected storage mode: ${mode} (REPL_ID=${!!process.env.REPL_ID})`);
+  
+  return mode;
+}
+
+function createStorageClient(): Storage {
+  const mode = detectStorageMode();
+
+  if (mode === 'replit') {
+    console.log('[ObjectStorage] Initializing Replit sidecar storage client');
+    return new Storage({
+      credentials: {
+        audience: "replit",
+        subject_token_type: "access_token",
+        token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+        type: "external_account",
+        credential_source: {
+          url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+          format: {
+            type: "json",
+            subject_token_field_name: "access_token",
+          },
+        },
+        universe_domain: "googleapis.com",
+      },
+      projectId: "",
+    });
+  } else {
+    const projectId = process.env.GCS_PROJECT_ID;
+    const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+    if (!projectId || !keyFilename) {
+      console.warn(
+        '[ObjectStorage] GCS mode detected but credentials not configured. ' +
+        'Set GCS_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS environment variables. ' +
+        'Falling back to default credentials.'
+      );
+      return new Storage();
+    }
+
+    console.log('[ObjectStorage] Initializing direct GCS storage client');
+    return new Storage({
+      projectId,
+      keyFilename,
+    });
+  }
+}
+
+export const objectStorageClient = createStorageClient();
+
 export class ObjectStorageService {
+  private signer: StorageSigner | null = null;
+
   constructor() {}
 
-  // Gets the public object search paths.
+  private getStorageSigner(): StorageSigner {
+    if (this.signer) {
+      return this.signer;
+    }
+
+    const mode = detectStorageMode();
+
+    try {
+      if (mode === 'replit') {
+        console.log('[ObjectStorage] Creating ReplitSidecarSigner');
+        this.signer = new ReplitSidecarSigner();
+      } else {
+        console.log('[ObjectStorage] Creating DirectGCSSigner');
+        this.signer = new DirectGCSSigner();
+      }
+    } catch (error: any) {
+      console.error('[ObjectStorage] Failed to initialize signer:', error.message);
+      throw new Error(
+        `Failed to initialize storage signer in ${mode} mode: ${error.message}`
+      );
+    }
+
+    return this.signer;
+  }
+
   getPublicObjectSearchPaths(): Array<string> {
     const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
     const paths = Array.from(
@@ -64,7 +235,6 @@ export class ObjectStorageService {
     return paths;
   }
 
-  // Gets the private object directory.
   getPrivateObjectDir(): string {
     const dir = process.env.PRIVATE_OBJECT_DIR || "";
     if (!dir) {
@@ -76,7 +246,6 @@ export class ObjectStorageService {
     return dir;
   }
 
-  // Search for a public object from the search paths.
   async searchPublicObject(filePath: string): Promise<File | null> {
     const searchPaths = this.getPublicObjectSearchPaths();
     if (searchPaths.length === 0) {
@@ -86,12 +255,10 @@ export class ObjectStorageService {
     for (const searchPath of searchPaths) {
       const fullPath = `${searchPath}/${filePath}`;
 
-      // Full path format: /<bucket_name>/<object_name>
       const { bucketName, objectName } = parseObjectPath(fullPath);
       const bucket = objectStorageClient.bucket(bucketName);
       const file = bucket.file(objectName);
 
-      // Check if file exists
       const [exists] = await file.exists();
       if (exists) {
         return file;
@@ -101,15 +268,12 @@ export class ObjectStorageService {
     return null;
   }
 
-  // Downloads an object to the response.
   async downloadObject(file: File, res: Response, cacheTtlSec: number = 3600) {
     try {
-      // Get file metadata
       const [metadata] = await file.getMetadata();
-      // Get the ACL policy for the object.
       const aclPolicy = await getObjectAclPolicy(file);
       const isPublic = aclPolicy?.visibility === "public";
-      // Set appropriate headers
+      
       res.set({
         "Content-Type": metadata.contentType || "application/octet-stream",
         "Content-Length": metadata.size,
@@ -118,7 +282,6 @@ export class ObjectStorageService {
         }, max-age=${cacheTtlSec}`,
       });
 
-      // Stream the file to the response
       const stream = file.createReadStream();
 
       stream.on("error", (err) => {
@@ -137,14 +300,12 @@ export class ObjectStorageService {
     }
   }
 
-  // Gets the upload URL for an object entity.
   async getObjectEntityUploadURL(): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
 
     const objectId = randomUUID();
     const fullPath = `${privateObjectDir}/uploads/${objectId}`;
 
-    // Sign URL for PUT method with TTL (15 minutes)
     return this.signObjectURL({
       objectPath: fullPath,
       method: "PUT",
@@ -152,7 +313,6 @@ export class ObjectStorageService {
     });
   }
 
-  // Gets the object entity file from the object path.
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
@@ -184,7 +344,6 @@ export class ObjectStorageService {
       return rawPath;
     }
 
-    // Extract the path from the URL by removing query parameters and domain
     const url = new URL(rawPath);
     const rawObjectPath = url.pathname;
 
@@ -197,12 +356,10 @@ export class ObjectStorageService {
       return rawObjectPath;
     }
 
-    // Extract the entity ID from the path
     const entityId = rawObjectPath.slice(objectEntityDir.length);
     return `/objects/${entityId}`;
   }
 
-  // Tries to set the ACL policy for the object entity and return the normalized path.
   async trySetObjectEntityAclPolicy(
     rawPath: string,
     aclPolicy: ObjectAclPolicy
@@ -217,7 +374,6 @@ export class ObjectStorageService {
     return normalizedPath;
   }
 
-  // Checks if the user can access the object entity.
   async canAccessObjectEntity({
     userId,
     objectFile,
@@ -234,7 +390,6 @@ export class ObjectStorageService {
     });
   }
 
-  // Generate a presigned URL for uploading or downloading objects
   async signObjectURL({
     objectPath,
     method,
@@ -246,37 +401,17 @@ export class ObjectStorageService {
   }): Promise<string> {
     const { bucketName, objectName } = parseObjectPath(objectPath);
     
-    const request = {
-      bucket_name: bucketName,
-      object_name: objectName,
+    const signer = this.getStorageSigner();
+    
+    return signer.signURL({
+      bucketName,
+      objectName,
       method,
-      expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
-    };
-    
-    const response = await fetch(
-      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error(
-        `Failed to sign object URL, errorcode: ${response.status}, ` +
-          `make sure you're running on Replit`
-      );
-    }
-
-    const { signed_url: signedURL } = await response.json();
-    return signedURL;
+      ttlSec,
+    });
   }
 }
 
-// Helper function to parse object storage paths into bucket and object names
 export function parseObjectPath(path: string): {
   bucketName: string;
   objectName: string;
