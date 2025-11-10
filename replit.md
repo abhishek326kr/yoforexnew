@@ -132,3 +132,33 @@ YoForex employs a hybrid frontend built with Next.js and a robust Express.js bac
 - **Next.js 16:** React framework.
 - **esbuild:** Express API bundling.
 - **Docker:** Containerization.
+
+## Recent Changes
+
+### November 10, 2025 - TipTap SSR Hydration Error Fixed
+**Issue:** TipTap editor on `/discussions/new` page was causing React error #185 due to SSR hydration mismatch. TipTap's `useEditor` hook was being initialized during server-side rendering, even with `immediatelyRender: false` set.
+
+**Root Cause:** Next.js App Router runs components on both server and client. TipTap detected SSR execution and threw error: "Tiptap Error: SSR has been detected, please set `immediatelyRender` explicitly to `false` to avoid hydration mismatches."
+
+**Solution Implemented:**
+1. Added `isMounted` state flag in `app/discussions/new/EnhancedThreadComposeClient.tsx`
+2. `isMounted` starts as `false`, set to `true` in `useEffect` (client-side only)
+3. Made `useEditor` conditional: returns `undefined` during SSR, full config object on client mount
+4. Existing `EditorContent` conditional rendering handles null/undefined editor gracefully
+
+**Files Modified:**
+- `app/discussions/new/EnhancedThreadComposeClient.tsx`: Added SSR guard pattern for TipTap editor
+
+**Testing:**
+- ✅ Page loads without TipTap SSR errors
+- ✅ No React error #185
+- ✅ Only expected 401 authentication error for unauthenticated users
+- ✅ Architect reviewed and approved (PASS)
+
+**Pattern for Future Use:**
+This `isMounted` pattern should be used for any client-only libraries in Next.js App Router:
+```tsx
+const [isMounted, setIsMounted] = useState(false);
+useEffect(() => { setIsMounted(true); }, []);
+const editor = useEditor(isMounted ? { /* config */ } : undefined);
+```
