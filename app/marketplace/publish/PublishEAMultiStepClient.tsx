@@ -673,7 +673,7 @@ export default function PublishEAMultiStepClient() {
       
       // Redirect to the published EA page
       setTimeout(() => {
-        router.push(`/ea/${data.slug || data.id}`);
+        router.push(`/ea/${data.content?.slug || data.content?.id}`);
       }, 1500);
     },
     onError: (error: any) => {
