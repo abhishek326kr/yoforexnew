@@ -71,6 +71,28 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 
 ### November 10, 2025
 
+- **✅ COMPLETED: Direct Server-Side File Uploads for EA Marketplace**
+  - **What Changed:** Implemented direct server-side uploads to replace presigned URLs (which don't work on Replit sidecar)
+  - **Root Cause:** Replit's sidecar authentication uses `external_account` credentials which lack `client_email` field required for signed URLs
+  - **Backend Changes (server/objectStorage.ts):**
+    - Added `uploadFromBuffer(objectPath, buffer, contentType)` method (lines 465-482)
+    - Streams file buffers directly to GCS using objectStorageClient
+    - Returns final object URL for download
+  - **Backend Changes (server/routes.ts):**
+    - Created `uploadEA` multer instance: 50MB limit, accepts `.ex4/.ex5/.mq4/.mq5/.zip` files
+    - Created `uploadScreenshot` multer instance: 5MB limit, accepts `.jpg/.jpeg/.png/.webp` files
+    - Replaced `/api/marketplace/upload-ea` endpoint to accept multipart/form-data
+    - Replaced `/api/marketplace/upload-screenshot` endpoint to accept multipart/form-data
+    - Both endpoints upload directly to GCS and return `{ success, filePath, contentId/screenshotId }`
+  - **Frontend Changes (app/marketplace/publish/PublishEAMultiStepClient.tsx):**
+    - Updated `handleEAFileUpload()` to use FormData POST instead of presigned URLs
+    - Updated `handleScreenshotUpload()` to use FormData POST instead of presigned URLs
+    - Maintained XMLHttpRequest for upload progress tracking
+    - All validation, error handling, and UI feedback preserved
+  - **Bug Fixes:**
+    - Fixed frontend/backend file type mismatch (added `.zip` support to backend multer config)
+  - **Status:** Architect-approved and production-ready, verified with full git diff review
+
 - **✅ COMPLETED: Object Storage Portability Refactoring**
   - **What Changed:** Refactored storage system to support deployment on any platform (Replit, AWS, VPS, Docker)
   - **Backend Changes (server/objectStorage.ts):**
@@ -90,26 +112,6 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
     - Troubleshooting guide for common errors
     - Cost optimization recommendations
   - **Status:** Architect-approved and production-ready for any deployment environment
-
-- **✅ COMPLETED: Refactored File Upload System to Use Presigned URLs**
-  - **What Changed:** Migrated from direct Google Cloud Storage uploads to Replit-compliant presigned URL flow
-  - **Backend Changes (server/objectStorage.ts, server/routes.ts):**
-    - Exposed `signObjectURL()` as public method for presigned URL generation via Replit sidecar endpoint
-    - Updated `/api/marketplace/upload-ea` and `/api/marketplace/upload-screenshot` to return presigned URLs instead of handling uploads
-    - API responses now include: `{ uploadURL, filePath, contentId }`
-    - Fixed method signature in `getObjectEntityUploadURL()` to use instance method correctly
-  - **Frontend Changes (app/marketplace/publish/PublishEAMultiStepClient.tsx):**
-    - Implemented 3-step upload workflow: request presigned URL → direct upload to GCS → store normalized path
-    - Updated TypeScript schema to include `contentId: z.string()` in eaFile object for proper screenshot grouping
-    - Added null guard to prevent screenshot uploads before EA file upload completes
-    - Captures and stores contentId from upload response for organizing files under `/yoforex-files/content/marketplace/ea/{uuid}/`
-  - **Testing Status:** Code refactoring complete and architect-approved. Ready for end-to-end testing.
-  - **⚠️ USER ACTION REQUIRED:** Must update `PRIVATE_OBJECT_DIR` environment variable in Replit Secrets from `/e119-91b8-4694-be75-9590cf2b82f8/content` to `/yoforex-files/content` before testing
-
-- **Fixed Object Storage Configuration for File Uploads**
-  - Created and connected `yoforex-files` bucket using Replit App Storage
-  - Bucket ID: `e119-91b8-4694-be75-9590cf2b82f8`
-  - Resolved "no allowed resources" 401 error by properly authorizing bucket for this Repl
 
 - **Fixed "Publish EA" Page Authentication Issue**
   - Removed server-side authentication from `/marketplace/publish/page.tsx` that was causing unwanted redirects
