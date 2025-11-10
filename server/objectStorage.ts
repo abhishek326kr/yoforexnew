@@ -34,57 +34,34 @@ interface StorageSigner {
 
 class ReplitSidecarSigner implements StorageSigner {
   async signURL(params: SignURLParams): Promise<string> {
-    const request = {
-      bucket_name: params.bucketName,
-      object_name: params.objectName,
-      method: params.method,
-      expires_at: new Date(Date.now() + params.ttlSec * 1000).toISOString(),
-    };
+    console.log(`[ReplitSidecarSigner] Signing URL via Storage SDK for bucket: ${params.bucketName}, object: ${params.objectName}`);
     
-    console.log(`[ReplitSidecarSigner] Signing URL for bucket: ${params.bucketName}, object: ${params.objectName}`);
-    
-    // Get Replit action token for authentication
-    const actionToken = process.env.REPLIT_ACTION_TOKEN || process.env.REPL_ACTION_TOKEN || process.env.REPL_IDENTITY;
-    
-    if (!actionToken) {
-      throw new Error(
-        "Missing Replit action token. Set REPLIT_ACTION_TOKEN, REPL_ACTION_TOKEN, or ensure REPL_IDENTITY is available."
-      );
-    }
-    
-    const response = await fetch(
-      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Action-Token": actionToken,
-        },
-        body: JSON.stringify(request),
-      }
-    );
-    
-    if (!response.ok) {
-      const isBucketIdFormat = /^[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(params.bucketName);
-      
-      if (response.status === 401 && !isBucketIdFormat) {
-        throw new Error(
-          `Authentication failed (401) - PRIVATE_OBJECT_DIR must use bucket ID, not display name.\n` +
-          `Current bucket: "${params.bucketName}" (looks like display name)\n` +
-          `Required format: /xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/content\n` +
-          `Fix: Update PRIVATE_OBJECT_DIR in Replit Secrets to use your bucket ID from the Object Storage panel.`
-        );
-      }
-      
-      throw new Error(
-        `Failed to sign object URL via Replit sidecar, errorcode: ${response.status}\n` +
-        `Bucket: ${params.bucketName}, Object: ${params.objectName}\n` +
-        `Make sure PRIVATE_OBJECT_DIR uses bucket ID format (not display name).`
-      );
-    }
+    // Access objectStorageClient lazily (it's created later in the module)
+    const bucket = objectStorageClient.bucket(params.bucketName);
+    const file = bucket.file(params.objectName);
 
-    const { signed_url: signedURL } = await response.json();
-    return signedURL;
+    const actionMap: Record<string, 'read' | 'write' | 'delete'> = {
+      GET: 'read',
+      HEAD: 'read',
+      PUT: 'write',
+      DELETE: 'delete',
+    };
+
+    try {
+      const [url] = await file.getSignedUrl({
+        version: 'v4',
+        action: actionMap[params.method] || 'read',
+        expires: Date.now() + (params.ttlSec * 1000),
+      });
+
+      return url;
+    } catch (error: any) {
+      console.error('[ReplitSidecarSigner] Error signing URL:', error.message);
+      throw new Error(
+        `Failed to sign URL via Replit sidecar: ${error.message}\n` +
+        `Bucket: ${params.bucketName}, Object: ${params.objectName}`
+      );
+    }
   }
 }
 
