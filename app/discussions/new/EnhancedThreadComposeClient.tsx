@@ -6,12 +6,21 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
-import TiptapUnderline from '@tiptap/extension-underline';
-import Placeholder from '@tiptap/extension-placeholder';
+import dynamic from 'next/dynamic';
 import DOMPurify from 'isomorphic-dompurify';
+
+// Dynamically import TipTap editor with SSR disabled to prevent hydration errors
+const RichTextEditorClient = dynamic(
+  () => import('./RichTextEditorClient').then(mod => ({ default: mod.RichTextEditorClient })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center min-h-[400px] border rounded-lg bg-muted/20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+);
 import type { ForumCategory } from "@shared/schema";
 import Header from "@/components/Header";
 import EnhancedFooter from "@/components/EnhancedFooter";
@@ -73,14 +82,6 @@ import {
   Send,
   Hash,
   Clock,
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  List,
-  ListOrdered,
-  Heading1,
-  Heading2,
-  ImageIcon,
   Link2,
   FileText,
   File,
@@ -315,193 +316,6 @@ function ChipSelector({
   );
 }
 
-// Enhanced formatting toolbar
-function FormattingToolbar({ 
-  editor, 
-  isUploadingImage, 
-  onImageUpload 
-}: { 
-  editor: any;
-  isUploadingImage: boolean;
-  onImageUpload: () => void;
-}) {
-  if (!editor) return null;
-
-  const buttonClass = "relative h-9 w-9 p-0 transition-all duration-200";
-  const activeClass = "bg-primary text-primary-foreground shadow-md scale-105";
-
-  return (
-    <div className="flex items-center gap-0.5 p-2 border-b bg-gradient-to-r from-muted/30 to-muted/10 rounded-t-lg">
-      <TooltipProvider>
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('bold') ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                className={cn(buttonClass, editor.isActive('bold') && activeClass)}
-                data-testid="button-bold"
-              >
-                <Bold className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Bold (Ctrl+B)</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('italic') ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={cn(buttonClass, editor.isActive('italic') && activeClass)}
-                data-testid="button-italic"
-              >
-                <Italic className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Italic (Ctrl+I)</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Temporarily comment out Underline button to fix duplicate extension issue
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('underline') ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleUnderline().run()}
-                className={cn(buttonClass, editor.isActive('underline') && activeClass)}
-                data-testid="button-underline"
-              >
-                <UnderlineIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Underline (Ctrl+U)</p>
-            </TooltipContent>
-          </Tooltip>
-          */}
-        </div>
-      </TooltipProvider>
-      
-      <Separator orientation="vertical" className="h-6 mx-2" />
-      
-      <TooltipProvider>
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('heading', { level: 1 }) ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                className={cn(buttonClass, editor.isActive('heading', { level: 1 }) && activeClass)}
-                data-testid="button-h1"
-              >
-                <Heading1 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Heading 1</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('heading', { level: 2 }) ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={cn(buttonClass, editor.isActive('heading', { level: 2 }) && activeClass)}
-                data-testid="button-h2"
-              >
-                <Heading2 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Heading 2</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </TooltipProvider>
-      
-      <Separator orientation="vertical" className="h-6 mx-2" />
-      
-      <TooltipProvider>
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('bulletList') ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={cn(buttonClass, editor.isActive('bulletList') && activeClass)}
-                data-testid="button-bullet-list"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Bullet List</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={editor.isActive('orderedList') ? 'default' : 'ghost'}
-                onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                className={cn(buttonClass, editor.isActive('orderedList') && activeClass)}
-                data-testid="button-ordered-list"
-              >
-                <ListOrdered className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Numbered List</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </TooltipProvider>
-      
-      <div className="ml-auto">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={onImageUpload}
-          disabled={isUploadingImage}
-          className="h-9 px-4 bg-primary/10 hover:bg-primary/20 font-medium transition-all hover:scale-105"
-          data-testid="button-insert-image"
-        >
-          {isUploadingImage ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Uploading...
-            </>
-          ) : (
-            <>
-              <ImageIcon className="h-4 w-4 mr-2" />
-              Insert Image
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 // Enhanced file attachment component
 function FileAttachmentSection({ 
@@ -910,22 +724,12 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [quickStartMode, setQuickStartMode] = useState(true);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [seoData, setSeoData] = useState<SEOData | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
-  
-  // Ref to store editor instance after creation
-  const editorRef = useRef<any>(null);
   
   // Pre-select category from URL param
   const categoryParam = searchParams?.get("category") || "";
-  
-  // Set mounted flag on client-side only
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
   
   // Ensure categories is always an array
   const safeCategories = Array.isArray(categories) ? categories : [];
@@ -982,178 +786,6 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
   const hashtagsList = hashtags || [];
   const threadTypeValue = threadType || "discussion";
 
-  // Image upload handler - moved before useEditor to avoid initialization error
-  const handleImageUpload = async (file: File, editorInstance?: any) => {
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid file type",
-        description: "Please select an image file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Images must be less than 5MB",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('files', file);
-
-    try {
-      setIsUploadingImage(true);
-      
-      const res = await fetch("/api/upload/simple", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const imageUrl = data.urls?.[0];
-        if (imageUrl && editorInstance) {
-          editorInstance.chain()
-            .focus()
-            .setImage({ 
-              src: imageUrl,
-              alt: file.name,
-              title: file.name,
-            })
-            .run();
-          toast({
-            title: "Image uploaded!",
-            description: "Image inserted at cursor position",
-          });
-        } else {
-          throw new Error("No image URL returned");
-        }
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Upload failed with status ${res.status}`);
-      }
-    } catch (error) {
-      console.error('Image upload failed:', error);
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Could not upload image. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploadingImage(false);
-    }
-  };
-
-  // Initialize TipTap editor with persistent content (client-side only)
-  const editor = useEditor(
-    isMounted ? {
-      immediatelyRender: false,
-      extensions: [
-        StarterKit.configure({
-          heading: { levels: [1, 2, 3] },
-          // Disable any conflicting extensions
-          dropcursor: false,
-          gapcursor: false,
-        }),
-        // Temporarily commenting out Underline to fix duplicate extension issue
-        // TiptapUnderline,
-        Image.configure({
-          inline: true,
-          allowBase64: true,
-          HTMLAttributes: {
-            class: 'tiptap-image max-w-full h-auto rounded-lg my-4 mx-auto block cursor-move hover:shadow-lg transition-shadow',
-            style: 'max-height: 500px; object-fit: contain;',
-            loading: 'lazy',
-          },
-        }),
-        Placeholder.configure({
-          placeholder: 'Start writing your amazing content...',
-          emptyEditorClass: 'is-editor-empty',
-        }),
-      ],
-      content: contentHtmlValue || '',
-      editorProps: {
-        attributes: {
-          class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4',
-        },
-      handleDrop: (view, event, slice, moved) => {
-        if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
-          const files = Array.from(event.dataTransfer.files);
-          const imageFiles = files.filter(file => file.type.startsWith('image/'));
-          
-          if (imageFiles.length > 0) {
-            event.preventDefault();
-            setIsDragging(false);
-            
-            // Use the editorRef after it's initialized
-            imageFiles.forEach(async (file) => {
-              // Use editorRef to access the editor
-              if (editorRef.current) {
-                await handleImageUpload(file, editorRef.current);
-              }
-            });
-            
-            return true;
-          }
-        }
-        return false;
-      },
-      handleDOMEvents: {
-        dragover: (view, event) => {
-          event.preventDefault();
-          if (!isDragging && event.dataTransfer?.types.includes('Files')) {
-            setIsDragging(true);
-          }
-          return false;
-        },
-        dragleave: (view, event) => {
-          if (isDragging) {
-            const rect = view.dom.getBoundingClientRect();
-            if (
-              event.clientX <= rect.left ||
-              event.clientX >= rect.right ||
-              event.clientY <= rect.top ||
-              event.clientY >= rect.bottom
-            ) {
-              setIsDragging(false);
-            }
-          }
-          return false;
-        },
-        drop: () => {
-          setIsDragging(false);
-          return false;
-        },
-        paste: (view, event) => {
-          const items = event.clipboardData?.items;
-          if (items) {
-            for (const item of Array.from(items)) {
-              if (item.type.startsWith('image/')) {
-                event.preventDefault();
-                const file = item.getAsFile();
-                if (file) {
-                  // Use editorRef to access the editor
-                  if (editorRef.current) {
-                    // Handle the async upload without awaiting it
-                    handleImageUpload(file, editorRef.current);
-                  }
-                }
-                return true;
-              }
-            }
-          }
-          return false;
-        },
-      },
-    },
-  } : undefined  // Return undefined during SSR to prevent TipTap SSR error
-);
-  
   // Validation helpers - use form values for proper reactivity
   const bodyTextLength = bodyText?.length || 0;
   
@@ -1162,131 +794,10 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
     categorySlug && 
     bodyTextLength >= 20; // Match schema minimum
 
-  const isFormValid = canProceedStep1 && editor !== null;
+  const isFormValid = canProceedStep1;
   
-  // Update form when editor content changes and set editorRef
-  // Extract setValue as a stable reference
+  // Extract setValue as a stable reference for RichTextEditorClient
   const { setValue } = form;
-  
-  useEffect(() => {
-    if (editor) {
-      // Store editor instance in ref
-      editorRef.current = editor;
-      
-      const updateContent = () => {
-        // Set both plain text and HTML content
-        setValue("body", editor.getText()); // Plain text for backend
-        setValue("contentHtml", editor.getHTML()); // Rich HTML for display
-      };
-      editor.on('update', updateContent);
-      return () => {
-        editor.off('update', updateContent);
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor]); // Only depend on editor, setValue is stable from react-hook-form
-
-  // Create a ref for the hidden file input
-  const imageInputRef = useRef<HTMLInputElement>(null);
-
-  // Trigger file picker for image upload - with improved error handling and logging
-  const triggerImageUpload = () => {
-    console.log('[Image Upload] Button clicked, triggering file picker...');
-    console.log('[Image Upload] imageInputRef.current exists:', !!imageInputRef.current);
-    
-    // First try using the persistent hidden input
-    if (imageInputRef.current) {
-      console.log('[Image Upload] Using hidden input ref to trigger file picker');
-      
-      try {
-        // Ensure the input is properly configured before clicking
-        imageInputRef.current.type = 'file';
-        imageInputRef.current.accept = 'image/*';
-        
-        // Test that we can trigger the click
-        console.log('[Image Upload] About to click hidden input');
-        imageInputRef.current.click();
-        console.log('[Image Upload] Hidden input clicked successfully');
-        
-        // Verify focus moved to input (for debugging)
-        setTimeout(() => {
-          console.log('[Image Upload] Current active element:', document.activeElement);
-        }, 100);
-      } catch (error) {
-        console.error('[Image Upload] Error clicking hidden input:', error);
-        
-        // Fallback to temporary input
-        console.log('[Image Upload] Falling back to temporary input method');
-        createTemporaryFileInput();
-      }
-    } else {
-      // Fallback: create temporary input if ref is not available
-      console.log('[Image Upload] Hidden input ref not available, creating temporary input');
-      createTemporaryFileInput();
-    }
-  };
-  
-  // Helper function to create temporary file input
-  const createTemporaryFileInput = () => {
-    console.log('[Image Upload] Creating temporary input element');
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file && editor) {
-        console.log('[Image Upload] File selected via temporary input:', file.name);
-        await handleImageUpload(file, editor);
-      }
-    };
-    
-    try {
-      input.click();
-      console.log('[Image Upload] Temporary input clicked successfully');
-    } catch (error) {
-      console.error('[Image Upload] Error clicking temporary input:', error);
-      toast({
-        title: "Failed to open file picker",
-        description: "Please try again or drag and drop an image instead",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle image file selection with enhanced logging
-  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('[Image Upload] handleImageFileSelect triggered');
-    const file = e.target.files?.[0];
-    
-    if (!file) {
-      console.log('[Image Upload] No file selected');
-      return;
-    }
-    
-    console.log('[Image Upload] File selected:', {
-      name: file.name,
-      size: file.size,
-      type: file.type
-    });
-    
-    if (!editor) {
-      console.error('[Image Upload] Editor not initialized yet');
-      toast({
-        title: "Editor not ready",
-        description: "Please wait for the editor to load and try again",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    console.log('[Image Upload] Processing file:', file.name);
-    await handleImageUpload(file, editor);
-    
-    // Reset the input value to allow selecting the same file again
-    e.target.value = '';
-    console.log('[Image Upload] Input value reset for reuse');
-  };
 
   // Hashtag management
   const addHashtag = () => {
@@ -1525,59 +1036,30 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                               <BookOpen className="h-4 w-4" />
                               Your story or question
                             </Label>
-                            <div 
-                              className={cn(
-                                "border-2 rounded-xl overflow-hidden transition-all",
-                                isDragging && "border-primary shadow-lg ring-4 ring-primary/10"
-                              )}
-                            >
-                              <FormattingToolbar 
-                                editor={editor} 
-                                isUploadingImage={isUploadingImage}
-                                onImageUpload={triggerImageUpload}
-                              />
-                              <div className="relative">
-                                {editor ? (
-                                  <EditorContent 
-                                    editor={editor} 
-                                    className="min-h-[300px]"
-                                  />
-                                ) : (
-                                  <div className="min-h-[300px] p-4 flex items-center justify-center text-muted-foreground">
-                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                    Initializing editor...
-                                  </div>
+                            <RichTextEditorClient
+                              initialContent={contentHtmlValue}
+                              onUpdate={(html, text) => {
+                                setValue("contentHtml", html);
+                                setValue("body", text);
+                              }}
+                              isDragging={isDragging}
+                              onDragStateChange={setIsDragging}
+                            />
+                            <div className="flex justify-between text-xs">
+                              <span className={cn(
+                                "transition-colors",
+                                bodyTextLength < 150 ? "text-red-500" : "text-green-500"
+                              )}>
+                                <span>{bodyTextLength}</span>
+                                <span> characters</span>
+                                {bodyTextLength >= 150 && (
+                                  <CheckCircle className="inline h-3 w-3 ml-1" />
                                 )}
-                                {isDragging && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-primary/10 backdrop-blur-sm pointer-events-none">
-                                    <div className="text-center p-6 bg-background/90 rounded-lg border-2 border-dashed border-primary">
-                                      <Upload className="h-12 w-12 mx-auto mb-2 text-primary animate-bounce" />
-                                      <p className="text-lg font-semibold text-primary">Drop images here</p>
-                                      <p className="text-sm text-muted-foreground mt-1">
-                                        Images will be uploaded and inserted at cursor
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
+                              </span>
+                              <span className="text-muted-foreground">
+                                💡 Drag & drop or paste images directly
+                              </span>
                             </div>
-                            {editor && (
-                              <div className="flex justify-between text-xs">
-                                <span className={cn(
-                                  "transition-colors",
-                                  editor.getText().length < 150 ? "text-red-500" : "text-green-500"
-                                )}>
-                                  <span>{editor.getText().length}</span>
-                                  <span> characters</span>
-                                  {editor.getText().length >= 150 && (
-                                    <CheckCircle className="inline h-3 w-3 ml-1" />
-                                  )}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  💡 Drag & drop or paste images directly
-                                </span>
-                              </div>
-                            )}
                           </div>
 
                           {/* Advanced Options */}
@@ -1663,7 +1145,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                       {/* SEO Optimization Section */}
                       <AutoSEOPanel
                         title={title || ""}
-                        body={editor?.getText() || ""}
+                        body={bodyText || ""}
                         imageUrls={[]}
                         categories={categories.map(c => c.slug)}
                         onSEOUpdate={(data) => setSeoData(data)}
@@ -1678,7 +1160,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                   )}
 
                   {/* STEP 3: Preview & Submit */}
-                  {currentStep === 3 && editor && (
+                  {currentStep === 3 && (
                     <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2">
                       <Card className="border-2 shadow-lg">
                         <CardHeader>
@@ -1704,7 +1186,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                             <div 
                               className="prose prose-sm dark:prose-invert max-w-none"
                               dangerouslySetInnerHTML={{ 
-                                __html: DOMPurify.sanitize(editor.getHTML())
+                                __html: DOMPurify.sanitize(contentHtmlValue)
                               }}
                             />
                             
@@ -1843,15 +1325,6 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                       </div>
                     </div>
                   </div>
-                  {/* Hidden file input for image upload */}
-                  <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileSelect}
-                    style={{ display: 'none' }}
-                    aria-hidden="true"
-                  />
                 </form>
               </Form>
             </div>
