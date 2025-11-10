@@ -175,3 +175,25 @@ const ClientComponent = dynamic(
 ```
 
 **CRITICAL:** The `isMounted` pattern does NOT prevent hook execution during SSR. Only dynamic imports with `{ ssr: false }` can completely isolate client-only code from server-side rendering.
+
+### November 10, 2025 - Infinite Loop Error in CoinBalanceWidget Fixed
+**Issue:** "Maximum update depth exceeded" error occurring when clicking "Next" button on `/discussions/new` page. The error was caused by nested TooltipProvider components triggering infinite re-renders.
+
+**Root Cause:** CoinBalanceWidget was creating its own TooltipProvider wrapper around the Tooltip component, while AppProviders already provides a global TooltipProvider at the root level. Nested TooltipProviders can cause React to enter infinite re-render loops.
+
+**Solution Implemented:**
+- Removed TooltipProvider wrapper from CoinBalanceWidget component
+- Kept only Tooltip, TooltipTrigger, and TooltipContent components
+- Relied on the global TooltipProvider from AppProviders.tsx
+
+**Files Modified:**
+- `app/components/CoinBalanceWidget.tsx`: Removed nested TooltipProvider
+
+**Testing:**
+- ✅ Page loads successfully without infinite loop errors
+- ✅ No "Maximum update depth exceeded" errors
+- ✅ Next button works correctly
+- ✅ Tooltip functionality preserved
+
+**Pattern for Future Use:**
+shadcn/ui TooltipProvider should only be used ONCE at the root level (in AppProviders). Individual components should only use Tooltip, TooltipTrigger, and TooltipContent without wrapping them in their own TooltipProvider.
