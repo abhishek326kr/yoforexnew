@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import WithdrawalsClient from "./WithdrawalsClient";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Withdraw Coins | YoForex",
   description: "Convert your gold coins to cash and withdraw your earnings from YoForex.",

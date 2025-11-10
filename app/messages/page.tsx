@@ -23,8 +23,7 @@ export const metadata: Metadata = {
   },
 };
 
-// Enable ISR with 10-second revalidation for better performance
-export const revalidate = 10;
+export const dynamic = 'force-dynamic';
 
 async function getUser() {
   const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
@@ -39,7 +38,7 @@ async function getUser() {
         Cookie: cookieHeader,
       },
       credentials: 'include',
-      next: { revalidate: 10 },
+      cache: 'no-store',
     });
 
     if (res.status === 401) {
@@ -67,7 +66,7 @@ async function getConversations(cookieHeader: string) {
         Cookie: cookieHeader,
       },
       credentials: 'include',
-      next: { revalidate: 10 },
+      cache: 'no-store',
     });
 
     if (!res.ok) {

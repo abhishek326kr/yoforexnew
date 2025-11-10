@@ -20,6 +20,8 @@ export const metadata: Metadata = {
   },
 };
 
+export const revalidate = 60;
+
 type CoinsLeader = {
   userId: string;
   username: string;
@@ -50,9 +52,9 @@ async function getLeaderboardData() {
   try {
     // Fetch all three leaderboards in parallel
     const [coinsRes, contributorsRes, sellersRes] = await Promise.all([
-      fetch(`${EXPRESS_URL}/api/leaderboards/coins`, { cache: 'no-store' }),
-      fetch(`${EXPRESS_URL}/api/leaderboards/contributors`, { cache: 'no-store' }),
-      fetch(`${EXPRESS_URL}/api/leaderboards/sellers`, { cache: 'no-store' }),
+      fetch(`${EXPRESS_URL}/api/leaderboards/coins`, { next: { revalidate: 60 } }),
+      fetch(`${EXPRESS_URL}/api/leaderboards/contributors`, { next: { revalidate: 60 } }),
+      fetch(`${EXPRESS_URL}/api/leaderboards/sellers`, { next: { revalidate: 60 } }),
     ]);
 
     const coinLeaders: CoinsLeader[] = coinsRes.ok ? await coinsRes.json() : [];

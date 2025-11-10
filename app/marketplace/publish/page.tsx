@@ -4,6 +4,8 @@ import { getInternalApiUrl } from '../../lib/api-config';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 // Generate SEO metadata
 export const metadata: Metadata = {
   title: 'Publish Expert Advisor | YoForex Marketplace',

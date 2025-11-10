@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import PublishClient from "./PublishClient";
 import { getInternalApiUrl } from "../lib/api-config";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Publish Content | YoForex",
   description: "Share your expert advisors, indicators, and trading articles with the YoForex community. Earn coins for quality content.",

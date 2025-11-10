@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Enable ISR with 60-second revalidation
+export const revalidate = 60;
+
 // Fetch initial members data from Express API
 async function getInitialMembersData() {
   try {
@@ -28,10 +31,10 @@ async function getInitialMembersData() {
     // Fetch members and stats
     const [membersRes, statsRes] = await Promise.all([
       fetch(`${EXPRESS_URL}/api/members?limit=20&sort=coins`, {
-        cache: 'no-store',
+        next: { revalidate: 60 },
       }),
       fetch(`${EXPRESS_URL}/api/members/stats`, {
-        cache: 'no-store',
+        next: { revalidate: 60 },
       }),
     ]);
 

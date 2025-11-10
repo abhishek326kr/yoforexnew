@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardSettingsClient from "./DashboardSettingsClient";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Dashboard Settings | YoForex",
   description: "Customize your YoForex dashboard. Manage widgets, layout, and preferences.",

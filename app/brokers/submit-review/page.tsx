@@ -5,6 +5,8 @@ import SubmitBrokerReviewClient from "./SubmitBrokerReviewClient";
 import { getInternalApiUrl } from "../../lib/api-config";
 import { ComingSoon } from '@/components/ComingSoon';
 
+export const dynamic = 'force-dynamic';
+
 // Feature Flag type
 type FeatureFlag = {
   slug: string;
@@ -19,7 +21,7 @@ async function getFeatureFlag(slug: string): Promise<FeatureFlag | null> {
   try {
     const apiUrl = getInternalApiUrl();
     const response = await fetch(`${apiUrl}/api/feature-flags?slug=${slug}`, {
-      cache: 'no-store',
+      next: { revalidate: 0 },
     });
     if (!response.ok) return null;
     return await response.json();

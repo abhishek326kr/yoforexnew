@@ -5,6 +5,26 @@ YoForex is a comprehensive trading community platform for forex traders. It feat
 
 ## Recent Changes (Latest First)
 
+### November 10, 2025 - Next.js 16 SSR Compatibility Refactoring (Production Build Ready)
+- **Comprehensive SSR Refactoring**: Successfully refactored 13 pages for Next.js 16 static generation compatibility
+  - **Search & Filter Pages**: Refactored /search, /marketplace with server-side searchParams parsing and Suspense boundaries
+  - **Data Pages with ISR**: Fixed /leaderboard, /members to use ISR (revalidate: 60) instead of fully dynamic rendering
+  - **Authentication Pages**: Added `export const dynamic = 'force-dynamic'` to 7 auth-required pages:
+    - /publish, /brokers/submit-review (previously fixed)
+    - /withdrawals, /marketplace/publish, /withdrawals/history, /dashboard/settings (new fixes)
+    - /messages (removed inappropriate ISR caching, now fully dynamic)
+  - **Admin Pages**: Extracted client components with Suspense for /admin/users, /admin/marketplace
+  - **Forum Pages**: Fixed /discussions/new with Suspense boundary around EnhancedThreadComposeClient
+- **Production Build**: Successfully builds 138 static pages with `npm run build`
+  - Fixed all "useSearchParams() should be wrapped in suspense" errors
+  - Fixed all "couldn't be rendered statically because it used cookies()" errors
+  - Fixed all "revalidate: 0" errors preventing static generation
+- **Architecture Improvements**:
+  - Established clear pattern: Server components parse searchParams → pass to client components wrapped in Suspense
+  - Auth pages now properly use `force-dynamic` instead of inappropriate ISR caching
+  - Data listing pages use ISR (60s revalidation) for optimal performance
+- **Impact**: Platform now production-ready with proper SSR, static generation, and deployment readiness
+
 ### November 7, 2025 - Marketplace Product Images Fix
 - **Fixed Marketplace EA Product Images**: Resolved issue where all marketplace products displayed blue placeholder boxes
   - Downloaded 10 category-appropriate stock trading images (scalping, grid, news trading, etc.)

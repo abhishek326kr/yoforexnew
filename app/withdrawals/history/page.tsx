@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import WithdrawalHistoryClient from "./WithdrawalHistoryClient";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Withdrawal History | YoForex",
   description: "View your withdrawal history and track payout status.",
