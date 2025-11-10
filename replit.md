@@ -67,6 +67,22 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### November 10, 2025
+- **Fixed "Publish EA" Page Authentication Issue**
+  - Removed server-side authentication from `/marketplace/publish/page.tsx` that was causing unwanted redirects
+  - Implemented client-side authentication guards in `PublishEAMultiStepClient.tsx` following DashboardClient pattern
+  - Added three-state handling: loading skeleton → unauthenticated login prompt → authenticated form
+  - Unauthenticated users now see a "Login Required" card instead of being redirected to home page
+  - Server-side API protection remains in place at `/api/marketplace/publish-ea` endpoint
+  - Verified with architect tool - implementation approved
+
+- **Fixed BadgeWall Component Data Structure Issue**
+  - Updated `BadgeWall.tsx` to handle nested API response structure correctly
+  - Added `BadgesResponse` interface to properly type API responses
+  - Fixed `badges?.map is not a function` error by extracting data from `response.badges`
+
 ## System Architecture
 
 YoForex employs a hybrid frontend built with Next.js and a robust Express.js backend, leveraging PostgreSQL for data persistence.
@@ -75,6 +91,7 @@ YoForex employs a hybrid frontend built with Next.js and a robust Express.js bac
 - **Next.js:** Utilizes App Router, Server Components, and Incremental Static Regeneration (ISR) for the primary user-facing application.
 - **Express API:** Provides RESTful endpoints, Replit OIDC authentication, rate limiting, and input validation. React Query manages client-side state and caching.
 - **UI/UX:** Modern design with vibrant gradients, glassmorphism, bright product cards with hover effects, color-coded category badges, gradient pricing badges, shimmer loading skeletons, star ratings, and smooth micro-animations.
+- **Authentication Pattern:** Client-side authentication checks preferred over server-side for better UX; uses `isLoading`, `isAuthenticated`, and `useAuthPrompt()` pattern with three-state rendering (loading → unauthenticated prompt → authenticated content)
 
 ### Database Design
 - **PostgreSQL with Drizzle ORM:** Features 25+ tables, critical indexes, connection pooling, SSL/TLS, and automatic retry logic, ensuring data integrity and performance.
