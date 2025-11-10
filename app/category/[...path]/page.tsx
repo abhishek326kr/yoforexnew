@@ -41,6 +41,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const response = await fetch(`${apiUrl}/api/threads/slug/${lastSlug}`);
     if (response.ok) {
       const thread = await response.json();
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yoforex.com';
+      const threadImage = thread.thumbnailUrl || '/thread-og.svg';
+      
       return {
         title: thread.title,
         description: thread.body?.substring(0, 160) || `Discussion about ${thread.title}`,
@@ -55,6 +58,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
           description: thread.body?.substring(0, 160),
           url: `/category/${pathSegments.join('/')}`,
           type: 'article',
+          images: [{ url: threadImage, width: 1200, height: 630 }],
+        },
+        twitter: {
+          card: 'summary_large_image',
+          title: thread.title,
+          description: thread.body?.substring(0, 160),
+          images: [threadImage],
+          site: '@YoForex',
         },
       };
     }
@@ -68,6 +79,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const response = await fetch(`${apiUrl}/api/content/slug/${lastSlug}`);
     if (response.ok) {
       const content = await response.json();
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yoforex.com';
+      const contentImage = content.thumbnailUrl || '/ea-og.svg';
+      
       return {
         title: `${content.title} | YoForex Marketplace`,
         description: content.description?.substring(0, 160) || `Download ${content.title}`,
@@ -77,6 +91,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
           description: content.description?.substring(0, 160),
           url: `/category/${pathSegments.join('/')}`,
           type: 'article',
+          images: [{ url: contentImage, width: 1200, height: 630 }],
+        },
+        twitter: {
+          card: 'summary_large_image',
+          title: content.title,
+          description: content.description?.substring(0, 160),
+          images: [contentImage],
+          site: '@YoForex',
         },
       };
     }
@@ -94,6 +116,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
   
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yoforex.com';
+  const categoryImage = category.imageUrl || '/category-og.svg';
+  
   return {
     title: `${category.name} | YoForex Forum`,
     description: category.description || `Browse ${category.name} discussions and content`,
@@ -103,6 +128,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description: category.description || `Browse ${category.name} discussions`,
       url: `/category/${fullPath}`,
       type: 'website',
+      images: [{ url: categoryImage, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: category.name,
+      description: category.description || `Browse ${category.name} discussions`,
+      images: [categoryImage],
+      site: '@YoForex',
     },
   };
 }

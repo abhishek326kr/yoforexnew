@@ -17,11 +17,14 @@ export async function generateMetadata(): Promise<Metadata> {
       title: 'EA & Indicator Marketplace | YoForex',
       description: 'Browse and download expert advisors (EAs) and indicators for MT4/MT5. Find free and premium trading tools from expert developers.',
       type: 'website',
+      images: [{ url: '/marketplace-og.svg', width: 1200, height: 630 }],
     },
     twitter: {
       card: 'summary_large_image',
       title: 'EA & Indicator Marketplace | YoForex',
       description: 'Browse and download expert advisors (EAs) and indicators for MT4/MT5. Find free and premium trading tools from expert developers.',
+      images: ['/marketplace-og.svg'],
+      site: '@YoForex',
     },
   });
 }
