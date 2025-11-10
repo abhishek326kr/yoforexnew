@@ -58,6 +58,7 @@ import {
   Users
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthPrompt } from "@/hooks/useAuthPrompt";
 import { cn } from "@/lib/utils";
 
 // Lazy load rich editor to prevent SSR issues
@@ -184,7 +185,8 @@ interface FileWithPreview extends File {
 export default function PublishEAMultiStepClient() {
   const router = useRouter();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading, isAuthenticated } = useAuth();
+  const { requireAuth, AuthPrompt } = useAuthPrompt("publish your EA");
   const [currentStep, setCurrentStep] = useState(1);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -669,6 +671,58 @@ export default function PublishEAMultiStepClient() {
         return null;
     }
   };
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <>
+        <Header />
+        <main className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+          <div className="container max-w-5xl mx-auto px-4 py-8">
+            <div className="text-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
+          </div>
+        </main>
+        <EnhancedFooter />
+      </>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Header />
+        <main className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+          <div className="container max-w-5xl mx-auto px-4 py-8">
+            <Card className="max-w-md mx-auto mt-12">
+              <CardHeader className="text-center">
+                <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <CardTitle className="text-2xl">Login Required</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-muted-foreground mb-6">
+                  You need to be logged in to publish your Expert Advisor. Please login to continue.
+                </p>
+                <Button 
+                  onClick={() => requireAuth(() => {})} 
+                  className="w-full"
+                  data-testid="button-publish-login"
+                >
+                  <Shield className="mr-2 h-4 w-4" />
+                  Login to Publish
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+        <EnhancedFooter />
+        <AuthPrompt />
+      </>
+    );
+  }
 
   return (
     <>
