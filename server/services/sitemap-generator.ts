@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { forumCategories, forumThreads, content, users, brokers } from '@shared/schema';
 import { sql } from 'drizzle-orm';
+import { getCategoryPath } from '../../lib/category-path';
 
 interface SitemapUrl {
   loc: string;
@@ -41,10 +42,17 @@ export class SitemapGenerator {
       });
     });
 
-    // 3. Forum categories (with hierarchical paths)
+    // Warm up category path cache for performance
     const categories = await db.select().from(forumCategories);
+    console.log(`[SITEMAP Generator] Warming cache for ${categories.length} categories...`);
     for (const category of categories) {
-      const categoryPath = await this.getCategoryPath(category.slug);
+      await getCategoryPath(category.slug); // Populate cache
+    }
+    console.log(`[SITEMAP Generator] Cache warmed successfully`);
+
+    // 3. Forum categories (with hierarchical paths)
+    for (const category of categories) {
+      const categoryPath = await getCategoryPath(category.slug);
       urls.push({
         loc: `${this.baseUrl}/category/${categoryPath}`,
         lastmod: category.updatedAt 
@@ -71,7 +79,7 @@ export class SitemapGenerator {
         skippedThreadCount++;
         continue;
       }
-      const categoryPath = await this.getCategoryPath(thread.categorySlug);
+      const categoryPath = await getCategoryPath(thread.categorySlug);
       if (!categoryPath) {
         skippedThreadCount++;
         continue;
@@ -105,7 +113,7 @@ export class SitemapGenerator {
         skippedContentCount++;
         continue;
       }
-      const categoryPath = await this.getCategoryPath(item.category);
+      const categoryPath = await getCategoryPath(item.category);
       if (!categoryPath) {
         skippedContentCount++;
         continue;
@@ -160,32 +168,6 @@ export class SitemapGenerator {
       xml,
       urlCount: urls.length,
     };
-  }
-
-  /**
-   * Get full hierarchical category path
-   */
-  private async getCategoryPath(categorySlug: string): Promise<string> {
-    const path: string[] = [];
-    let currentSlug: string | null = categorySlug;
-    const visited = new Set<string>();
-
-    while (currentSlug && !visited.has(currentSlug)) {
-      visited.add(currentSlug);
-
-      const [category] = await db
-        .select()
-        .from(forumCategories)
-        .where(sql`${forumCategories.slug} = ${currentSlug}`)
-        .limit(1);
-
-      if (!category) break;
-
-      path.unshift(category.slug);
-      currentSlug = category.parentSlug;
-    }
-
-    return path.join('/');
   }
 
   /**

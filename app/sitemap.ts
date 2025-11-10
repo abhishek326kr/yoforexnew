@@ -29,13 +29,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Fetch all forum categories
   const categories = await db.query.forumCategories.findMany();
   
+  // Warm up category path cache for performance (before concurrent calls)
+  console.log(`[SITEMAP] Warming cache for ${categories.length} categories...`);
+  for (const category of categories) {
+    await getCategoryPath(category.slug); // Populate cache sequentially
+  }
+  console.log(`[SITEMAP] Cache warmed successfully`);
+  
   // Fetch all SEO categories
   const seoCategoriesList = await db
     .select()
     .from(seoCategories)
     .where(eq(seoCategories.isActive, true));
 
-  // Filter threads with valid categories
+  // Filter threads with valid categories (now using cached paths)
   const validThreads = await Promise.all(
     threads.map(async (thread: ForumThread) => {
       if (!thread.categorySlug) return null;
