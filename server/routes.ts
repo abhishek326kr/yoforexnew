@@ -16530,12 +16530,17 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const privateDir = objectStorage.getPrivateObjectDir();
       const objectPath = `${privateDir}/marketplace/ea/${eaId}/${eaId}${ext}`;
       
+      console.log("[EA Upload] privateDir:", privateDir);
+      console.log("[EA Upload] objectPath:", objectPath);
+      
       // Generate presigned PUT URL (valid for 15 minutes)
       const uploadURL = await objectStorage.signObjectURL({
         objectPath,
         method: "PUT",
         ttlSec: 900,
       });
+      
+      console.log("[EA Upload] Generated uploadURL:", uploadURL.substring(0, 100) + "...");
       
       // Return the presigned URL and file path
       return res.json({
@@ -16588,12 +16593,17 @@ export async function registerRoutes(app: Express): Promise<Express> {
         ? `${privateDir}/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
         : `${privateDir}/marketplace/screenshots/${screenshotId}${ext}`;
       
+      console.log("[Screenshot Upload] privateDir:", privateDir);
+      console.log("[Screenshot Upload] objectPath:", objectPath);
+      
       // Generate presigned PUT URL (valid for 15 minutes)
       const uploadURL = await objectStorage.signObjectURL({
         objectPath,
         method: "PUT",
         ttlSec: 900,
       });
+      
+      console.log("[Screenshot Upload] Generated uploadURL:", uploadURL.substring(0, 100) + "...");
       
       // Return the presigned URL and file path
       const filePath = eaId
