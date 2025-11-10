@@ -35,9 +35,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .from(seoCategories)
     .where(eq(seoCategories.isActive, true));
 
+  // Filter threads with valid categories
+  const validThreads = await Promise.all(
+    threads.map(async (thread: ForumThread) => {
+      if (!thread.categorySlug) return null;
+      const categoryPath = await getCategoryPath(thread.categorySlug);
+      return categoryPath ? thread : null;
+    })
+  );
+  const filteredThreads = validThreads.filter(Boolean) as ForumThread[];
+  
+  console.log(`[SITEMAP] Threads: ${threads.length} total, ${filteredThreads.length} valid, ${threads.length - filteredThreads.length} skipped`);
+
   // Generate hierarchical URLs for threads in parallel
   const threadUrls = await Promise.all(
-    threads.map(async (thread: ForumThread) => ({
+    filteredThreads.map(async (thread: ForumThread) => ({
       url: `${baseUrl}${await getThreadUrl(thread)}`,
       lastModified: thread.updatedAt ? new Date(thread.updatedAt) : new Date(),
       changeFrequency: 'weekly' as const,
@@ -45,9 +57,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }))
   );
 
+  // Filter content with valid categories
+  const validContent = await Promise.all(
+    contentItems.map(async (item: Content) => {
+      if (!item.category) return null;
+      const categoryPath = await getCategoryPath(item.category);
+      return categoryPath ? item : null;
+    })
+  );
+  const filteredContent = validContent.filter(Boolean) as Content[];
+  
+  console.log(`[SITEMAP] Content: ${contentItems.length} total, ${filteredContent.length} valid, ${contentItems.length - filteredContent.length} skipped`);
+
   // Generate hierarchical URLs for content in parallel
   const contentUrls = await Promise.all(
-    contentItems.map(async (item: Content) => ({
+    filteredContent.map(async (item: Content) => ({
       url: `${baseUrl}${await getContentUrl(item)}`,
       lastModified: item.updatedAt ? new Date(item.updatedAt) : new Date(),
       changeFrequency: 'weekly' as const,

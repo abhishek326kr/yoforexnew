@@ -63,15 +63,29 @@ export class SitemapGenerator {
       })
       .from(forumThreads);
 
+    let validThreadCount = 0;
+    let skippedThreadCount = 0;
+    
     for (const thread of threads) {
+      if (!thread.categorySlug) {
+        skippedThreadCount++;
+        continue;
+      }
       const categoryPath = await this.getCategoryPath(thread.categorySlug);
+      if (!categoryPath) {
+        skippedThreadCount++;
+        continue;
+      }
       urls.push({
         loc: `${this.baseUrl}/category/${categoryPath}/${thread.slug}`,
         lastmod: thread.updatedAt
           ? new Date(thread.updatedAt).toISOString().split('T')[0]
           : new Date(thread.createdAt).toISOString().split('T')[0],
       });
+      validThreadCount++;
     }
+    
+    console.log(`[SITEMAP Generator] Threads: ${threads.length} total, ${validThreadCount} valid, ${skippedThreadCount} skipped`);
 
     // 5. Marketplace content
     const contentItems = await db
@@ -83,15 +97,29 @@ export class SitemapGenerator {
       })
       .from(content);
 
+    let validContentCount = 0;
+    let skippedContentCount = 0;
+    
     for (const item of contentItems) {
+      if (!item.category) {
+        skippedContentCount++;
+        continue;
+      }
       const categoryPath = await this.getCategoryPath(item.category);
+      if (!categoryPath) {
+        skippedContentCount++;
+        continue;
+      }
       urls.push({
         loc: `${this.baseUrl}/category/${categoryPath}/${item.slug}`,
         lastmod: item.updatedAt
           ? new Date(item.updatedAt).toISOString().split('T')[0]
           : new Date(item.createdAt).toISOString().split('T')[0],
       });
+      validContentCount++;
     }
+    
+    console.log(`[SITEMAP Generator] Content: ${contentItems.length} total, ${validContentCount} valid, ${skippedContentCount} skipped`);
 
     // 6. User profiles
     const userProfiles = await db

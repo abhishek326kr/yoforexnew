@@ -96,7 +96,13 @@ export async function getCategoryByPath(path: string) {
  * // Returns: "/category/trading-strategies/scalping-m1-m15/thread-slug"
  */
 export async function getThreadUrl(thread: Pick<ForumThread, 'categorySlug' | 'slug'>): Promise<string> {
+  if (!thread.categorySlug) {
+    return `/thread/${thread.slug}`; // Fallback for uncategorized threads
+  }
   const categoryPath = await getCategoryPath(thread.categorySlug);
+  if (!categoryPath) {
+    return `/thread/${thread.slug}`; // Fallback if category not found
+  }
   return `/category/${categoryPath}/${thread.slug}`;
 }
 
@@ -111,7 +117,13 @@ export async function getThreadUrl(thread: Pick<ForumThread, 'categorySlug' | 's
  * // Returns: "/category/ea-library/scalping-eas/gold-scalper-pro"
  */
 export async function getContentUrl(content: Pick<Content, 'category' | 'slug'>): Promise<string> {
+  if (!content.category) {
+    return `/content/${content.slug}`; // Fallback for uncategorized content
+  }
   const categoryPath = await getCategoryPath(content.category);
+  if (!categoryPath) {
+    return `/content/${content.slug}`; // Fallback if category not found
+  }
   return `/category/${categoryPath}/${content.slug}`;
 }
 
