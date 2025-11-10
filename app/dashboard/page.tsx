@@ -1,6 +1,8 @@
 import { Metadata } from "next";
 import DashboardClient from "./DashboardClient";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "My Dashboard | YoForex",
   description: "Manage your YoForex account, track your earnings, and view your recent activity.",

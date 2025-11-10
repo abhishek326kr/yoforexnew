@@ -71,6 +71,19 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 
 ### November 10, 2025
 
+- **✅ COMPLETED: Fixed Dashboard Hydration Error**
+  - **What Changed:** Fixed React error #418 (hydration mismatch) on /dashboard page
+  - **Root Cause:** Server-side rendering without authentication vs client-side rendering with authentication caused HTML mismatch
+  - **Frontend Changes (app/dashboard/page.tsx):**
+    - Added `export const dynamic = 'force-dynamic'` to disable static generation (line 3)
+    - Forces page to render dynamically on every request, preventing hydration mismatch
+    - DashboardClient component now consistently handles authentication flow
+  - **Bug Fixes:**
+    - ✅ No more React error #418 in browser console
+    - ✅ Dashboard loads cleanly for both authenticated and unauthenticated users
+    - ✅ Login prompt displays correctly without hydration errors
+  - **Status:** Tested and working, console logs clean
+
 - **✅ COMPLETED: Fixed Next.js Deployment Build Failures**
   - **What Changed:** Fixed build failures caused by API connection errors and missing Suspense boundaries
   - **Root Cause:** Pages tried to fetch from Express API during build, but API server not running; useSearchParams() not wrapped in Suspense
