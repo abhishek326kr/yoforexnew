@@ -6,8 +6,9 @@
 echo "🚀 Starting YoForex in Development Mode..."
 
 # Start Express API server on port 3001 in background using tsx (for hot reload)
+# Unset PORT to prevent Replit's PORT=5000 from conflicting with API_PORT
 echo "📦 Starting Express API server (port 3001)..."
-API_PORT=3001 NODE_ENV=development npx tsx server/index.ts &
+env -u PORT API_PORT=3001 NODE_ENV=development npx tsx server/index.ts &
 EXPRESS_PID=$!
 
 # Minimal wait for Express to bind port
