@@ -4,7 +4,10 @@ import MarketplaceClient from './MarketplaceClient';
 import { getInternalApiUrl } from '../lib/api-config';
 import { getMetadataWithOverrides } from '../lib/metadata-helper';
 
-// Enable ISR with 60-second revalidation
+// Force dynamic rendering (SSR) - this page fetches from Express API
+export const dynamic = 'force-dynamic';
+
+// Enable ISR with 60-second revalidation (only applies at runtime, not during build)
 export const revalidate = 60;
 
 // Generate SEO metadata with overrides

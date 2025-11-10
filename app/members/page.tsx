@@ -20,7 +20,10 @@ export const metadata: Metadata = {
   },
 };
 
-// Enable ISR with 60-second revalidation
+// Force dynamic rendering (SSR) - this page fetches from Express API
+export const dynamic = 'force-dynamic';
+
+// Enable ISR with 60-second revalidation (only applies at runtime, not during build)
 export const revalidate = 60;
 
 // Fetch initial members data from Express API

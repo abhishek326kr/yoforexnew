@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import CategoriesClient from './CategoriesClient';
 import type { ForumCategory } from '@shared/schema';
+import { getInternalApiUrl } from '../lib/api-config';
 
-// Express API base URL - Use internal URL for server-side fetching
-const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
+// Force dynamic rendering (SSR) - this page fetches from Express API
+export const dynamic = 'force-dynamic';
 
-// Enable ISR with 60-second revalidation
+// Enable ISR with 60-second revalidation (only applies at runtime, not during build)
 export const revalidate = 60;
 
 // SEO Metadata as specified in requirements
@@ -32,15 +33,23 @@ export default async function CategoriesPage() {
   let initialCategories: ForumCategory[] = [];
   
   try {
-    const res = await fetch(`${EXPRESS_URL}/api/categories`, {
+    const apiUrl = getInternalApiUrl();
+    const res = await fetch(`${apiUrl}/api/categories`, {
       next: { revalidate: 60 },
     });
 
     if (res.ok) {
       initialCategories = await res.json();
+    } else {
+      console.warn('[Categories Page] API returned non-OK status:', res.status);
     }
-  } catch (error) {
-    console.error('Error fetching categories:', error);
+  } catch (error: any) {
+    // Graceful error handling for build time and runtime
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('[Categories Page] API unavailable, using fallback data');
+    } else {
+      console.error('[Categories Page] Error fetching categories:', error.message);
+    }
     initialCategories = [];
   }
 

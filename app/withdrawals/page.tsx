@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import WithdrawalsClient from "./WithdrawalsClient";
+import { getInternalApiUrl } from "../lib/api-config";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,14 +24,14 @@ export const metadata: Metadata = {
 };
 
 async function getUser() {
-  const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:5000';
+  const apiUrl = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map(cookie => `${cookie.name}=${cookie.value}`)
     .join('; ');
 
   try {
-    const res = await fetch(`${EXPRESS_URL}/api/me`, {
+    const res = await fetch(`${apiUrl}/api/me`, {
       headers: {
         Cookie: cookieHeader,
       },
@@ -47,21 +48,25 @@ async function getUser() {
     }
 
     return await res.json();
-  } catch (error) {
-    console.error('Error fetching user:', error);
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('[Withdrawals Page] API unavailable');
+    } else {
+      console.error('[Withdrawals Page] Error fetching user:', error.message);
+    }
     return null;
   }
 }
 
 async function getUserCoins(userId: string) {
-  const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:5000';
+  const apiUrl = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map(cookie => `${cookie.name}=${cookie.value}`)
     .join('; ');
 
   try {
-    const res = await fetch(`${EXPRESS_URL}/api/user/${userId}/coins`, {
+    const res = await fetch(`${apiUrl}/api/user/${userId}/coins`, {
       headers: {
         Cookie: cookieHeader,
       },
@@ -75,8 +80,12 @@ async function getUserCoins(userId: string) {
     }
 
     return await res.json();
-  } catch (error) {
-    console.error('Error fetching user coins:', error);
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('[Withdrawals Page] API unavailable for coins');
+    } else {
+      console.error('[Withdrawals Page] Error fetching user coins:', error.message);
+    }
     return null;
   }
 }

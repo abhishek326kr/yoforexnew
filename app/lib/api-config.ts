@@ -11,24 +11,38 @@
  */
 
 /**
+ * Detect if we're in build-time execution
+ * During build, the Express API server is not running, so we need fallback behavior
+ */
+function isBuildTime(): boolean {
+  return process.env.NEXT_PHASE === 'phase-production-build';
+}
+
+/**
  * Environment variable validation
  * Ensures required configuration is present at runtime
  * 
  * PRODUCTION SAFETY: Throws errors for missing critical variables
  * DEVELOPMENT: Allows fallbacks with warnings
+ * BUILD TIME: Uses fallbacks without errors to allow build to complete
  */
 function validateEnv() {
   const isProduction = process.env.NODE_ENV === 'production';
+  const buildTime = isBuildTime();
 
   if (typeof window === 'undefined') {
-    // Server-side: require EXPRESS_URL in production
+    // Server-side: require EXPRESS_URL in production (but not during build)
     if (!process.env.EXPRESS_URL) {
-      if (isProduction) {
+      if (isProduction && !buildTime) {
         throw new Error(
           '🚨 CRITICAL: EXPRESS_URL environment variable is required in production.\n' +
           'Please set it in your .env.production file.\n' +
           'Example: EXPRESS_URL=http://127.0.0.1:3001\n' +
           'For VPS deployment, see: VPS_DEPLOYMENT_GUIDE.md'
+        );
+      } else if (buildTime) {
+        console.warn(
+          '🔨 [Build] EXPRESS_URL not set during build - using fallback (API calls will be skipped)'
         );
       } else {
         console.warn(
@@ -40,12 +54,16 @@ function validateEnv() {
 
   // NEXT_PUBLIC_SITE_URL is required in production for SEO, OG tags, canonical URLs
   if (!process.env.NEXT_PUBLIC_SITE_URL) {
-    if (isProduction) {
+    if (isProduction && !buildTime) {
       throw new Error(
         '🚨 CRITICAL: NEXT_PUBLIC_SITE_URL environment variable is required in production.\n' +
         'Please set it in your .env.production file.\n' +
         'Example: NEXT_PUBLIC_SITE_URL=https://yourdomain.com\n' +
         'This is used for SEO metadata, Open Graph tags, and canonical URLs.'
+      );
+    } else if (buildTime) {
+      console.warn(
+        '🔨 [Build] NEXT_PUBLIC_SITE_URL not set during build - using fallback'
       );
     } else {
       console.warn(
@@ -106,22 +124,29 @@ export function getInternalApiUrl(): string {
   }
 
   const isProduction = process.env.NODE_ENV === 'production';
+  const buildTime = isBuildTime();
   const url = process.env.EXPRESS_URL;
   
   if (!url) {
-    if (isProduction) {
+    if (isProduction && !buildTime) {
       throw new Error(
         'EXPRESS_URL must be set in production. ' +
         'This is a critical configuration error that will prevent server-side API calls from working.'
       );
     }
-    // Development fallback only
+    // Development or build-time fallback
     const fallback = 'http://127.0.0.1:3001';
-    console.log(`[API Config] Using development fallback: ${fallback}`);
+    if (buildTime) {
+      console.log(`[Build] Using fallback API URL (will gracefully fail): ${fallback}`);
+    } else {
+      console.log(`[API Config] Using development fallback: ${fallback}`);
+    }
     return fallback;
   }
   
-  console.log(`[API Config] Internal API URL: ${url}`);
+  if (!buildTime) {
+    console.log(`[API Config] Internal API URL: ${url}`);
+  }
   return url;
 }
 

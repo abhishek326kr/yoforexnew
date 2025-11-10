@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import SettingsClient from "./SettingsClient";
+import { getInternalApiUrl } from "../lib/api-config";
 
 export const metadata: Metadata = {
   title: "Settings | YoForex",
@@ -21,15 +22,14 @@ export const metadata: Metadata = {
 };
 
 async function getUserSettings() {
-  // Use internal Express API URL for server-side fetches
-  const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
+  const apiUrl = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map((cookie: { name: string; value: string }) => `${cookie.name}=${cookie.value}`)
     .join('; ');
 
   try {
-    const res = await fetch(`${EXPRESS_URL}/api/me`, {
+    const res = await fetch(`${apiUrl}/api/me`, {
       headers: {
         Cookie: cookieHeader,
       },
@@ -46,15 +46,18 @@ async function getUserSettings() {
     }
 
     return await res.json();
-  } catch (error) {
-    console.error('Error fetching user:', error);
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('[Settings Page] API unavailable');
+    } else {
+      console.error('[Settings Page] Error fetching user:', error.message);
+    }
     return null;
   }
 }
 
 async function getUserCoins() {
-  // Use internal Express API URL for server-side fetches
-  const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
+  const apiUrl = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map((cookie: { name: string; value: string }) => `${cookie.name}=${cookie.value}`)
@@ -64,7 +67,7 @@ async function getUserCoins() {
     const user = await getUserSettings();
     if (!user?.id) return null;
 
-    const res = await fetch(`${EXPRESS_URL}/api/user/${user.id}/coins`, {
+    const res = await fetch(`${apiUrl}/api/user/${user.id}/coins`, {
       headers: {
         Cookie: cookieHeader,
       },
@@ -77,8 +80,12 @@ async function getUserCoins() {
     }
 
     return await res.json();
-  } catch (error) {
-    console.error('Error fetching coins:', error);
+  } catch (error: any) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('[Settings Page] API unavailable for coins');
+    } else {
+      console.error('[Settings Page] Error fetching coins:', error.message);
+    }
     return { totalCoins: 0, weeklyEarned: 0, rank: null };
   }
 }
