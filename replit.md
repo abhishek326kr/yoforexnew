@@ -69,6 +69,60 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 
 ## Recent Changes
 
+### Welcome & Email Verification System (November 10, 2025)
+Implemented complete email verification flow for new user signups:
+
+1. **Registration Flow Integration:**
+   - Generates secure 32-byte verification token on signup
+   - Stores token in `emailVerificationTokens` table with 24-hour expiration
+   - Sends professional welcome email with verification link
+   - Email includes platform overview and feature highlights
+   - Continues to work even if email sending fails (graceful degradation)
+
+2. **Email Verification Endpoint:**
+   - POST `/api/auth/verify-email` validates tokens
+   - Checks token expiration (24-hour window)
+   - Updates `users.is_email_verified` to true
+   - Deletes token after use (single-use security)
+   - Clear error messages for expired/invalid tokens
+
+3. **Frontend Verification Page:**
+   - New page at `/verify-email` handles verification links
+   - Extracts token from URL query parameters
+   - Shows real-time verification status (verifying/success/error)
+   - Professional UI with loading states and error handling
+   - Navigation options to dashboard, home, or earnings
+
+4. **Security Features:**
+   - Cryptographically secure random tokens (32 bytes)
+   - 24-hour expiration window
+   - Single-use tokens (deleted after verification)
+   - Non-blocking registration (email failures don't prevent signup)
+   - Email field requirement for verification
+
+**Files Modified:**
+- `server/localAuth.ts` - Added verification token generation and email sending to registration
+- `server/localAuth.ts` - Added POST /api/auth/verify-email endpoint
+- `app/verify-email/page.tsx` - New frontend verification page
+- `shared/schema.ts` - Leveraged existing emailVerificationTokens table
+
+**User Experience:**
+1. User registers with email → receives welcome email
+2. User clicks verification link → redirected to /verify-email
+3. Email verified automatically → success message shown
+4. User can navigate to dashboard or start earning coins
+
+**Status:**
+- ✅ Complete signup-to-verification flow working
+- ✅ 25+ email templates ready (purchases, notifications, etc.)
+- ✅ Architect approved as production-ready
+- ✅ Graceful error handling throughout
+
+**Future Enhancements (Optional):**
+- Resend verification email endpoint
+- Token hashing in database
+- Enhanced UI copy for expired links
+
 ### SMTP Email System & Database Fixes (November 10, 2025)
 Completed SMTP testing system and critical database error fixes:
 

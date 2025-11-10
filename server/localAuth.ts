@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "./db";
-import { users, passwordResetTokens, coinTransactions, COIN_TRIGGERS, COIN_CHANNELS } from "../shared/schema";
+import { users, passwordResetTokens, emailVerificationTokens, coinTransactions, COIN_TRIGGERS, COIN_CHANNELS } from "../shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import crypto from "crypto";
 import { 
@@ -313,7 +313,7 @@ export async function setupLocalAuth(app: Express) {
           await db.insert(coinTransactions).values({
             userId: newUser.id,
             amount: 100,
-            type: 'earned',
+            type: 'earn',
             description: 'Welcome bonus',
             trigger: 'user.registration.welcome_bonus' as any,
             channel: 'system' as any,
@@ -323,6 +323,37 @@ export async function setupLocalAuth(app: Express) {
         } catch (coinError) {
           console.error("[WELCOME BONUS] Failed to create coin transaction:", coinError);
           // Don't fail registration if coin transaction fails
+        }
+        
+        // Send welcome/verification email if email provided
+        if (email) {
+          try {
+            // Generate secure verification token
+            const verificationToken = crypto.randomBytes(32).toString('hex');
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+            
+            // Store token in database
+            await db.insert(emailVerificationTokens).values({
+              userId: newUser.id,
+              email: email,
+              token: verificationToken,
+              expiresAt,
+              createdAt: new Date(),
+            });
+            
+            // Send welcome email with verification link
+            const { emailService } = await import('./services/emailService');
+            await emailService.sendEmailVerification(
+              email,
+              newUser.username,
+              verificationToken
+            );
+            
+            console.log(`[WELCOME EMAIL] Sent verification email to: ${email}`);
+          } catch (emailError: any) {
+            console.error("[WELCOME EMAIL] Failed to send verification email:", emailError);
+            // Don't fail registration if email fails
+          }
         }
         
         // Auto-login after registration
@@ -529,6 +560,60 @@ export async function setupLocalAuth(app: Express) {
     } catch (error: any) {
       console.error("[RESET PASSWORD] Error:", error);
       res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+  
+  // Email verification endpoint
+  app.post("/api/auth/verify-email", async (req, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ error: "Verification token is required" });
+      }
+      
+      // Find valid, non-expired verification token
+      const [verificationRecord] = await db
+        .select()
+        .from(emailVerificationTokens)
+        .where(
+          and(
+            eq(emailVerificationTokens.token, token),
+            gt(emailVerificationTokens.expiresAt, new Date())
+          )
+        )
+        .limit(1);
+      
+      if (!verificationRecord) {
+        return res.status(400).json({ 
+          error: "Invalid or expired verification link",
+          message: "The verification link is invalid or has expired. Please request a new verification email." 
+        });
+      }
+      
+      // Update user's email verification status
+      await db
+        .update(users)
+        .set({ 
+          is_email_verified: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, verificationRecord.userId));
+      
+      // Delete the verification token (single-use)
+      await db
+        .delete(emailVerificationTokens)
+        .where(eq(emailVerificationTokens.id, verificationRecord.id));
+      
+      console.log(`[EMAIL VERIFICATION] Email verified for user: ${verificationRecord.userId}`);
+      
+      res.json({ 
+        success: true, 
+        message: "Email verified successfully! You now have full access to all YoForex features." 
+      });
+    } catch (error: any) {
+      console.error("[EMAIL VERIFICATION] Error:", error);
+      res.status(500).json({ error: "Failed to verify email" });
     }
   });
   
