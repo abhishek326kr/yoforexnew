@@ -135,30 +135,43 @@ YoForex employs a hybrid frontend built with Next.js and a robust Express.js bac
 
 ## Recent Changes
 
-### November 10, 2025 - TipTap SSR Hydration Error Fixed
-**Issue:** TipTap editor on `/discussions/new` page was causing React error #185 due to SSR hydration mismatch. TipTap's `useEditor` hook was being initialized during server-side rendering, even with `immediatelyRender: false` set.
+### November 10, 2025 - TipTap SSR Hydration Error Fixed (Final Solution)
+**Issue:** TipTap editor on `/discussions/new` page was causing React error #185 due to SSR hydration mismatch. TipTap's `useEditor` hook executes during server-side rendering in Next.js App Router, even with conditional guards.
 
-**Root Cause:** Next.js App Router runs components on both server and client. TipTap detected SSR execution and threw error: "Tiptap Error: SSR has been detected, please set `immediatelyRender` explicitly to `false` to avoid hydration mismatches."
+**Root Cause:** In Next.js App Router, React hooks (including `useEditor`) ALWAYS execute during SSR, regardless of conditional logic or `isMounted` patterns. The `isMounted` pattern doesn't prevent hook execution during SSR - it only affects what the hook returns.
 
 **Solution Implemented:**
-1. Added `isMounted` state flag in `app/discussions/new/EnhancedThreadComposeClient.tsx`
-2. `isMounted` starts as `false`, set to `true` in `useEffect` (client-side only)
-3. Made `useEditor` conditional: returns `undefined` during SSR, full config object on client mount
-4. Existing `EditorContent` conditional rendering handles null/undefined editor gracefully
+1. Created `RichTextEditorClient.tsx` - encapsulates all TipTap editor logic in a client-only component
+2. Modified `EnhancedThreadComposeClient.tsx`:
+   - Added dynamic import with `{ ssr: false }` to completely isolate TipTap from SSR
+   - Removed all TipTap-related code (FormattingToolbar, useEditor, handleImageUpload, editor state)
+   - Replaced old editor rendering with dynamically imported `<RichTextEditorClient>`
+   - Updated form integration to use onUpdate callbacks for persisting content
+   - Updated character counter, SEO panel, and preview to use form values instead of editor instance
 
-**Files Modified:**
-- `app/discussions/new/EnhancedThreadComposeClient.tsx`: Added SSR guard pattern for TipTap editor
+**Files Created/Modified:**
+- `app/discussions/new/RichTextEditorClient.tsx`: New client-only TipTap editor component
+- `app/discussions/new/EnhancedThreadComposeClient.tsx`: Refactored to use dynamic import
 
 **Testing:**
 - ✅ Page loads without TipTap SSR errors
-- ✅ No React error #185
+- ✅ No React error #185 (hydration mismatch eliminated)
+- ✅ Application builds and runs successfully
+- ✅ Fast Refresh working correctly
 - ✅ Only expected 401 authentication error for unauthenticated users
+- ✅ Form validation, draft saving, and content persistence all working
 - ✅ Architect reviewed and approved (PASS)
 
 **Pattern for Future Use:**
-This `isMounted` pattern should be used for any client-only libraries in Next.js App Router:
+For client-only libraries in Next.js App Router, use dynamic imports with `{ ssr: false }`:
 ```tsx
-const [isMounted, setIsMounted] = useState(false);
-useEffect(() => { setIsMounted(true); }, []);
-const editor = useEditor(isMounted ? { /* config */ } : undefined);
+const ClientComponent = dynamic(
+  () => import('./ClientComponent').then(mod => ({ default: mod.ClientComponent })),
+  { 
+    ssr: false,
+    loading: () => <div>Loading...</div>
+  }
+);
 ```
+
+**CRITICAL:** The `isMounted` pattern does NOT prevent hook execution during SSR. Only dynamic imports with `{ ssr: false }` can completely isolate client-only code from server-side rendering.
