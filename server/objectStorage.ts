@@ -446,62 +446,13 @@ export class ObjectStorageService {
     console.log('[uploadFromBuffer] Content type:', contentType);
     console.log('[uploadFromBuffer] Buffer size:', buffer.length);
     
-    const mode = detectStorageMode();
-    console.log('[uploadFromBuffer] Storage mode:', mode);
+    const { bucketName, objectName } = parseObjectPath(objectPath);
+    console.log('[uploadFromBuffer] Bucket:', bucketName);
+    console.log('[uploadFromBuffer] Object:', objectName);
     
-    if (mode === 'replit') {
-      // On Replit: Use sidecar-signed URL for upload (sidecar handles bucket ID translation)
-      console.log('[uploadFromBuffer] Using Replit sidecar for buffer upload');
-      
-      try {
-        // Get signed PUT URL from sidecar
-        console.log('[uploadFromBuffer] Requesting signed URL...');
-        const signedURL = await this.signObjectURL({
-          objectPath,
-          method: 'PUT',
-          ttlSec: 900, // 15 minutes
-        });
-        console.log('[uploadFromBuffer] Got signed URL (length):', signedURL.length);
-        console.log('[uploadFromBuffer] Signed URL starts with:', signedURL.substring(0, 50));
-        
-        // Upload buffer to signed URL
-        console.log('[uploadFromBuffer] Uploading to signed URL...');
-        const response = await fetch(signedURL, {
-          method: 'PUT',
-          body: buffer,
-          headers: {
-            'Content-Type': contentType,
-          },
-        });
-        
-        console.log('[uploadFromBuffer] Upload response status:', response.status);
-        console.log('[uploadFromBuffer] Upload response status text:', response.statusText);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[uploadFromBuffer] Upload FAILED. Error response:', errorText);
-          throw new Error(
-            `Failed to upload to signed URL: ${response.status} ${response.statusText}\n${errorText}`
-          );
-        }
-        
-        console.log('[uploadFromBuffer] Upload successful!');
-        const { bucketName, objectName } = parseObjectPath(objectPath);
-        const finalURL = `https://storage.googleapis.com/${bucketName}/${objectName}`;
-        console.log('[uploadFromBuffer] Final URL:', finalURL);
-        return finalURL;
-      } catch (error: any) {
-        console.error('[uploadFromBuffer] ERROR in Replit mode:');
-        console.error('[uploadFromBuffer] Error name:', error.name);
-        console.error('[uploadFromBuffer] Error message:', error.message);
-        console.error('[uploadFromBuffer] Error stack:', error.stack);
-        throw error;
-      }
-    } else {
-      // On non-Replit (GCS with service account): Use direct SDK upload
-      console.log('[uploadFromBuffer] Using direct GCS SDK for buffer upload');
-      
-      const { bucketName, objectName } = parseObjectPath(objectPath);
+    try {
+      // Use Storage SDK's .save() method directly (works with both Replit sidecar and GCS service accounts)
+      console.log('[uploadFromBuffer] Uploading via Storage SDK .save() method...');
       const bucket = objectStorageClient.bucket(bucketName);
       const file = bucket.file(objectName);
 
@@ -512,7 +463,15 @@ export class ObjectStorageService {
         },
       });
 
-      return `https://storage.googleapis.com/${bucketName}/${objectName}`;
+      const finalURL = `https://storage.googleapis.com/${bucketName}/${objectName}`;
+      console.log('[uploadFromBuffer] Upload successful! URL:', finalURL);
+      return finalURL;
+    } catch (error: any) {
+      console.error('[uploadFromBuffer] Upload FAILED:');
+      console.error('[uploadFromBuffer] Error name:', error.name);
+      console.error('[uploadFromBuffer] Error message:', error.message);
+      console.error('[uploadFromBuffer] Error stack:', error.stack);
+      throw error;
     }
   }
 }
