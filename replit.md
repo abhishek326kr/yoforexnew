@@ -72,18 +72,19 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 ### November 10, 2025
 
 - **✅ COMPLETED: Direct Server-Side File Uploads for EA Marketplace**
-  - **What Changed:** Implemented direct server-side uploads to replace presigned URLs (which don't work on Replit sidecar)
-  - **Root Cause:** Replit's sidecar authentication uses `external_account` credentials which lack `client_email` field required for signed URLs
+  - **What Changed:** Implemented server-side uploads using sidecar-backed approach on Replit, direct GCS SDK on other platforms
+  - **Root Cause:** Replit uses internal bucket IDs (e.g., `e119-91b8-4694-be75-9590cf2b82f8`) that must be translated to actual GCS bucket names via sidecar
   - **Backend Changes (server/objectStorage.ts):**
-    - Added `uploadFromBuffer(objectPath, buffer, contentType)` method (lines 465-482)
-    - Streams file buffers directly to GCS using objectStorageClient
-    - Returns final object URL for download
+    - Added `uploadFromBuffer(objectPath, buffer, contentType)` method (lines 465-518)
+    - On Replit: Uses sidecar-signed PUT URLs for upload (sidecar translates bucket ID to real bucket name)
+    - On AWS/VPS/Docker: Uses direct GCS SDK upload (works with real bucket names in service account credentials)
+    - Automatically detects environment and uses appropriate upload method
   - **Backend Changes (server/routes.ts):**
     - Created `uploadEA` multer instance: 50MB limit, accepts `.ex4/.ex5/.mq4/.mq5/.zip` files
     - Created `uploadScreenshot` multer instance: 5MB limit, accepts `.jpg/.jpeg/.png/.webp` files
     - Replaced `/api/marketplace/upload-ea` endpoint to accept multipart/form-data
     - Replaced `/api/marketplace/upload-screenshot` endpoint to accept multipart/form-data
-    - Both endpoints upload directly to GCS and return `{ success, filePath, contentId/screenshotId }`
+    - Both endpoints upload via `uploadFromBuffer()` and return `{ success, filePath, contentId/screenshotId }`
   - **Frontend Changes (app/marketplace/publish/PublishEAMultiStepClient.tsx):**
     - Updated `handleEAFileUpload()` to use FormData POST instead of presigned URLs
     - Updated `handleScreenshotUpload()` to use FormData POST instead of presigned URLs
@@ -91,7 +92,8 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
     - All validation, error handling, and UI feedback preserved
   - **Bug Fixes:**
     - Fixed frontend/backend file type mismatch (added `.zip` support to backend multer config)
-  - **Status:** Architect-approved and production-ready, verified with full git diff review
+    - Fixed "bucket does not exist" error by routing Replit uploads through sidecar
+  - **Status:** Architect-approved and production-ready, tested and working on Replit
 
 - **✅ COMPLETED: Object Storage Portability Refactoring**
   - **What Changed:** Refactored storage system to support deployment on any platform (Replit, AWS, VPS, Docker)

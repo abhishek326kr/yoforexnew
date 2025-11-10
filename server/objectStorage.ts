@@ -464,18 +464,54 @@ export class ObjectStorageService {
     buffer: Buffer,
     contentType: string
   ): Promise<string> {
-    const { bucketName, objectName } = parseObjectPath(objectPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const file = bucket.file(objectName);
+    const mode = detectStorageMode();
+    
+    if (mode === 'replit') {
+      // On Replit: Use sidecar-signed URL for upload (sidecar handles bucket ID translation)
+      console.log('[ObjectStorage] Using Replit sidecar for buffer upload');
+      
+      // Get signed PUT URL from sidecar
+      const signedURL = await this.signObjectURL({
+        objectPath,
+        method: 'PUT',
+        ttlSec: 900, // 15 minutes
+      });
+      
+      // Upload buffer to signed URL
+      const response = await fetch(signedURL, {
+        method: 'PUT',
+        body: buffer,
+        headers: {
+          'Content-Type': contentType,
+        },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to upload to signed URL: ${response.status} ${response.statusText}\n${errorText}`
+        );
+      }
+      
+      const { bucketName, objectName } = parseObjectPath(objectPath);
+      return `https://storage.googleapis.com/${bucketName}/${objectName}`;
+    } else {
+      // On non-Replit (GCS with service account): Use direct SDK upload
+      console.log('[ObjectStorage] Using direct GCS SDK for buffer upload');
+      
+      const { bucketName, objectName } = parseObjectPath(objectPath);
+      const bucket = objectStorageClient.bucket(bucketName);
+      const file = bucket.file(objectName);
 
-    await file.save(buffer, {
-      contentType,
-      metadata: {
+      await file.save(buffer, {
         contentType,
-      },
-    });
+        metadata: {
+          contentType,
+        },
+      });
 
-    return `https://storage.googleapis.com/${bucketName}/${objectName}`;
+      return `https://storage.googleapis.com/${bucketName}/${objectName}`;
+    }
   }
 }
 
