@@ -1157,7 +1157,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
   const isFormValid = canProceedStep1 && editor !== null;
   
   // Update form when editor content changes and set editorRef
-  // Use only setValue in dependencies to avoid infinite loop
+  // Extract setValue as a stable reference
   const { setValue } = form;
   
   useEffect(() => {
@@ -1175,7 +1175,8 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
         editor.off('update', updateContent);
       };
     }
-  }, [editor, setValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]); // Only depend on editor, setValue is stable from react-hook-form
 
   // Create a ref for the hidden file input
   const imageInputRef = useRef<HTMLInputElement>(null);
