@@ -54,7 +54,7 @@ export function ActivityHeatmap() {
   }
 
   const getActivityForCell = (hour: number, day: number): ActivityCell | undefined => {
-    return data?.data.find((cell) => cell.hour === hour && cell.day === day);
+    return data?.data?.find((cell) => cell.hour === hour && cell.day === day);
   };
 
   const cellSize = 28;
