@@ -71,6 +71,26 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 
 ### November 10, 2025
 
+- **✅ COMPLETED: Object Storage Portability Refactoring**
+  - **What Changed:** Refactored storage system to support deployment on any platform (Replit, AWS, VPS, Docker)
+  - **Backend Changes (server/objectStorage.ts):**
+    - Implemented dual-storage strategy with automatic environment detection
+    - `ReplitSidecarSigner`: Uses Replit sidecar endpoint (`http://127.0.0.1:1106`)
+    - `DirectGCSSigner`: Uses @google-cloud/storage SDK with service account credentials
+    - `detectStorageMode()`: Auto-detects Replit vs non-Replit environments
+    - Graceful fallback when GCS credentials missing (no crashes)
+    - Descriptive error messages guide users to configure credentials
+  - **Configuration (.env.example):**
+    - Added complete object storage configuration section
+    - Environment variables: `STORAGE_MODE`, `PRIVATE_OBJECT_DIR`, `GOOGLE_APPLICATION_CREDENTIALS`, `GCS_PROJECT_ID`
+    - Auto-detection means no configuration needed on Replit
+  - **Documentation (DEPLOYMENT.md):**
+    - Added comprehensive "Object Storage Configuration" section
+    - Step-by-step GCS bucket creation and service account setup
+    - Troubleshooting guide for common errors
+    - Cost optimization recommendations
+  - **Status:** Architect-approved and production-ready for any deployment environment
+
 - **✅ COMPLETED: Refactored File Upload System to Use Presigned URLs**
   - **What Changed:** Migrated from direct Google Cloud Storage uploads to Replit-compliant presigned URL flow
   - **Backend Changes (server/objectStorage.ts, server/routes.ts):**
