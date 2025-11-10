@@ -27,6 +27,11 @@ interface Badge {
   color: string;
 }
 
+interface BadgesResponse {
+  badges: Badge[];
+  progress: Record<string, number>;
+}
+
 const BADGE_ICONS: Record<string, any> = {
   trophy: Trophy,
   star: Star,
@@ -37,10 +42,12 @@ const BADGE_ICONS: Record<string, any> = {
 };
 
 export function BadgeWall() {
-  const { data: badges, isLoading } = useQuery<Badge[]>({
+  const { data, isLoading } = useQuery<BadgesResponse>({
     queryKey: ['/api/dashboard/badges'],
     staleTime: 5 * 60 * 1000,
   });
+
+  const badges = data?.badges;
 
   const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
 
