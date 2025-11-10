@@ -544,8 +544,8 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
             </p>
           </div>
           
-          <Link href="/publish">
-            <Button className="bg-green-600 hover:bg-green-700">
+          <Link href="/marketplace/publish">
+            <Button className="bg-green-600 hover:bg-green-700" data-testid="button-sell-ea">
               <Plus className="h-4 w-4 mr-2" />
               Sell Your EA
             </Button>
