@@ -70,6 +70,13 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 ## Recent Changes
 
 ### November 10, 2025
+- **Fixed Object Storage Configuration for File Uploads**
+  - Created and connected `yoforex-files` bucket using Replit App Storage
+  - Bucket ID: `e119-91b8-4694-be75-9590cf2b82f8`
+  - Environment variable `PRIVATE_OBJECT_DIR=/yoforex-files/content` correctly configured
+  - Resolved "no allowed resources" 401 error by properly authorizing bucket for this Repl
+  - File uploads for EA files, screenshots, and documentation now functional
+
 - **Fixed "Publish EA" Page Authentication Issue**
   - Removed server-side authentication from `/marketplace/publish/page.tsx` that was causing unwanted redirects
   - Implemented client-side authentication guards in `PublishEAMultiStepClient.tsx` following DashboardClient pattern
