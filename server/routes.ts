@@ -222,6 +222,7 @@ import {
   errorTrackingLimiter,
   marketplaceActionLimiter,
   financeActionLimiter,
+  smtpTestLimiter,
 } from "./rateLimiting.js";
 import rateLimit from 'express-rate-limit';
 import DOMPurify from 'isomorphic-dompurify';
@@ -20710,6 +20711,15 @@ export async function registerRoutes(app: Express): Promise<Express> {
   });
 
   // ========== SMTP Testing Endpoints (Admin Only) ==========
+  //
+  // SECURITY NOTE: These endpoints are for admin SMTP testing only.
+  // To test SMTP functionality:
+  //   1. Go to Admin Dashboard > Communications > SMTP Settings
+  //   2. Use "Test Connection" to verify SMTP credentials
+  //   3. Use "Send Test Email" to send to your admin email or approved test addresses
+  //
+  // Test emails are restricted to prevent SMTP relay abuse.
+  // All test sends are logged to audit_logs for security monitoring.
 
   // GET /api/admin/smtp/status - Check SMTP configuration status
   app.get("/api/admin/smtp/status", isAdminMiddleware, async (req, res) => {
@@ -20738,7 +20748,8 @@ export async function registerRoutes(app: Express): Promise<Express> {
   });
 
   // POST /api/admin/smtp/test-connection - Test SMTP connection
-  app.post("/api/admin/smtp/test-connection", isAdminMiddleware, async (req, res) => {
+  // Rate limited to 5 requests per 15 minutes per admin
+  app.post("/api/admin/smtp/test-connection", isAdminMiddleware, smtpTestLimiter, async (req, res) => {
     try {
       console.log('[SMTP Test] Testing connection...');
       const result = await emailService.verifyConnection();
@@ -20763,10 +20774,16 @@ export async function registerRoutes(app: Express): Promise<Express> {
   });
 
   // POST /api/admin/smtp/send-test - Send test email
-  app.post("/api/admin/smtp/send-test", isAdminMiddleware, async (req, res) => {
+  // Rate limited to 5 requests per 15 minutes per admin
+  // SECURITY: Only allows sending to admin's own email or approved whitelist
+  app.post("/api/admin/smtp/send-test", isAdminMiddleware, smtpTestLimiter, async (req, res) => {
     try {
       const { to, subject, message } = req.body;
+      const adminUser = req.user as User;
+      const adminId = adminUser.id;
+      const adminEmail = adminUser.email;
 
+      // Validate email address is provided
       if (!to || typeof to !== 'string') {
         return res.status(400).json({
           success: false,
@@ -20783,7 +20800,40 @@ export async function registerRoutes(app: Express): Promise<Express> {
         });
       }
 
-      console.log(`[SMTP Test] Sending test email to ${to}...`);
+      // SECURITY: Prevent SMTP relay abuse by restricting recipients
+      // Only allow sending to admin's own email or hardcoded whitelist
+      const APPROVED_TEST_EMAILS = ['ranjan.nayak1968@gmail.com', 'test@yoforex.net'];
+      const isAdminEmail = to.toLowerCase() === adminEmail.toLowerCase();
+      const isWhitelisted = APPROVED_TEST_EMAILS.includes(to.toLowerCase());
+
+      if (!isAdminEmail && !isWhitelisted) {
+        console.log(`[SMTP Test] Blocked test email to unauthorized recipient: ${to} (admin: ${adminEmail})`);
+        
+        // Log security violation to audit log
+        await db.insert(adminActions).values({
+          adminId,
+          actionType: 'smtp_test_blocked',
+          targetType: 'smtp',
+          targetId: to,
+          details: {
+            recipient: to,
+            reason: 'Unauthorized recipient',
+            adminEmail: adminEmail,
+            timestamp: new Date().toISOString()
+          }
+        });
+
+        return res.status(403).json({
+          success: false,
+          error: 'Test emails can only be sent to your own email address or approved test addresses',
+          allowedRecipients: {
+            yourEmail: adminEmail,
+            approvedTestEmails: APPROVED_TEST_EMAILS
+          }
+        });
+      }
+
+      console.log(`[SMTP Test] Sending test email to ${to} (authorized)...`);
       
       // Use custom subject if provided, otherwise use default
       const customMessage = message || subject ? 
@@ -20792,15 +20842,49 @@ export async function registerRoutes(app: Express): Promise<Express> {
 
       const result = await emailService.sendTestEmail(to, customMessage);
       
+      // Log SMTP test send to audit log
+      await db.insert(adminActions).values({
+        adminId,
+        actionType: 'smtp_test_email_sent',
+        targetType: 'smtp',
+        targetId: to,
+        details: {
+          recipient: to,
+          subject: subject || 'SMTP Test Email',
+          success: result.success,
+          messageId: result.messageId || null,
+          error: result.error || null,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
       if (result.success) {
-        console.log(`[SMTP Test] Email sent successfully, messageId: ${result.messageId}`);
+        console.log(`[SMTP Test] Email sent successfully to ${to}, messageId: ${result.messageId}`);
         res.json(result);
       } else {
-        console.error(`[SMTP Test] Failed to send email:`, result.error);
+        console.error(`[SMTP Test] Failed to send email to ${to}:`, result.error);
         res.status(500).json(result);
       }
     } catch (error: any) {
       console.error('[SMTP Test] Unexpected error:', error);
+      
+      // Try to log the error to audit log
+      try {
+        const adminUser = req.user as User;
+        await db.insert(adminActions).values({
+          adminId: adminUser.id,
+          actionType: 'smtp_test_error',
+          targetType: 'smtp',
+          targetId: req.body.to || 'unknown',
+          details: {
+            error: error.message,
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (auditError) {
+        console.error('[SMTP Test] Failed to log error to audit:', auditError);
+      }
+
       res.status(500).json({
         success: false,
         error: error.message || 'Unexpected error sending test email'

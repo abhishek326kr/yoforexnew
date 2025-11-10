@@ -223,6 +223,28 @@ export const newsletterSubscriptionLimiter = rateLimit({
 });
 
 /**
+ * SMTP test rate limiter
+ * 5 requests per 15 minutes per admin user to prevent abuse
+ * Strict limit to prevent SMTP relay abuse and resource exhaustion
+ */
+export const smtpTestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per window
+  message: {
+    error: "Too many SMTP test requests, please try again later",
+    retryAfter: "15 minutes",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      error: "Too many SMTP test requests. Please wait 15 minutes before testing again",
+      retryAfter: "15 minutes",
+    });
+  },
+});
+
+/**
  * Error tracking rate limiter
  * 100 requests per 15 minutes per IP
  * More generous than general API to prevent circular rate-limiting issues
