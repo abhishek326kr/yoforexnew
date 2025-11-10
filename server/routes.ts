@@ -16535,21 +16535,33 @@ export async function registerRoutes(app: Express): Promise<Express> {
   
   // Endpoint for direct EA file uploads
   app.post("/api/marketplace/upload-ea", isAuthenticated, marketplaceActionLimiter, uploadEA.single('file'), async (req, res) => {
+    console.log("[EA Upload] ========== START EA UPLOAD ==========");
     let authenticatedUserId: string;
     
     try {
       authenticatedUserId = getAuthenticatedUserId(req);
+      console.log("[EA Upload] Authenticated user:", authenticatedUserId);
     } catch (error) {
+      console.error("[EA Upload] Authentication failed");
       return res.status(401).json({ error: "Authentication required" });
     }
 
     try {
       if (!req.file) {
+        console.error("[EA Upload] No file in request");
         return res.status(400).json({ error: "No file uploaded" });
       }
 
       const file = req.file;
+      console.log("[EA Upload] File received:", {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        buffer: file.buffer ? `${file.buffer.length} bytes` : 'no buffer'
+      });
+      
       const ext = path.extname(file.originalname).toLowerCase();
+      console.log("[EA Upload] File extension:", ext);
       
       const objectStorage = new ObjectStorageService();
       
@@ -16557,11 +16569,16 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const privateDir = objectStorage.getPrivateObjectDir();
       const objectPath = `${privateDir}/marketplace/ea/${eaId}/${eaId}${ext}`;
       
+      console.log("[EA Upload] Target path:", objectPath);
+      console.log("[EA Upload] Starting uploadFromBuffer...");
+      
       await objectStorage.uploadFromBuffer(
         objectPath,
         file.buffer,
         file.mimetype
       );
+      
+      console.log("[EA Upload] Upload successful! Returning response");
       
       return res.json({
         success: true,
@@ -16570,8 +16587,11 @@ export async function registerRoutes(app: Express): Promise<Express> {
       });
       
     } catch (error: any) {
-      console.error("[EA Upload] Error:", error);
-      return res.status(500).json({ error: "Failed to upload EA file" });
+      console.error("[EA Upload] FAILED with error:");
+      console.error("[EA Upload] Error name:", error.name);
+      console.error("[EA Upload] Error message:", error.message);
+      console.error("[EA Upload] Error stack:", error.stack);
+      return res.status(500).json({ error: "Failed to upload EA file", details: error.message });
     }
   });
 
