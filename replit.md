@@ -69,6 +69,58 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 
 ## Recent Changes
 
+### SMTP Email System & Database Fixes (November 10, 2025)
+Completed SMTP testing system and critical database error fixes:
+
+1. **Database Error Resolution:**
+   - Fixed foreign key constraint violations in error tracking system
+   - Created system automation user (UUID: 00000000-0000-0000-0000-000000000001)
+   - Created `server/constants.ts` with SYSTEM_AUTOMATION_USER_ID constant
+   - Updated all auto-resolve functions to use proper user references
+   - Eliminated recurring "auto-system" foreign key errors
+
+2. **SMTP Configuration & Testing:**
+   - Configured Hostinger SMTP credentials (smtp.hostinger.com:465)
+   - Successfully sent test email to ranjan.nayak1968@gmail.com
+   - Message ID: <a01a82a1-9390-4d88-d45a-3ea8c021db99@yoforex.net>
+   - Verified email delivery with YoForex branding
+
+3. **SMTP Admin Panel:**
+   - Added SMTP Settings tab to `/admin/communications`
+   - Real-time SMTP connection status monitoring
+   - Test connection functionality
+   - Secure test email sending with recipient restrictions
+   - Visual status indicators (connected/failed/not tested)
+
+4. **Security Hardening:**
+   - Restricted test email recipients to admin's own email + whitelist
+   - Added rate limiting (5 requests per 15 minutes)
+   - Implemented audit logging for all SMTP test sends
+   - Fixed BASE_URL fallback in email templates (prevents broken links)
+   - Removed server/send-smtp-test.ts standalone script
+
+**Files Modified:**
+- `server/constants.ts` - New file with SYSTEM_AUTOMATION_USER_ID
+- `server/storage.ts` - Updated auto-resolve functions to use constant
+- `server/seed.ts` - Added system automation user creation
+- `server/routes.ts` - Added 3 SMTP admin endpoints with security controls
+- `server/services/emailService.ts` - Added sendTestEmail method, BASE_URL fallback
+- `server/rateLimiting.ts` - Created smtpTestLimiter
+- `app/admin/communications/page.tsx` - Added SMTP Settings tab
+
+**Security Features:**
+- Recipient whitelist: admin's email + ['ranjan.nayak1968@gmail.com', 'test@yoforex.net']
+- Rate limiting: 5 SMTP tests per 15 minutes per admin
+- Audit trail: All test sends logged to adminActions table
+- Fallback URLs: Email links work even without BASE_URL env var
+
+**Status:**
+- ✅ SMTP verified working with Hostinger
+- ✅ Database errors eliminated
+- ✅ Admin panel fully functional
+- ✅ All security controls active
+- ✅ Production-ready (architect approved)
+
 ### SEO & Performance Optimizations (November 10, 2025)
 Completed comprehensive SEO improvements for 2025 production deployment:
 
