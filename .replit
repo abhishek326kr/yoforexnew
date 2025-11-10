@@ -23,7 +23,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 39375
+localPort = 40887
 externalPort = 5000
 
 [[ports]]
@@ -74,7 +74,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash start-production.sh"
+args = "bash start-hybrid.sh"
 waitForPort = 5000
 
 [agent]
