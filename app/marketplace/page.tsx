@@ -10,7 +10,7 @@ export const revalidate = 60;
 // Generate SEO metadata with overrides
 export async function generateMetadata(): Promise<Metadata> {
   return await getMetadataWithOverrides('/marketplace', {
-    title: 'EA & Indicator Marketplace | YoForex',
+    title: 'EA & Indicator Marketplace',
     description: 'Browse and download expert advisors (EAs) and indicators for MT4/MT5. Find free and premium trading tools from expert developers.',
     keywords: ['forex EA', 'MT4 indicators', 'MT5 expert advisor', 'trading tools', 'forex marketplace'],
     openGraph: {
