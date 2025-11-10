@@ -914,12 +914,18 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
   const [quickStartMode, setQuickStartMode] = useState(true);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [seoData, setSeoData] = useState<SEOData | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   
   // Ref to store editor instance after creation
   const editorRef = useRef<any>(null);
   
   // Pre-select category from URL param
   const categoryParam = searchParams?.get("category") || "";
+  
+  // Set mounted flag on client-side only
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   // Ensure categories is always an array
   const safeCategories = Array.isArray(categories) ? categories : [];
@@ -1043,37 +1049,38 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
     }
   };
 
-  // Initialize TipTap editor with persistent content
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
-        // Disable any conflicting extensions
-        dropcursor: false,
-        gapcursor: false,
-      }),
-      // Temporarily commenting out Underline to fix duplicate extension issue
-      // TiptapUnderline,
-      Image.configure({
-        inline: true,
-        allowBase64: true,
-        HTMLAttributes: {
-          class: 'tiptap-image max-w-full h-auto rounded-lg my-4 mx-auto block cursor-move hover:shadow-lg transition-shadow',
-          style: 'max-height: 500px; object-fit: contain;',
-          loading: 'lazy',
+  // Initialize TipTap editor with persistent content (client-side only)
+  const editor = useEditor(
+    isMounted ? {
+      immediatelyRender: false,
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3] },
+          // Disable any conflicting extensions
+          dropcursor: false,
+          gapcursor: false,
+        }),
+        // Temporarily commenting out Underline to fix duplicate extension issue
+        // TiptapUnderline,
+        Image.configure({
+          inline: true,
+          allowBase64: true,
+          HTMLAttributes: {
+            class: 'tiptap-image max-w-full h-auto rounded-lg my-4 mx-auto block cursor-move hover:shadow-lg transition-shadow',
+            style: 'max-height: 500px; object-fit: contain;',
+            loading: 'lazy',
+          },
+        }),
+        Placeholder.configure({
+          placeholder: 'Start writing your amazing content...',
+          emptyEditorClass: 'is-editor-empty',
+        }),
+      ],
+      content: contentHtmlValue || '',
+      editorProps: {
+        attributes: {
+          class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4',
         },
-      }),
-      Placeholder.configure({
-        placeholder: 'Start writing your amazing content...',
-        emptyEditorClass: 'is-editor-empty',
-      }),
-    ],
-    content: contentHtmlValue || '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4',
-      },
       handleDrop: (view, event, slice, moved) => {
         if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
           const files = Array.from(event.dataTransfer.files);
@@ -1144,7 +1151,8 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
         },
       },
     },
-  });
+  } : undefined  // Return undefined during SSR to prevent TipTap SSR error
+);
   
   // Validation helpers - use form values for proper reactivity
   const bodyTextLength = bodyText?.length || 0;
@@ -1529,10 +1537,17 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                 onImageUpload={triggerImageUpload}
                               />
                               <div className="relative">
-                                <EditorContent 
-                                  editor={editor} 
-                                  className="min-h-[300px]"
-                                />
+                                {editor ? (
+                                  <EditorContent 
+                                    editor={editor} 
+                                    className="min-h-[300px]"
+                                  />
+                                ) : (
+                                  <div className="min-h-[300px] p-4 flex items-center justify-center text-muted-foreground">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    Initializing editor...
+                                  </div>
+                                )}
                                 {isDragging && (
                                   <div className="absolute inset-0 flex items-center justify-center bg-primary/10 backdrop-blur-sm pointer-events-none">
                                     <div className="text-center p-6 bg-background/90 rounded-lg border-2 border-dashed border-primary">
