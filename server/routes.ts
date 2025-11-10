@@ -16495,7 +16495,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
   // EA MARKETPLACE FILE UPLOAD ENDPOINTS
   // ============================================================================
   
-  // Endpoint to upload EA files to Object Storage
+  // Endpoint to generate presigned URL for EA file uploads
   app.post("/api/marketplace/upload-ea", isAuthenticated, marketplaceActionLimiter, async (req, res) => {
     let authenticatedUserId: string;
     
@@ -16506,37 +16506,20 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
 
     try {
-      // Configure multer for EA file upload
-      const uploadEA = multer({
-        limits: { 
-          fileSize: 50 * 1024 * 1024, // 50MB limit
-        },
-        fileFilter: (req, file, cb) => {
-          // Accept only EA file types
-          const allowedExt = ['.ex4', '.ex5', '.mq4', '.mq5'];
-          const ext = path.extname(file.originalname).toLowerCase();
-          
-          if (!allowedExt.includes(ext)) {
-            return cb(new Error('Only .ex4, .ex5, .mq4, and .mq5 files are allowed'));
-          }
-          cb(null, true);
-        }
-      }).single('eaFile');
+      const { fileName } = req.body;
+      
+      if (!fileName || typeof fileName !== 'string') {
+        return res.status(400).json({ error: "fileName is required" });
+      }
 
-      // Handle file upload
-      await new Promise<void>((resolve, reject) => {
-        uploadEA(req, res, (err: any) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
+      // Validate file extension
+      const allowedExt = ['.ex4', '.ex5', '.mq4', '.mq5'];
+      const ext = path.extname(fileName).toLowerCase();
+      
+      if (!allowedExt.includes(ext)) {
+        return res.status(415).json({ 
+          error: 'Invalid file type. Only .ex4, .ex5, .mq4, and .mq5 files are allowed' 
         });
-      });
-
-      const file = (req as any).file;
-      if (!file) {
-        return res.status(400).json({ error: "No EA file uploaded" });
       }
 
       // Initialize object storage service
@@ -16544,45 +16527,30 @@ export async function registerRoutes(app: Express): Promise<Express> {
       
       // Generate unique EA file path
       const eaId = crypto.randomUUID();
-      const ext = path.extname(file.originalname);
-      const objectPath = `marketplace/ea/${eaId}/${eaId}${ext}`;
+      const objectPath = `/yoforex-files/content/marketplace/ea/${eaId}/${eaId}${ext}`;
       
-      // Upload EA file to Object Storage
-      const publicUrl = await objectStorage.uploadObject(
+      // Generate presigned PUT URL (valid for 15 minutes)
+      const uploadURL = await objectStorage.signObjectURL({
         objectPath,
-        file.buffer,
-        file.mimetype || 'application/octet-stream',
-        {
-          originalName: file.originalname,
-          uploaderId: authenticatedUserId,
-          uploadedAt: new Date().toISOString(),
-        }
-      );
+        method: "PUT",
+        ttlSec: 900,
+      });
       
-      // Return the file URL and metadata
+      // Return the presigned URL and file path
       return res.json({
         success: true,
-        fileUrl: `/objects/${objectPath}`,
-        fileName: file.originalname,
-        fileSize: file.size,
+        uploadURL,
+        filePath: `/objects/marketplace/ea/${eaId}/${eaId}${ext}`,
         contentId: eaId,
       });
       
     } catch (error: any) {
-      console.error("[EA Upload] Error:", error);
-      
-      if (error.message?.includes('file size')) {
-        return res.status(413).json({ error: "File too large. Maximum size is 50MB" });
-      }
-      if (error.message?.includes('allowed')) {
-        return res.status(415).json({ error: error.message });
-      }
-      
-      return res.status(500).json({ error: "Failed to upload EA file" });
+      console.error("[EA Upload Presign] Error:", error);
+      return res.status(500).json({ error: "Failed to generate upload URL" });
     }
   });
 
-  // Endpoint to upload screenshots for EA
+  // Endpoint to generate presigned URL for screenshot uploads
   app.post("/api/marketplace/upload-screenshot", isAuthenticated, marketplaceActionLimiter, async (req, res) => {
     let authenticatedUserId: string;
     
@@ -16593,36 +16561,20 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
 
     try {
-      // Configure multer for screenshot upload
-      const uploadScreenshot = multer({
-        limits: { 
-          fileSize: 5 * 1024 * 1024, // 5MB limit per screenshot
-        },
-        fileFilter: (req, file, cb) => {
-          // Accept only image files
-          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-          
-          if (!allowedTypes.includes(file.mimetype)) {
-            return cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
-          }
-          cb(null, true);
-        }
-      }).single('screenshot');
+      const { fileName, eaId } = req.body;
+      
+      if (!fileName || typeof fileName !== 'string') {
+        return res.status(400).json({ error: "fileName is required" });
+      }
 
-      // Handle file upload
-      await new Promise<void>((resolve, reject) => {
-        uploadScreenshot(req, res, (err: any) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
+      // Validate file extension
+      const allowedExt = ['.jpg', '.jpeg', '.png', '.webp'];
+      const ext = path.extname(fileName).toLowerCase();
+      
+      if (!allowedExt.includes(ext)) {
+        return res.status(415).json({ 
+          error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed' 
         });
-      });
-
-      const file = (req as any).file;
-      if (!file) {
-        return res.status(400).json({ error: "No screenshot uploaded" });
       }
 
       // Initialize object storage service
@@ -16630,38 +16582,32 @@ export async function registerRoutes(app: Express): Promise<Express> {
       
       // Generate unique screenshot path
       const screenshotId = crypto.randomUUID();
-      const ext = path.extname(file.originalname);
-      const objectPath = `marketplace/screenshots/${screenshotId}${ext}`;
+      const objectPath = eaId 
+        ? `/yoforex-files/content/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
+        : `/yoforex-files/content/marketplace/screenshots/${screenshotId}${ext}`;
       
-      // Upload screenshot to Object Storage
-      const publicUrl = await objectStorage.uploadObject(
+      // Generate presigned PUT URL (valid for 15 minutes)
+      const uploadURL = await objectStorage.signObjectURL({
         objectPath,
-        file.buffer,
-        file.mimetype,
-        {
-          uploaderId: authenticatedUserId,
-          uploadedAt: new Date().toISOString(),
-        }
-      );
+        method: "PUT",
+        ttlSec: 900,
+      });
       
-      // Return the screenshot URL
+      // Return the presigned URL and file path
+      const filePath = eaId
+        ? `/objects/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
+        : `/objects/marketplace/screenshots/${screenshotId}${ext}`;
+      
       return res.json({
         success: true,
-        imageUrl: `/objects/${objectPath}`,
-        fileName: file.originalname,
+        uploadURL,
+        filePath,
+        screenshotId,
       });
       
     } catch (error: any) {
-      console.error("[Screenshot Upload] Error:", error);
-      
-      if (error.message?.includes('file size')) {
-        return res.status(413).json({ error: "File too large. Maximum size is 5MB" });
-      }
-      if (error.message?.includes('allowed')) {
-        return res.status(415).json({ error: error.message });
-      }
-      
-      return res.status(500).json({ error: "Failed to upload screenshot" });
+      console.error("[Screenshot Upload Presign] Error:", error);
+      return res.status(500).json({ error: "Failed to generate upload URL" });
     }
   });
 

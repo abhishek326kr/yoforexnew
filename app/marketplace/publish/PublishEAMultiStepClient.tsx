@@ -134,7 +134,8 @@ const publishEASchema = z.object({
     name: z.string(),
     size: z.number(),
     url: z.string(),
-    type: z.string()
+    type: z.string(),
+    contentId: z.string() // UUID returned from upload for screenshot grouping
   }).nullable(),
   screenshots: z.array(z.object({
     name: z.string(),
@@ -271,11 +272,24 @@ export default function PublishEAMultiStepClient() {
     setUploadProgress(prev => ({ ...prev, eaFile: 0 }));
     
     try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append("eaFile", file);
+      // Step 1: Get presigned URL from server
+      const presignResponse = await fetch("/api/marketplace/upload-ea", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ fileName: file.name }),
+      });
 
-      // Track upload progress
+      if (!presignResponse.ok) {
+        const error = await presignResponse.json();
+        throw new Error(error.error || "Failed to get upload URL");
+      }
+
+      const { uploadURL, filePath, contentId } = await presignResponse.json();
+
+      // Step 2: Upload file directly to GCS using presigned URL
       const xhr = new XMLHttpRequest();
       
       xhr.upload.addEventListener("progress", (event) => {
@@ -285,42 +299,31 @@ export default function PublishEAMultiStepClient() {
         }
       });
 
-      // Upload to server
-      const uploadPromise = new Promise<any>((resolve, reject) => {
+      const uploadPromise = new Promise<void>((resolve, reject) => {
         xhr.onload = () => {
-          if (xhr.status === 200) {
-            try {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response);
-            } catch (e) {
-              reject(new Error("Invalid response from server"));
-            }
+          if (xhr.status === 200 || xhr.status === 204) {
+            resolve();
           } else {
-            try {
-              const error = JSON.parse(xhr.responseText);
-              reject(new Error(error.error || "Upload failed"));
-            } catch (e) {
-              reject(new Error(`Upload failed with status ${xhr.status}`));
-            }
+            reject(new Error(`Upload failed with status ${xhr.status}`));
           }
         };
         
         xhr.onerror = () => reject(new Error("Network error during upload"));
         xhr.onabort = () => reject(new Error("Upload cancelled"));
         
-        xhr.open("POST", "/api/marketplace/upload-ea");
-        xhr.withCredentials = true;
-        xhr.send(formData);
+        xhr.open("PUT", uploadURL);
+        xhr.send(file);
       });
 
-      const response = await uploadPromise;
+      await uploadPromise;
 
-      // Update form with uploaded file info
+      // Step 3: Update form with uploaded file info
       form.setValue("eaFile", {
         name: file.name,
         size: file.size,
-        url: response.fileUrl,
-        type: fileExt
+        url: filePath,
+        type: fileExt,
+        contentId: contentId // Store contentId for screenshot upload grouping
       });
       
       toast({
@@ -358,31 +361,57 @@ export default function PublishEAMultiStepClient() {
     }
 
     const uploadedScreenshots = [];
+    const eaFile = form.getValues("eaFile");
+    
+    // Ensure EA file was uploaded first to get the contentId for proper grouping
+    if (!eaFile?.contentId) {
+      toast({
+        title: "Upload EA file first",
+        description: "Please upload your EA file before adding screenshots",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    const eaId = eaFile.contentId;
     
     for (const file of acceptedFiles) {
       try {
-        // Create FormData for file upload
-        const formData = new FormData();
-        formData.append("screenshot", file);
-
-        // Upload to server
-        const response = await fetch("/api/marketplace/upload-screenshot", {
+        // Step 1: Get presigned URL from server
+        const presignResponse = await fetch("/api/marketplace/upload-screenshot", {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
           credentials: "include",
-          body: formData
+          body: JSON.stringify({ 
+            fileName: file.name,
+            eaId: eaId 
+          }),
         });
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Upload failed");
+        if (!presignResponse.ok) {
+          const error = await presignResponse.json();
+          throw new Error(error.error || "Failed to get upload URL");
         }
 
-        const result = await response.json();
-        
+        const { uploadURL, filePath } = await presignResponse.json();
+
+        // Step 2: Upload file directly to GCS using presigned URL
+        const uploadResponse = await fetch(uploadURL, {
+          method: "PUT",
+          body: file,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed with status ${uploadResponse.status}`);
+        }
+
+        // Step 3: Add to uploaded screenshots list
         uploadedScreenshots.push({
           name: file.name,
           size: file.size,
-          url: result.imageUrl,
+          url: filePath,
           isPrimary: currentScreenshots.length === 0 && uploadedScreenshots.length === 0
         });
         
