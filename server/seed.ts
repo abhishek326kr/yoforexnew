@@ -2,6 +2,7 @@ import { db } from "./db";
 import { users, brokers, contentReplies, forumCategories, forumThreads, forumReplies, userBadges, activityFeed, rankTiers, featureUnlocks } from "@shared/schema";
 import { storage } from "./storage";
 import { eq } from "drizzle-orm";
+import { SYSTEM_AUTOMATION_USER_ID } from "./constants";
 
 // SEO Helper Functions
 function generateSlug(text: string): string {
@@ -38,6 +39,29 @@ function getRandomDate(daysAgo: number): Date {
 
 async function seed() {
   console.log("🌱 Seeding database...");
+
+  // Create system automation user for automated system operations
+  let systemUser = await storage.getUser(SYSTEM_AUTOMATION_USER_ID);
+  if (!systemUser) {
+    console.log("🤖 Creating system automation user...");
+    systemUser = await db.insert(users).values({
+      id: SYSTEM_AUTOMATION_USER_ID,
+      username: "system-automation",
+      email: "system-automation@yoforex.internal",
+      firstName: "System",
+      lastName: "Automation",
+      isBot: true,
+      totalCoins: 0,
+      weeklyEarned: 0,
+      reputationScore: 0,
+      level: 0,
+      isEmailVerified: false,
+      emailNotifications: false,
+      onboardingCompleted: true,
+      role: "user",
+    }).returning().then(rows => rows[0]);
+    console.log(`✅ System automation user created with ID: ${SYSTEM_AUTOMATION_USER_ID}`);
+  }
 
   // Use the specified demo user ID
   const DEMO_USER_ID = "6e5f03b9-e0f1-424b-b264-779d75f62d89";

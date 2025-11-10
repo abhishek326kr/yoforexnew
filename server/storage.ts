@@ -303,6 +303,7 @@ import { applySEOAutomations, generateUniqueSlug, generateThreadSlug, generateRe
 import { db } from "./db";
 import { eq, and, or, desc, asc, sql, count, inArray, gt, gte, lte, ilike, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { coinTransactionService } from "./services/coinTransactionService";
+import { SYSTEM_AUTOMATION_USER_ID } from "./constants";
 
 /**
  * Calculate user level based on total coins
@@ -19848,7 +19849,7 @@ export class DrizzleStorage implements IStorage {
         .set({
           status: 'resolved',
           resolvedAt: new Date(),
-          resolvedBy: 'auto-system-404-cleanup',
+          resolvedBy: SYSTEM_AUTOMATION_USER_ID,
           updatedAt: new Date(),
         })
         .where(
@@ -19870,7 +19871,7 @@ export class DrizzleStorage implements IStorage {
         .set({
           status: 'resolved',
           resolvedAt: new Date(),
-          resolvedBy: 'auto-system',
+          resolvedBy: SYSTEM_AUTOMATION_USER_ID,
           updatedAt: new Date(),
         })
         .where(
@@ -19888,7 +19889,7 @@ export class DrizzleStorage implements IStorage {
       if (allResolved.length > 0) {
         const statusChanges = allResolved.map(group => ({
           errorGroupId: group.id,
-          changedBy: resolved404s.includes(group) ? 'auto-system-404-cleanup' : 'auto-system',
+          changedBy: SYSTEM_AUTOMATION_USER_ID,
           oldStatus: 'active' as const,
           newStatus: 'resolved' as const,
           reason: resolved404s.includes(group) 
