@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import HomeClient from './HomeClient';
 import { getInternalApiUrl } from './lib/api-config';
+import JsonLd from './components/JsonLd';
+import { generateOrganizationSchema, generateWebSiteSchema, SITE_CONFIG } from '../lib/schema-generator';
 
 // Enable ISR with 60-second revalidation
 export const revalidate = 60;
@@ -90,11 +92,18 @@ export default async function HomePage() {
     fetchData('/api/threads'),
   ]);
 
+  // Generate structured data schemas for homepage
+  const organizationSchema = generateOrganizationSchema(SITE_CONFIG);
+  const websiteSchema = generateWebSiteSchema(SITE_CONFIG);
+
   return (
-    <HomeClient 
-      initialStats={stats}
-      initialCategories={topCategories}
-      initialThreads={threads}
-    />
+    <>
+      <JsonLd schema={{ '@graph': [organizationSchema, websiteSchema] }} />
+      <HomeClient 
+        initialStats={stats}
+        initialCategories={topCategories}
+        initialThreads={threads}
+      />
+    </>
   );
 }

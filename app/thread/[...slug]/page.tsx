@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
-import type { ForumThread, ForumReply } from '@shared/schema';
+import type { ForumThread, ForumReply, User } from '@shared/schema';
 import ThreadDetailClient from './ThreadDetailClient';
 import { getThreadUrl } from '../../../lib/category-path';
 import { getMetadataWithOverrides } from '../../lib/metadata-helper';
 import { getInternalApiUrl } from '../../lib/api-config';
+import JsonLd from '../../components/JsonLd';
+import { generateDiscussionForumPostingSchema } from '../../../lib/schema-generator';
 
 interface PageProps {
   params: Promise<{ slug: string[] }>;
@@ -104,6 +106,42 @@ export default async function ThreadDetailPage({ params }: PageProps) {
   // Fetch replies for the thread
   const replies: ForumReply[] = await fetchData(`/api/threads/${thread.id}/replies`) || [];
   
+  // Fetch author information for schema
+  let author: User | undefined;
+  if (thread.authorId) {
+    author = await fetchData(`/api/users/${thread.authorId}`);
+  }
+  
+  // Generate DiscussionForumPosting schema for SEO
+  let threadSchema = null;
+  if (author) {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yoforex.net';
+    
+    // Map replies to schema format
+    const repliesForSchema = replies.map(r => ({
+      id: r.id,
+      content: r.body,
+      author: { id: r.userId, username: 'Forum Member' } as User,
+      createdAt: new Date(r.createdAt),
+      upvotes: r.upvotes || 0,
+    }));
+    
+    threadSchema = generateDiscussionForumPostingSchema({
+      thread,
+      author,
+      baseUrl,
+      viewCount: thread.views || 0,
+      replyCount: thread.replyCount || replies.length,
+      upvoteCount: thread.upvotes || 0,
+      replies: repliesForSchema.length > 0 ? repliesForSchema : undefined,
+    });
+  }
+  
   // Display the thread directly with correct prop names
-  return <ThreadDetailClient initialThread={thread} initialReplies={replies} />;
+  return (
+    <>
+      {threadSchema && <JsonLd schema={threadSchema} />}
+      <ThreadDetailClient initialThread={thread} initialReplies={replies} />
+    </>
+  );
 }

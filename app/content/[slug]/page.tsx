@@ -5,6 +5,8 @@ import type { Content, User as UserType, ContentReview } from '@shared/schema';
 import { getContentUrl } from '../../../lib/category-path';
 import { getMetadataWithOverrides } from '../../lib/metadata-helper';
 import { getInternalApiUrl } from '../../lib/api-config';
+import JsonLd from '../../components/JsonLd';
+import { generateProductSchema } from '../../../lib/schema-generator';
 
 // Express API base URL
 const EXPRESS_URL = getInternalApiUrl();
@@ -182,16 +184,47 @@ export default async function ContentDetailPage({ params }: { params: Promise<{ 
     }
   }
 
+  // Generate Product schema for SEO
+  let productSchema = null;
+  if (content && author) {
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yoforex.net';
+    
+    // Calculate average rating from reviews
+    const averageRating = reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : undefined;
+    
+    // Map reviews to schema format
+    const reviewsForSchema = reviews.map(r => ({
+      author: r.user,
+      rating: r.rating,
+      comment: r.review,
+      createdAt: new Date(r.createdAt),
+    }));
+    
+    productSchema = generateProductSchema({
+      product: content,
+      baseUrl,
+      author,
+      averageRating,
+      reviewCount: reviews.length,
+      reviews: reviewsForSchema.length > 0 ? reviewsForSchema : undefined,
+    });
+  }
+
   // Pass all fetched data to the client component
   return (
-    <ContentDetailClient
-      slug={slug}
-      initialContent={content}
-      initialAuthor={author}
-      initialReviews={reviews}
-      initialSimilarContent={similarContent}
-      initialAuthorReleases={authorReleases}
-    />
+    <>
+      {productSchema && <JsonLd schema={productSchema} />}
+      <ContentDetailClient
+        slug={slug}
+        initialContent={content}
+        initialAuthor={author}
+        initialReviews={reviews}
+        initialSimilarContent={similarContent}
+        initialAuthorReleases={authorReleases}
+      />
+    </>
   );
 }
 
