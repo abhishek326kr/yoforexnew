@@ -70,12 +70,26 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 ## Recent Changes
 
 ### November 10, 2025
+
+- **✅ COMPLETED: Refactored File Upload System to Use Presigned URLs**
+  - **What Changed:** Migrated from direct Google Cloud Storage uploads to Replit-compliant presigned URL flow
+  - **Backend Changes (server/objectStorage.ts, server/routes.ts):**
+    - Exposed `signObjectURL()` as public method for presigned URL generation via Replit sidecar endpoint
+    - Updated `/api/marketplace/upload-ea` and `/api/marketplace/upload-screenshot` to return presigned URLs instead of handling uploads
+    - API responses now include: `{ uploadURL, filePath, contentId }`
+    - Fixed method signature in `getObjectEntityUploadURL()` to use instance method correctly
+  - **Frontend Changes (app/marketplace/publish/PublishEAMultiStepClient.tsx):**
+    - Implemented 3-step upload workflow: request presigned URL → direct upload to GCS → store normalized path
+    - Updated TypeScript schema to include `contentId: z.string()` in eaFile object for proper screenshot grouping
+    - Added null guard to prevent screenshot uploads before EA file upload completes
+    - Captures and stores contentId from upload response for organizing files under `/yoforex-files/content/marketplace/ea/{uuid}/`
+  - **Testing Status:** Code refactoring complete and architect-approved. Ready for end-to-end testing.
+  - **⚠️ USER ACTION REQUIRED:** Must update `PRIVATE_OBJECT_DIR` environment variable in Replit Secrets from `/e119-91b8-4694-be75-9590cf2b82f8/content` to `/yoforex-files/content` before testing
+
 - **Fixed Object Storage Configuration for File Uploads**
   - Created and connected `yoforex-files` bucket using Replit App Storage
   - Bucket ID: `e119-91b8-4694-be75-9590cf2b82f8`
-  - Environment variable `PRIVATE_OBJECT_DIR=/yoforex-files/content` correctly configured
   - Resolved "no allowed resources" 401 error by properly authorizing bucket for this Repl
-  - File uploads for EA files, screenshots, and documentation now functional
 
 - **Fixed "Publish EA" Page Authentication Issue**
   - Removed server-side authentication from `/marketplace/publish/page.tsx` that was causing unwanted redirects
@@ -83,7 +97,6 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
   - Added three-state handling: loading skeleton → unauthenticated login prompt → authenticated form
   - Unauthenticated users now see a "Login Required" card instead of being redirected to home page
   - Server-side API protection remains in place at `/api/marketplace/publish-ea` endpoint
-  - Verified with architect tool - implementation approved
 
 - **Fixed BadgeWall Component Data Structure Issue**
   - Updated `BadgeWall.tsx` to handle nested API response structure correctly
