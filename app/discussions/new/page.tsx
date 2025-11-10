@@ -3,6 +3,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import EnhancedThreadComposeClient from "./EnhancedThreadComposeClient";
 import type { ForumCategory } from "@shared/schema";
 
+export const dynamic = 'force-dynamic';
+
 function ThreadComposeLoading() {
   return (
     <div className="p-6 space-y-4">
