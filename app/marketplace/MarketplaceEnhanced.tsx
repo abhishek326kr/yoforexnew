@@ -88,8 +88,18 @@ interface Content {
   tags?: string[];
 }
 
+export interface InitialFilters {
+  search?: string;
+  category?: string;
+  type?: string;
+  sort?: string;
+  price?: string;
+  platform?: string;
+}
+
 interface MarketplaceEnhancedProps {
   initialContent: Content[];
+  initialFilters?: InitialFilters;
 }
 
 const CATEGORIES = [
@@ -164,21 +174,47 @@ const getCategoryImage = (category: string, type: string): string => {
   return defaultEAImage;
 };
 
-export default function MarketplaceEnhanced({ initialContent }: MarketplaceEnhancedProps) {
+export default function MarketplaceEnhanced({ initialContent, initialFilters = {} }: MarketplaceEnhancedProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   
-  // State management
+  // State management - Initialize from server-provided filters
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
-  const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "all");
-  const [selectedType, setSelectedType] = useState(searchParams.get("type") || "all");
-  const [sortBy, setSortBy] = useState(searchParams.get("sort") || "newest");
-  const [priceFilter, setPriceFilter] = useState(searchParams.get("price") || "all");
-  const [platformFilter, setPlatformFilter] = useState(searchParams.get("platform") || "all");
+  const [searchTerm, setSearchTerm] = useState(initialFilters.search || "");
+  const [selectedCategory, setSelectedCategory] = useState(initialFilters.category || "all");
+  const [selectedType, setSelectedType] = useState(initialFilters.type || "all");
+  const [sortBy, setSortBy] = useState(initialFilters.sort || "newest");
+  const [priceFilter, setPriceFilter] = useState(initialFilters.price || "all");
+  const [platformFilter, setPlatformFilter] = useState(initialFilters.platform || "all");
   const [showFilters, setShowFilters] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  
+  // Sync state when initialFilters prop changes (server navigation)
+  useEffect(() => {
+    if (initialFilters.search !== undefined) setSearchTerm(initialFilters.search);
+    if (initialFilters.category !== undefined) setSelectedCategory(initialFilters.category);
+    if (initialFilters.type !== undefined) setSelectedType(initialFilters.type);
+    if (initialFilters.sort !== undefined) setSortBy(initialFilters.sort);
+    if (initialFilters.price !== undefined) setPriceFilter(initialFilters.price);
+    if (initialFilters.platform !== undefined) setPlatformFilter(initialFilters.platform);
+  }, [initialFilters]);
+  
+  // Sync URL when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+    
+    if (searchTerm) params.set('search', searchTerm);
+    if (selectedCategory !== 'all') params.set('category', selectedCategory);
+    if (selectedType !== 'all') params.set('type', selectedType);
+    if (sortBy !== 'newest') params.set('sort', sortBy);
+    if (priceFilter !== 'all') params.set('price', priceFilter);
+    if (platformFilter !== 'all') params.set('platform', platformFilter);
+    
+    const queryString = params.toString();
+    const newUrl = queryString ? `?${queryString}` : '/marketplace';
+    
+    router.replace(newUrl, { scroll: false });
+  }, [searchTerm, selectedCategory, selectedType, sortBy, priceFilter, platformFilter, router]);
   
   // Fetch content with filters
   const { data: content = initialContent, isLoading, refetch } = useQuery<Content[]>({

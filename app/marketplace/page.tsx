@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import MarketplaceClient from './MarketplaceClient';
 import { getInternalApiUrl } from '../lib/api-config';
 import { getMetadataWithOverrides } from '../lib/metadata-helper';
@@ -46,8 +47,44 @@ async function getMarketplaceContent() {
   }
 }
 
-export default async function MarketplacePage() {
-  const initialContent = await getMarketplaceContent();
+// Loading component for Suspense fallback
+function MarketplaceLoading() {
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="animate-pulse">
+        <div className="h-8 bg-muted rounded w-64 mb-4"></div>
+        <div className="h-4 bg-muted rounded w-96 mb-8"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-64 bg-muted rounded-lg"></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  return <MarketplaceClient initialContent={initialContent} />;
+export default async function MarketplacePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const initialContent = await getMarketplaceContent();
+  
+  // Parse search params on the server
+  const params = await searchParams;
+  const initialFilters = {
+    search: typeof params.search === 'string' ? params.search : '',
+    category: typeof params.category === 'string' ? params.category : 'all',
+    sortBy: typeof params.sortBy === 'string' ? params.sortBy : 'recent',
+  };
+
+  return (
+    <Suspense fallback={<MarketplaceLoading />}>
+      <MarketplaceClient 
+        initialContent={initialContent} 
+        initialFilters={initialFilters}
+      />
+    </Suspense>
+  );
 }

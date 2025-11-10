@@ -24,15 +24,26 @@ interface Content {
 
 interface MarketplaceClientProps {
   initialContent: Content[];
+  initialFilters?: {
+    search: string;
+    category: string;
+    sortBy: string;
+  };
 }
 
-export default function MarketplaceClient({ initialContent }: MarketplaceClientProps) {
+export default function MarketplaceClient({ 
+  initialContent, 
+  initialFilters 
+}: MarketplaceClientProps) {
   // Use the enhanced marketplace component for better functionality
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <Header />
       <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <MarketplaceEnhanced initialContent={initialContent} />
+        <MarketplaceEnhanced 
+          initialContent={initialContent} 
+          initialFilters={initialFilters}
+        />
       </main>
       <EnhancedFooter />
     </div>
