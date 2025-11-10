@@ -361,11 +361,11 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
         <Card className="overflow-hidden hover:shadow-lg transition-shadow">
           <CardContent className="p-0">
             <div className="flex">
-              <div className="w-48 h-36 relative bg-gradient-to-br from-blue-100 to-purple-100">
+              <Link href={`/ea/${item.slug}`} className="w-48 h-36 relative bg-gradient-to-br from-blue-100 to-purple-100 cursor-pointer group" data-testid={`link-ea-${item.id}`}>
                 <img
                   src={imageUrl}
                   alt={item.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-opacity group-hover:opacity-90"
                   onError={(e) => {
                     e.currentTarget.src = getCategoryImage(item.category, item.type);
                   }}
@@ -373,7 +373,7 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
                 {item.isFree && (
                   <Badge className="absolute top-2 left-2 bg-green-500">FREE</Badge>
                 )}
-              </div>
+              </Link>
               <div className="flex-1 p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -433,7 +433,7 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
                     </span>
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     {!item.isFree && (
                       <span className="text-lg font-bold text-amber-600">
                         {item.priceCoins} coins
@@ -443,6 +443,7 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
                       size="sm"
                       onClick={() => handlePurchase(item)}
                       className="bg-blue-600 hover:bg-blue-700"
+                      data-testid={`button-buy-${item.id}`}
                     >
                       {item.isFree ? 'Download' : 'Purchase'}
                     </Button>
@@ -458,11 +459,11 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
     return (
       <Card className="overflow-hidden hover:shadow-lg transition-all hover:-translate-y-1">
         <CardHeader className="p-0">
-          <div className="relative aspect-video bg-gradient-to-br from-blue-100 to-purple-100">
+          <Link href={`/ea/${item.slug}`} className="block relative aspect-video bg-gradient-to-br from-blue-100 to-purple-100 cursor-pointer group" data-testid={`link-ea-${item.id}`}>
             <img
               src={imageUrl}
               alt={item.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform group-hover:scale-105"
               onError={(e) => {
                 e.currentTarget.src = getCategoryImage(item.category, item.type);
               }}
@@ -470,15 +471,15 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
             {item.isFree && (
               <Badge className="absolute top-2 left-2 bg-green-500">FREE</Badge>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 bg-white/80 hover:bg-white"
-              onClick={() => toggleFavorite(item.id)}
-            >
-              <Heart className={cn("h-4 w-4", favorites.has(item.id) && "fill-red-500 text-red-500")} />
-            </Button>
-          </div>
+          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 bg-white/80 hover:bg-white z-10"
+            onClick={() => toggleFavorite(item.id)}
+          >
+            <Heart className={cn("h-4 w-4", favorites.has(item.id) && "fill-red-500 text-red-500")} />
+          </Button>
         </CardHeader>
         
         <CardContent className="p-4">
@@ -512,7 +513,7 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
         </CardContent>
         
         <CardFooter className="p-4 pt-0">
-          <div className="flex justify-between items-center w-full">
+          <div className="flex justify-between items-center w-full gap-3">
             <div className="text-lg font-bold text-amber-600">
               {item.isFree ? 'Free' : `${item.priceCoins} coins`}
             </div>
@@ -520,6 +521,7 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
               size="sm"
               onClick={() => handlePurchase(item)}
               className="bg-blue-600 hover:bg-blue-700"
+              data-testid={`button-buy-${item.id}`}
             >
               <ShoppingCart className="h-3 w-3 mr-1" />
               {item.isFree ? 'Get' : 'Buy'}

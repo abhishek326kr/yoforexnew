@@ -71,6 +71,28 @@ YoForex is a comprehensive trading community platform for forex traders, featuri
 
 ### November 10, 2025
 
+- **✅ COMPLETED: Marketplace UI Enhancements**
+  - **What Changed:** Fixed overlapping buttons and made EA card images clickable
+  - **Frontend Changes (app/marketplace/MarketplaceEnhanced.tsx):**
+    - **Grid View (lines 464-476):** Wrapped EA images in Link components with `group-hover:scale-105` effect
+    - **List View (lines 367-379):** Wrapped EA images in Link components with `group-hover:opacity-90` effect
+    - **Button Spacing Fix:** Added `gap-3` to CardFooter in both views (lines 439, 518)
+    - All images now navigate to `/ea/{slug}` when clicked
+    - Added `cursor-pointer` class and hover effects for better UX
+    - Added `data-testid` attributes for both images and Buy buttons
+  - **Bug Fixes:**
+    - Fixed overlapping price display and Buy buttons on EA cards
+    - Fixed z-index for Heart (favorite) button to stay above clickable image layer
+  - **Status:** Architect-approved, responsive design maintained for both grid and list views
+
+- **✅ COMPLETED: Fixed `/ea/undefined` Navigation Bug**
+  - **What Changed:** Fixed redirect after EA publishing to use correct response structure
+  - **Frontend Changes (app/marketplace/publish/PublishEAMultiStepClient.tsx):**
+    - Updated line 679 to access `data.content.slug` instead of `data.slug`
+    - API returns `{ success: true, content: { id, slug, ... } }` structure
+    - Now correctly navigates to `/ea/{slug}` after successful EA publishing
+  - **Status:** Bug fixed, tested and working
+
 - **✅ COMPLETED: Direct Server-Side File Uploads for EA Marketplace**
   - **What Changed:** Implemented server-side uploads using sidecar-backed approach on Replit, direct GCS SDK on other platforms
   - **Root Cause:** Replit uses internal bucket IDs (e.g., `e119-91b8-4694-be75-9590cf2b82f8`) that must be translated to actual GCS bucket names via sidecar
