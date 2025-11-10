@@ -1,0 +1,446 @@
+import cron from 'node-cron';
+import type { IStorage } from '../storage';
+import { calculateEngagementScore, calculateUserReputation, calculateSalesScore } from '../utils/rankingAlgorithm';
+import { startEmailQueueProcessor } from '../services/emailQueue';
+import { initRetentionJobs } from './retentionJobs';
+import { initializeEmailDigestJobs } from './emailDigests';
+
+export function startBackgroundJobs(storage: IStorage) {
+  console.log('[JOBS] Background jobs DISABLED for performance optimization');
+  console.log('[JOBS] No background jobs running - reducing CPU/memory usage');
+  
+  // Start Email Queue Processor
+  console.log('[EMAIL QUEUE] Starting email queue processor...');
+  startEmailQueueProcessor();
+  console.log('[EMAIL QUEUE] Email queue processor started successfully');
+  
+  // Start Retention Jobs (vault unlock, tier calculation, etc.)
+  console.log('[RETENTION] Initializing retention jobs...');
+  initRetentionJobs();
+  console.log('[RETENTION] Retention jobs initialized successfully');
+  
+  // Start Email Digest Jobs (daily/weekly summaries, milestone notifications)
+  console.log('[EMAIL DIGEST] Initializing email digest jobs...');
+  initializeEmailDigestJobs();
+  console.log('[EMAIL DIGEST] Email digest jobs initialized successfully');
+  
+  // Sitemap Generation Job - Runs every 24 hours (ENABLED)
+  cron.schedule('0 2 * * *', async () => { // Runs at 2 AM daily
+    try {
+      console.log('[SITEMAP JOB] Starting automated sitemap generation...');
+      
+      const { SitemapGenerator } = await import('../services/sitemap-generator.js');
+      const { SitemapSubmissionService } = await import('../services/sitemap-submission.js');
+      const { sitemapLogs } = await import('@shared/schema');
+      const { db } = await import('../db');
+      
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:5000';
+      const generator = new SitemapGenerator(baseUrl);
+      const submissionService = new SitemapSubmissionService(baseUrl);
+
+      // Generate sitemap
+      const { xml, urlCount } = await generator.generateSitemap();
+
+      // Save to public directory
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const publicDir = path.join(process.cwd(), 'public');
+      await fs.mkdir(publicDir, { recursive: true });
+      await fs.writeFile(path.join(publicDir, 'sitemap.xml'), xml, 'utf-8');
+
+      // Log generation
+      await db.insert(sitemapLogs).values({
+        action: 'generate',
+        status: 'success',
+        urlCount,
+        submittedTo: null,
+      });
+
+      console.log(`[SITEMAP JOB] Generated sitemap with ${urlCount} URLs`);
+
+      // Submit to search engines
+      const sitemapUrl = `${baseUrl}/sitemap.xml`;
+      const allUrls = xml.match(/<loc>(.*?)<\/loc>/g)?.map(loc => 
+        loc.replace('<loc>', '').replace('</loc>', '')
+      ) || [];
+
+      // Submit to IndexNow
+      const indexNowResult = await submissionService.submitToIndexNow(allUrls);
+      console.log('[SITEMAP JOB] IndexNow submission:', indexNowResult.success ? 'Success' : indexNowResult.error);
+
+      // Ping Google
+      const googleResult = await submissionService.pingGoogle(sitemapUrl);
+      console.log('[SITEMAP JOB] Google ping:', googleResult.success ? 'Success' : googleResult.error);
+
+      console.log('[SITEMAP JOB] Completed successfully');
+    } catch (error: any) {
+      console.error('[SITEMAP JOB] Error during automated generation:', error);
+      
+      // Log error
+      try {
+        const { sitemapLogs } = await import('@shared/schema');
+        const { db } = await import('../db');
+        await db.insert(sitemapLogs).values({
+          action: 'generate',
+          status: 'error',
+          urlCount: null,
+          submittedTo: null,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+      } catch (logError) {
+        console.error('[SITEMAP JOB] Failed to log error:', logError);
+      }
+    }
+  });
+
+  console.log('[JOBS] Sitemap generation scheduled (runs daily at 2 AM)');
+  
+  // Bot Behavior Engine - Runs every 10 minutes (ENABLED)
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      console.log('[BOT ENGINE] Starting bot behavior engine...');
+      
+      const { runBotEngine } = await import('../services/botBehaviorEngine.js');
+      await runBotEngine();
+      
+      console.log('[BOT ENGINE] Bot behavior engine completed successfully');
+    } catch (error: any) {
+      console.error('[BOT ENGINE] Error during bot behavior execution:', error);
+    }
+  });
+  
+  console.log('[JOBS] Bot behavior engine scheduled (runs every 10 minutes)');
+  
+  // Bot Purchase Refunds - Runs at 3 AM daily (ENABLED)
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      console.log('[BOT REFUNDS] Starting bot purchase refunds...');
+      
+      const { refundBotPurchases } = await import('../services/botBehaviorEngine.js');
+      await refundBotPurchases();
+      
+      console.log('[BOT REFUNDS] Bot purchase refunds completed successfully');
+    } catch (error: any) {
+      console.error('[BOT REFUNDS] Error during bot purchase refunds:', error);
+    }
+  });
+  
+  console.log('[JOBS] Bot purchase refunds scheduled (runs daily at 3 AM)');
+  
+  // ============================================
+  // SEO SCAN BACKGROUND JOBS
+  // ============================================
+  
+  // Nightly full SEO scan - Runs at 1 AM daily
+  cron.schedule('0 1 * * *', async () => {
+    try {
+      console.log('[SEO SCAN] Starting nightly full SEO scan...');
+      
+      const { seoScanner } = await import('../services/seo-scanner.js');
+      
+      if (seoScanner.isScanRunning()) {
+        console.log('[SEO SCAN] Skipping nightly scan - another scan is already in progress');
+        return;
+      }
+      
+      const scanId = await seoScanner.startScan({
+        scanType: 'full',
+        triggeredBy: 'cron',
+      });
+      
+      if (scanId) {
+        console.log(`[SEO SCAN] Nightly full scan started successfully (ID: ${scanId})`);
+      } else {
+        console.log('[SEO SCAN] Failed to start nightly scan - mutex locked');
+      }
+    } catch (error: any) {
+      console.error('[SEO SCAN] Error during nightly full scan:', error);
+    }
+  });
+  
+  console.log('[JOBS] Nightly SEO full scan scheduled (runs daily at 1 AM)');
+  
+  // Hourly delta SEO scan - Runs at :15 past every hour
+  cron.schedule('15 * * * *', async () => {
+    try {
+      console.log('[SEO SCAN] Starting hourly delta SEO scan...');
+      
+      const { seoScanner } = await import('../services/seo-scanner.js');
+      
+      if (seoScanner.isScanRunning()) {
+        console.log('[SEO SCAN] Skipping hourly delta scan - another scan is already in progress');
+        return;
+      }
+      
+      const scanId = await seoScanner.startScan({
+        scanType: 'delta',
+        triggeredBy: 'cron',
+      });
+      
+      if (scanId) {
+        console.log(`[SEO SCAN] Hourly delta scan started successfully (ID: ${scanId})`);
+      } else {
+        console.log('[SEO SCAN] Hourly delta scan skipped - no URLs need scanning or mutex locked');
+      }
+    } catch (error: any) {
+      console.error('[SEO SCAN] Error during hourly delta scan:', error);
+    }
+  });
+  
+  console.log('[JOBS] Hourly SEO delta scan scheduled (runs at :15 past each hour)');
+  
+  // Hourly high-priority SEO digest - Runs at :30 past every hour
+  cron.schedule('30 * * * *', async () => {
+    try {
+      console.log('[SEO ALERTS] Starting hourly high-priority digest...');
+      
+      const { sendHighPriorityDigest } = await import('../services/seo-alerts.js');
+      const sent = await sendHighPriorityDigest();
+      
+      if (sent) {
+        console.log('[SEO ALERTS] High-priority digest sent successfully');
+      } else {
+        console.log('[SEO ALERTS] No high-priority digest sent (no issues or already sent)');
+      }
+    } catch (error: any) {
+      console.error('[SEO ALERTS] Error sending high-priority digest:', error);
+    }
+  });
+  
+  console.log('[JOBS] Hourly SEO high-priority digest scheduled (runs at :30 past each hour)');
+  
+  // ============================================
+  // ERROR TRACKING BACKGROUND JOBS
+  // ============================================
+  
+  // Hourly error cleanup and auto-resolve - Runs every hour
+  cron.schedule('0 * * * *', async () => {
+    try {
+      console.log('[ERROR CLEANUP] Starting hourly error cleanup and auto-resolve...');
+      
+      // Auto-resolve errors that haven't occurred in 1 hour (1/24 days)
+      // Most errors repeat every 30 min if not fixed - 1 hour is aggressive cleanup
+      const resolvedResult = await storage.autoResolveInactiveErrors(1/24);
+      
+      // Delete:
+      // - All "solved" errors immediately (historical, no value)
+      // - "resolved" errors older than 7 days
+      const cleanupResult = await storage.cleanupOldErrors(30); // Parameter ignored, always uses 7 days for resolved
+      
+      console.log(`[ERROR CLEANUP] Hourly cleanup completed - Auto-resolved: ${resolvedResult.resolvedCount}, Deleted groups: ${cleanupResult.deletedGroups}, Deleted events: ${cleanupResult.deletedEvents}`);
+    } catch (error: any) {
+      console.error('[ERROR CLEANUP] Error during hourly cleanup:', error);
+    }
+  });
+  
+  console.log('[JOBS] Hourly error cleanup and auto-resolve scheduled (runs every hour)');
+  
+  // ============================================
+  // SWEETS ECONOMY AUTOMATION JOBS
+  // ============================================
+  
+  // Coin Expiration Job - Runs daily at 4 AM (same time as error cleanup for efficiency)
+  cron.schedule('0 4 * * *', async () => {
+    try {
+      console.log('[COIN EXPIRATION] Starting coin expiration automation...');
+      
+      const { runCoinExpiration } = await import('./coinExpiration.js');
+      const result = await runCoinExpiration();
+      
+      console.log(`[COIN EXPIRATION] Completed: ${result.usersAffected} users, ${result.coinsExpired} coins expired, ${result.errors} errors`);
+    } catch (error: any) {
+      console.error('[COIN EXPIRATION] Error during coin expiration job:', error);
+    }
+  });
+  
+  console.log('[JOBS] Coin expiration automation scheduled (runs daily at 4 AM)');
+  
+  // Fraud Detection Job - Runs hourly
+  cron.schedule('0 * * * *', async () => {
+    try {
+      console.log('[FRAUD DETECTION] Starting fraud detection scan...');
+      
+      const { runFraudDetection } = await import('./fraudDetection.js');
+      const result = await runFraudDetection();
+      
+      console.log(`[FRAUD DETECTION] Completed: ${result.signalsCreated} signals created, ${result.highSeverityAlerts} high severity alerts`);
+    } catch (error: any) {
+      console.error('[FRAUD DETECTION] Error during fraud detection:', error);
+    }
+  });
+  
+  console.log('[JOBS] Fraud detection scheduled (runs hourly)');
+  
+  // Treasury Snapshot Job - Runs daily at 6 AM
+  cron.schedule('0 6 * * *', async () => {
+    try {
+      console.log('[TREASURY SNAPSHOT] Starting treasury snapshot...');
+      
+      const { runTreasurySnapshot } = await import('./treasurySnapshot.js');
+      const result = await runTreasurySnapshot();
+      
+      console.log(`[TREASURY SNAPSHOT] Completed: ${result.totalUserBalance} user coins, ${result.botTreasuryBalance} bot coins, ${result.pendingRedemptions} pending redemptions${result.anomalyDetected ? ' ⚠️ ANOMALY DETECTED' : ''}`);
+    } catch (error: any) {
+      console.error('[TREASURY SNAPSHOT] Error during treasury snapshot:', error);
+    }
+  });
+  
+  console.log('[JOBS] Treasury snapshot scheduled (runs daily at 6 AM)');
+  
+  // Balance Reconciliation Job - Runs weekly Sunday 3 AM
+  cron.schedule('0 3 * * 0', async () => {
+    try {
+      console.log('[BALANCE RECONCILIATION] Starting weekly balance reconciliation...');
+      
+      const { runBalanceReconciliation } = await import('./balanceReconciliation.js');
+      const result = await runBalanceReconciliation();
+      
+      console.log(`[BALANCE RECONCILIATION] Completed: ${result.usersChecked} users checked, ${result.discrepanciesFound} discrepancies found, total drift: ${result.totalDrift} coins`);
+    } catch (error: any) {
+      console.error('[BALANCE RECONCILIATION] Error during balance reconciliation:', error);
+    }
+  });
+  
+  console.log('[JOBS] Balance reconciliation scheduled (runs weekly Sunday at 3 AM)');
+  
+  // NOTE: All other background jobs are disabled to improve performance
+  // To re-enable, uncomment the cron schedules below:
+  
+  // Update thread engagement scores every 60 minutes
+  // cron.schedule('0 * * * *', async () => {
+  //   console.log('[JOBS] Updating thread engagement scores...');
+  //   try {
+  //     await updateThreadScores(storage);
+  //   } catch (error) {
+  //     console.error('[JOBS] Error updating thread scores:', error);
+  //   }
+  // });
+
+  // Update user reputation scores every 5 minutes
+  // cron.schedule('*_/5 * * * *', async () => {
+  //   console.log('[JOBS] Updating user reputation scores...');
+  //   try {
+  //     await updateUserReputations(storage);
+  //   } catch (error) {
+  //     console.error('[JOBS] Error updating user reputations:', error);
+  //   }
+  // });
+
+  // Update top seller scores every 15 minutes
+  // cron.schedule('*_/15 * * * *', async () => {
+  //   console.log('[JOBS] Updating top seller scores...');
+  //   try {
+  //     await updateTopSellerScores(storage);
+  //   } catch (error) {
+  //     console.error('[JOBS] Error updating top seller scores:', error);
+  //   }
+  // });
+
+  // Initial calculation on startup
+  // setTimeout(async () => {
+  //   try {
+  //     await updateThreadScores(storage);
+  //     await updateUserReputations(storage);
+  //     await updateTopSellerScores(storage);
+  //     console.log('[JOBS] Initial score calculations complete');
+  //   } catch (error) {
+  //     console.error('[JOBS] Error in initial calculations:', error);
+  //   }
+  // }, 5000);
+}
+
+async function updateThreadScores(storage: IStorage) {
+  // Get all forum threads
+  const threads = await storage.getAllForumThreads();
+  let updated = 0;
+
+  for (const thread of threads) {
+    try {
+      // Get author reputation
+      const author = await storage.getUserById(thread.authorId);
+      const authorReputation = author?.reputationScore || 0;
+
+      // Calculate engagement score
+      const score = calculateEngagementScore({
+        views: thread.views,
+        replies: thread.replyCount,
+        helpfulVotes: thread.helpfulVotes || 0,
+        bookmarks: thread.bookmarkCount || 0,
+        shares: thread.shareCount || 0,
+        recency: thread.createdAt,
+        authorReputation
+      });
+
+      // Update thread score
+      await storage.updateThreadScore(thread.id, score);
+      updated++;
+    } catch (error) {
+      console.error(`[JOBS] Error updating score for thread ${thread.id}:`, error);
+    }
+  }
+
+  console.log(`[JOBS] Updated ${updated} thread scores`);
+}
+
+async function updateUserReputations(storage: IStorage) {
+  // Get all users
+  const users = await storage.getAllUsers();
+  let updated = 0;
+
+  for (const user of users) {
+    try {
+      // Get user statistics
+      const stats = await storage.getUserStats(user.id);
+
+      // Calculate reputation score
+      const reputation = calculateUserReputation({
+        threadsCreated: stats.threadsCreated,
+        repliesPosted: stats.repliesPosted,
+        helpfulVotes: stats.helpfulVotes,
+        bestAnswers: stats.bestAnswers || 0,
+        contentSales: stats.contentSales || 0,
+        followersCount: stats.followersCount || 0,
+        uploadsCount: stats.uploadsCount || 0,
+        verifiedTrader: user.isVerifiedTrader || false
+      });
+
+      // Update user reputation
+      await storage.updateUserReputation(user.id, reputation);
+      updated++;
+    } catch (error) {
+      console.error(`[JOBS] Error updating reputation for user ${user.id}:`, error);
+    }
+  }
+
+  console.log(`[JOBS] Updated ${updated} user reputations`);
+}
+
+async function updateTopSellerScores(storage: IStorage) {
+  // Get all content (EAs, Indicators, etc.)
+  const allContent = await storage.getAllContent();
+  let updated = 0;
+
+  for (const content of allContent) {
+    try {
+      // Get sales statistics
+      const salesStats = await storage.getContentSalesStats(content.id);
+
+      // Calculate sales score
+      const score = calculateSalesScore({
+        totalSales: salesStats.totalSales,
+        priceCoins: content.priceCoins,
+        reviewCount: salesStats.reviewCount,
+        avgRating: salesStats.avgRating,
+        downloads: content.downloads
+      });
+
+      // Update content sales score
+      await storage.updateContentSalesScore(content.id, score);
+      updated++;
+    } catch (error) {
+      console.error(`[JOBS] Error updating sales score for content ${content.id}:`, error);
+    }
+  }
+
+  console.log(`[JOBS] Updated ${updated} content sales scores`);
+}

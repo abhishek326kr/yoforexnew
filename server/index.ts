@@ -1,0 +1,262 @@
+import express, { type Request, Response, NextFunction } from "express";
+import { createServer } from "http";
+import cors from "cors";
+import crypto from "crypto";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
+import { generalApiLimiter } from "./rateLimiting";
+import { storage } from "./storage";
+import { startBackgroundJobs } from "./jobs/backgroundJobs";
+import { startBotEngagementJob } from "./jobs/botEngagement";
+import { startBotRefundJob } from "./jobs/botRefunds";
+import { setupSecurityHeaders } from "./middleware/securityHeaders";
+import { categoryRedirectMiddleware, trackCategoryViews } from "./middleware/categoryRedirects";
+import { initializeDashboardWebSocket } from "./services/dashboardWebSocket";
+import { serverErrorTracker, errorTrackingMiddleware } from "./middleware/errorTracking";
+import { ipBanMiddleware, loginSecurityMiddleware } from './middleware/security';
+import { getSecurityService } from './services/securityService';
+import { auditLogger } from './middleware/auditLogger';
+
+// Initialize security service
+const securityService = getSecurityService(storage);
+
+const app = express();
+
+// Trust first proxy - required for correct rate limiting behind load balancers/proxies
+app.set("trust proxy", 1);
+
+// Apply security headers to all requests (before CORS)
+setupSecurityHeaders(app);
+
+// Apply category redirect middleware early in the stack
+app.use(categoryRedirectMiddleware);
+app.use(trackCategoryViews);
+
+// Body parsing middleware MUST come before session middleware
+declare module 'http' {
+  interface IncomingMessage {
+    rawBody: unknown
+  }
+}
+app.use(express.json({
+  limit: '10mb', // Increased limit for error tracking bulk submissions
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Configure CORS for cross-origin requests with credentials
+// CORS must come AFTER body parsing but can be before or after sessions
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests with no origin (e.g., mobile apps, Postman, same-origin)
+    if (!origin) return callback(null, true);
+    
+    // Always allow localhost and 127.0.0.1 origins (safe local origins for development and error reporting)
+    const localOriginPatterns = [
+      /^https?:\/\/localhost:\d+$/,        // Any localhost port
+      /^https?:\/\/127\.0\.0\.1:\d+$/,     // Any 127.0.0.1 port
+      /^https?:\/\/0\.0\.0\.0:\d+$/,       // Any 0.0.0.0 port
+    ];
+    
+    if (localOriginPatterns.some(pattern => pattern.test(origin))) {
+      return callback(null, true);
+    }
+    
+    // Always allow Replit domains (development and production)
+    const replitDomainPatterns = [
+      /^https?:\/\/.*\.replit\.app$/,      // Replit app domains (multi-level)
+      /^https?:\/\/.*\.replit\.dev$/,      // Replit dev domains (multi-level)
+      /^https?:\/\/.*\.repl\.co$/,         // Replit co domains (multi-level)
+      /^https?:\/\/.*\.repl\.run$/,        // Replit run domains (multi-level)
+    ];
+    
+    if (replitDomainPatterns.some(pattern => pattern.test(origin))) {
+      return callback(null, true);
+    }
+    
+    // Production domains
+    const allowedProductionOrigins = [
+      'https://yoforex.net',
+      'https://www.yoforex.net',
+      ...(process.env.ALLOWED_ORIGINS?.split(',').filter(Boolean) || [])
+    ];
+    
+    if (allowedProductionOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Log and deny unrecognized origins
+    console.log('CORS: Origin not allowed:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true, // Allow cookies to be sent
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie'],
+  maxAge: 86400, // Cache preflight requests for 24 hours
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+};
+
+app.use(cors(corsOptions));
+
+// Apply security middleware early in the chain
+// Block banned IPs first (before any other processing)
+app.use(ipBanMiddleware(storage));
+
+// Track login attempts and detect brute force attacks
+app.use(loginSecurityMiddleware(storage, securityService));
+
+// Apply general rate limiting to all API routes
+app.use("/api/", generalApiLimiter);
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path = req.path;
+  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+  const originalResJson = res.json;
+  res.json = function (bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path.startsWith("/api")) {
+      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "…";
+      }
+
+      log(logLine);
+    }
+  });
+
+  next();
+});
+
+// Initialize the server with proper async handling
+async function initializeServer() {
+  try {
+    // Session middleware MUST be set up BEFORE routes
+    // Import and setup authentication middleware first
+    const { setupAuth } = await import('./flexibleAuth');
+    await setupAuth(app);
+    
+    // Setup local authentication (includes password reset endpoints)
+    const { setupLocalAuth } = await import('./localAuth');
+    await setupLocalAuth(app);
+    
+    // Add audit logging middleware after authentication setup
+    app.use(auditLogger);
+    
+    const expressApp = await registerRoutes(app);
+    
+    // Register error tracking middleware to capture specialized error types
+    // This middleware will capture errors and then pass them to the next error handler
+    expressApp.use(errorTrackingMiddleware);
+    
+    // Add comprehensive error handling middleware AFTER routes
+    expressApp.use(async (err: any, req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      
+      // Use ServerErrorTracker to capture the error
+      try {
+        // Determine severity based on status code
+        let severity: 'critical' | 'error' | 'warning' | 'info' = 'error';
+        if (status >= 500) {
+          severity = 'critical';
+        } else if (status >= 400) {
+          severity = 'error';
+        } else {
+          severity = 'warning';
+        }
+        
+        // Use ServerErrorTracker to handle error persistence
+        await serverErrorTracker.captureError(
+          err,
+          {
+            requestId: (req as any).requestId || (req as any).session?.id || crypto.randomUUID(),
+            method: req.method,
+            path: req.path,
+            query: req.query,
+            body: req.body,
+            headers: req.headers as Record<string, string>,
+            errorType: 'internal',
+            userId: (req as any).user?.id,
+            ip: req.ip,
+            userAgent: req.get('user-agent'),
+          },
+          severity
+        );
+      } catch (trackingError) {
+        // If error tracking fails, log it but don't block the response
+        console.error('[EXPRESS ERROR HANDLER] Error tracking failed:', trackingError);
+        console.error('[ORIGINAL ERROR]', err);
+      }
+
+      // Send response to client
+      res.status(status).json({ 
+        message,
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+      });
+    });
+
+    // React SPA removed - Next.js runs separately on port 3000
+    // Express server now only serves API endpoints
+    log("Express server running API-only mode (React SPA archived)");
+
+    // Create HTTP server and initialize WebSocket
+    const httpServer = createServer(expressApp);
+    const io = initializeDashboardWebSocket(httpServer);
+    expressApp.set('io', io); // Make WebSocket available to routes
+    log("WebSocket server initialized on /ws/dashboard and /ws/admin");
+
+    // Express API server runs on port 3001 (internal)
+    // Next.js frontend runs on port 5000 (user-facing, required by Replit)
+    const port = parseInt(process.env.API_PORT || '3001', 10);
+    
+    // Start the server only after all setup is complete
+    httpServer.listen(port, "0.0.0.0", () => {
+      log(`serving on port ${port} with WebSocket support`);
+      
+      // Defer background jobs if needed for health checks
+      if (process.env.DEFER_BACKGROUND_JOBS === 'true') {
+        log('Deferring background jobs for 5 seconds to allow health checks to pass...');
+        setTimeout(() => {
+          log('Starting background jobs after deferment period');
+          startBackgroundJobs(storage);
+          
+          // Initialize bot jobs
+          startBotEngagementJob();
+          startBotRefundJob();
+        }, 5000); // Start after 5 seconds
+      } else {
+        // Start background jobs immediately
+        startBackgroundJobs(storage);
+        
+        // Initialize bot jobs
+        startBotEngagementJob();
+        startBotRefundJob();
+      }
+    });
+
+    return httpServer;
+  } catch (error) {
+    console.error('Failed to initialize server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server with proper error handling
+initializeServer().catch((error) => {
+  console.error('Fatal server initialization error:', error);
+  process.exit(1);
+});
