@@ -219,9 +219,9 @@ async function initializeServer() {
     expressApp.set('io', io); // Make WebSocket available to routes
     log("WebSocket server initialized on /ws/dashboard and /ws/admin");
 
-    // Express API server runs on port 3001 (internal)
-    // Next.js frontend runs on port 5000 (user-facing, required by Replit)
-    const port = parseInt(process.env.API_PORT || '3001', 10);
+    // Express API server with Vite frontend runs on port 5000 (required by Replit)
+    // Use PORT env var first (Replit standard), then API_PORT, then default to 5000
+    const port = parseInt(process.env.PORT || process.env.API_PORT || '5000', 10);
     
     // Start the server only after all setup is complete
     httpServer.listen(port, "0.0.0.0", () => {

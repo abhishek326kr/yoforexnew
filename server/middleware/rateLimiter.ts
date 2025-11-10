@@ -102,8 +102,8 @@ export const passwordResetRateLimiter = rateLimit({
   max: 3, // Limit to 3 password reset requests per hour
   message: 'Too many password reset requests',
   keyGenerator: (req: Request) => {
-    // Use email as key if provided, otherwise use IP
-    return req.body?.email || req.ip || 'unknown';
+    // Use email as key if provided, otherwise fall back to default IP handling
+    return req.body?.email || undefined;
   },
   handler: (req: Request, res: Response) => {
     console.log(`[RATE LIMIT] Password reset blocked for: ${req.body?.email || req.ip}`);
