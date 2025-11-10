@@ -405,13 +405,13 @@ const upload = uploadSingle;
 const uploadEA = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowedExt = ['.ex4', '.ex5', '.mq4', '.mq5'];
+    const allowedExt = ['.ex4', '.ex5', '.mq4', '.mq5', '.zip'];
     const ext = path.extname(file.originalname).toLowerCase();
     
     if (allowedExt.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only .ex4, .ex5, .mq4, and .mq5 files are allowed'));
+      cb(new Error('Invalid file type. Only .ex4, .ex5, .mq4, .mq5, and .zip files are allowed'));
     }
   },
   limits: {
