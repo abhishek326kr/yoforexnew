@@ -3,6 +3,7 @@
 import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
+import { Client as ReplitStorageClient } from "@replit/object-storage";
 import {
   ObjectAclPolicy,
   ObjectPermission,
@@ -385,6 +386,53 @@ export class ObjectStorageService {
     return `/objects/${entityId}`;
   }
 
+  /**
+   * Normalizes any object path (GCS URL or local path) to /objects/... format
+   * This is used after uploads to ensure consistent path format in database.
+   * 
+   * Examples:
+   * - Input: https://storage.googleapis.com/bucket-id/content/ea-files/file.ex5
+   *   Output: /objects/ea-files/file.ex5
+   * 
+   * - Input: /e119.../content/ea-files/file.ex5
+   *   Output: /objects/ea-files/file.ex5
+   * 
+   * @param rawPath - The raw path from upload (GCS URL or local path)
+   * @returns Normalized path in /objects/... format
+   */
+  private normalizeToObjectsPath(rawPath: string): string {
+    let pathToNormalize = rawPath;
+    
+    // If it's a GCS URL, extract the pathname
+    if (rawPath.startsWith("https://storage.googleapis.com/")) {
+      const url = new URL(rawPath);
+      pathToNormalize = url.pathname;
+    }
+    
+    // Get the private object directory (e.g., /e119.../content)
+    let objectEntityDir = this.getPrivateObjectDir();
+    if (!objectEntityDir.endsWith("/")) {
+      objectEntityDir = `${objectEntityDir}/`;
+    }
+    
+    // Check if the path starts with the private object directory
+    if (!pathToNormalize.startsWith(objectEntityDir)) {
+      // Path doesn't match expected format, return as-is
+      console.warn(
+        `[normalizeToObjectsPath] Path doesn't start with private object dir.\n` +
+        `  Expected prefix: ${objectEntityDir}\n` +
+        `  Actual path: ${pathToNormalize}`
+      );
+      return pathToNormalize;
+    }
+    
+    // Extract the entity ID (everything after the private directory)
+    const entityId = pathToNormalize.slice(objectEntityDir.length);
+    
+    // Return normalized path
+    return `/objects/${entityId}`;
+  }
+
   async trySetObjectEntityAclPolicy(
     rawPath: string,
     aclPolicy: ObjectAclPolicy
@@ -446,33 +494,82 @@ export class ObjectStorageService {
     console.log('[uploadFromBuffer] Content type:', contentType);
     console.log('[uploadFromBuffer] Buffer size:', buffer.length);
     
-    const { bucketName, objectName } = parseObjectPath(objectPath);
-    console.log('[uploadFromBuffer] Bucket:', bucketName);
-    console.log('[uploadFromBuffer] Object:', objectName);
+    const mode = detectStorageMode();
+    console.log('[uploadFromBuffer] Storage mode:', mode);
     
-    try {
-      // Use Storage SDK's .save() method directly (works with both Replit sidecar and GCS service accounts)
-      console.log('[uploadFromBuffer] Uploading via Storage SDK .save() method...');
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
+    let uploadedPath: string;
+    
+    if (mode === 'replit') {
+      // On Replit: Use official Replit SDK with contentType support
+      console.log('[uploadFromBuffer] Using Replit SDK for upload...');
+      
+      try {
+        // The Replit SDK handles bucket mapping internally - we just pass the full path
+        // Path format: /bucket-id/content/... → SDK translates bucket-id to actual GCS bucket
+        const client = new ReplitStorageClient();
+        
+        console.log('[uploadFromBuffer] Uploading via Replit SDK with contentType...');
+        console.log('[uploadFromBuffer] Path:', objectPath);
+        console.log('[uploadFromBuffer] Content-Type:', contentType);
+        
+        // Upload the buffer with contentType metadata via options parameter
+        // Replit SDK signature: uploadFromBytes(path, data, options?)
+        // UploadOptions interface includes: { contentType?: string; metadata?: Record<string, string> }
+        const result = await client.uploadFromBytes(objectPath, buffer, {
+          contentType: contentType
+        });
+        
+        console.log('[uploadFromBuffer] Replit SDK upload successful!', result);
+        
+        // Use the object path for normalization
+        uploadedPath = objectPath;
+      } catch (error: any) {
+        console.error('[uploadFromBuffer] ERROR in Replit mode:');
+        console.error('[uploadFromBuffer] Error name:', error.name);
+        console.error('[uploadFromBuffer] Error message:', error.message);
+        console.error('[uploadFromBuffer] Error stack:', error.stack);
+        throw error;
+      }
+    } else {
+      // On non-Replit: Use Storage SDK directly
+      console.log('[uploadFromBuffer] Using GCS SDK direct upload...');
+      
+      const { bucketName, objectName } = parseObjectPath(objectPath);
+      
+      try {
+        const bucket = objectStorageClient.bucket(bucketName);
+        const file = bucket.file(objectName);
 
-      await file.save(buffer, {
-        contentType,
-        metadata: {
+        await file.save(buffer, {
           contentType,
-        },
-      });
+          metadata: {
+            contentType,
+          },
+        });
 
-      const finalURL = `https://storage.googleapis.com/${bucketName}/${objectName}`;
-      console.log('[uploadFromBuffer] Upload successful! URL:', finalURL);
-      return finalURL;
-    } catch (error: any) {
-      console.error('[uploadFromBuffer] Upload FAILED:');
-      console.error('[uploadFromBuffer] Error name:', error.name);
-      console.error('[uploadFromBuffer] Error message:', error.message);
-      console.error('[uploadFromBuffer] Error stack:', error.stack);
-      throw error;
+        // Use GCS URL for normalization
+        uploadedPath = `https://storage.googleapis.com/${bucketName}/${objectName}`;
+        console.log('[uploadFromBuffer] GCS upload successful! URL:', uploadedPath);
+      } catch (error: any) {
+        console.error('[uploadFromBuffer] Upload FAILED:');
+        console.error('[uploadFromBuffer] Error name:', error.name);
+        console.error('[uploadFromBuffer] Error message:', error.message);
+        console.error('[uploadFromBuffer] Error stack:', error.stack);
+        throw error;
+      }
     }
+    
+    // Normalize the path to /objects/... format for both modes
+    // This ensures consistent database storage and download endpoint compatibility
+    const normalizedPath = this.normalizeToObjectsPath(uploadedPath);
+    
+    console.log('[uploadFromBuffer] ========== PATH NORMALIZATION ==========');
+    console.log('[uploadFromBuffer]   Raw uploaded path:', uploadedPath);
+    console.log('[uploadFromBuffer]   Normalized path:', normalizedPath);
+    console.log('[uploadFromBuffer]   Private object dir:', this.getPrivateObjectDir());
+    console.log('[uploadFromBuffer] ========== END ==========');
+    
+    return normalizedPath;
   }
 }
 
