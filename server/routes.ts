@@ -17175,14 +17175,22 @@ export async function registerRoutes(app: Express): Promise<Express> {
             const correctedImageUrls = [];
             for (const oldPath of imageUrls) {
               const filename = path.basename(oldPath);
-              const oldStoragePath = `${privateDir}/marketplace/ea/${tempEaId}/screenshots/${filename}`;
-              const newStoragePath = `${privateDir}/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
+              // Remove any trailing slash from privateDir to avoid double slashes
+              const cleanPrivateDir = privateDir.replace(/\/+$/, '');
+              const oldStoragePath = `${cleanPrivateDir}/marketplace/ea/${tempEaId}/screenshots/${filename}`;
+              const newStoragePath = `${cleanPrivateDir}/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               const newPublicPath = `/objects/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
+              
+              console.log(`[EA Publish] Screenshot move plan for ${filename}:`);
+              console.log(`[EA Publish]   Old path: ${oldStoragePath}`);
+              console.log(`[EA Publish]   New path: ${newStoragePath}`);
+              console.log(`[EA Publish]   Public URL: ${newPublicPath}`);
               
               try {
                 // Download file from old location
-                console.log(`[EA Publish] Downloading ${filename} from ${oldStoragePath}`);
+                console.log(`[EA Publish] Step 1: Downloading ${filename}...`);
                 const fileBuffer = await storageClient.downloadAsBytes(oldStoragePath);
+                console.log(`[EA Publish] Step 1: Downloaded ${fileBuffer.length} bytes`);
                 
                 // Determine content type from filename
                 const ext = path.extname(filename).toLowerCase();
@@ -17191,18 +17199,30 @@ export async function registerRoutes(app: Express): Promise<Express> {
                                   ext === '.webp' ? 'image/webp' : 'image/jpeg';
                 
                 // Upload to new location
-                console.log(`[EA Publish] Uploading ${filename} to ${newStoragePath}`);
-                await objectStorage.uploadFromBuffer(newStoragePath, Buffer.from(fileBuffer), contentType);
+                console.log(`[EA Publish] Step 2: Uploading ${filename} (${contentType})...`);
+                const uploadedPath = await objectStorage.uploadFromBuffer(newStoragePath, Buffer.from(fileBuffer), contentType);
+                console.log(`[EA Publish] Step 2: Uploaded to ${uploadedPath}`);
+                
+                // Verify the file exists at new location
+                console.log(`[EA Publish] Step 3: Verifying file exists at new location...`);
+                try {
+                  await storageClient.downloadAsBytes(newStoragePath);
+                  console.log(`[EA Publish] Step 3: Verified file exists!`);
+                } catch (verifyError) {
+                  throw new Error(`File verification failed: ${verifyError.message}`);
+                }
                 
                 // Delete old file
-                console.log(`[EA Publish] Deleting old file: ${oldStoragePath}`);
+                console.log(`[EA Publish] Step 4: Deleting old file...`);
                 await storageClient.delete(oldStoragePath);
+                console.log(`[EA Publish] Step 4: Old file deleted`);
                 
                 // Only use new path if move succeeded
                 correctedImageUrls.push(newPublicPath);
-                console.log(`[EA Publish] Successfully moved screenshot: ${filename}`);
+                console.log(`[EA Publish] ✅ Successfully moved screenshot: ${filename}`);
               } catch (moveError) {
-                console.error(`[EA Publish] Failed to move screenshot ${filename}:`, moveError);
+                console.error(`[EA Publish] ❌ Failed to move screenshot ${filename}:`, moveError);
+                console.error(`[EA Publish] Error details:`, moveError.stack);
                 // Keep old path if move failed
                 correctedImageUrls.push(oldPath);
               }
