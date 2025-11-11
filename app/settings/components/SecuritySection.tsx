@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -197,6 +198,15 @@ export default function SecuritySection({ initialUser }: SecuritySectionProps) {
                         />
                       </FormControl>
                       <FormMessage />
+                      <FormDescription className="flex items-center gap-1">
+                        <Link 
+                          href="/auth/forgot-password" 
+                          className="text-primary hover:underline text-sm"
+                          data-testid="link-forgot-password-settings"
+                        >
+                          Forgot your password?
+                        </Link>
+                      </FormDescription>
                     </FormItem>
                   )}
                 />
