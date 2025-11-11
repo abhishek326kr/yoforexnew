@@ -138,11 +138,6 @@ export const users = pgTable("users", {
   google_uid: varchar("google_uid").unique(), // For Google OAuth (nullable)
   auth_provider: varchar("auth_provider", { length: 20 }).default("replit"), // 'email', 'google', 'replit'
   is_email_verified: boolean("is_email_verified").default(false),
-  two_factor_enabled: boolean("two_factor_enabled").default(false), // For 2FA authentication
-  two_factor_secret: varchar("two_factor_secret"), // TOTP secret key for 2FA
-  two_factor_backup_codes: text("two_factor_backup_codes").array(), // Backup codes for 2FA recovery
-  two_factor_verified_at: timestamp("two_factor_verified_at"), // Timestamp when 2FA was verified
-  two_factor_method: varchar("two_factor_method", { length: 20 }), // 2FA method (totp, sms, etc)
   last_login_at: timestamp("last_login_at"),
   
   // Replit Auth fields (kept for backward compatibility during migration)

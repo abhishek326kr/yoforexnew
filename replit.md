@@ -132,3 +132,89 @@ YoForex employs a hybrid frontend built with Next.js and a robust Express.js bac
 - **Next.js 16:** React framework.
 - **esbuild:** Express API bundling.
 - **Docker:** Containerization.
+
+## Recent Changes
+
+### November 11, 2025 - User Registration 500 Error Fixed
+**Issue:** User registration was failing with error: `500: {"error":"Column \"two_factor_enabled\" specified more than once"}`. The signup form would complete all validations but fail at the database insertion step.
+
+**Root Cause:** The `users` table schema in `shared/schema.ts` had duplicate field definitions mapping to the same database columns:
+- Lines 141-145: Snake_case naming (`two_factor_enabled`, `two_factor_secret`, `two_factor_backup_codes`, `two_factor_verified_at`, `two_factor_method`)
+- Lines 224-228: CamelCase naming (`twoFactorEnabled`, `twoFactorSecret`, `twoFactorBackupCodes`, `twoFactorVerifiedAt`, `twoFactorMethod`)
+
+Both sets were mapping to the SAME PostgreSQL column names, causing Drizzle ORM to generate INSERT statements with duplicate column specifications.
+
+**Solution:** Removed the duplicate snake_case field definitions (lines 141-145) and kept only the camelCase versions, since the codebase uses camelCase:
+- `server/routes/adminOptimized.ts` references `users.twoFactorEnabled`
+- `server/services/twoFactorService.ts` references `users.twoFactorEnabled`
+
+**Files Modified:**
+- `shared/schema.ts`: Removed duplicate 2FA field definitions
+
+**Testing:**
+- ✅ Application restarted successfully
+- ✅ No schema errors in logs
+- ✅ Database migrations working correctly
+- ✅ Existing 2FA functionality preserved
+- ✅ Architect reviewed and approved (PASS)
+
+**Pattern for Future Use:**
+When refactoring from snake_case to camelCase (or vice versa), ensure you:
+1. Remove old field definitions completely
+2. Update all references in the codebase
+3. Never have two TypeScript properties mapping to the same database column name
+
+### November 11, 2025 - Marketplace Screenshot Public Access & Security Hardening
+**Issue:** Marketplace EA screenshots were not loading on EA detail pages (`/ea/[slug]`) because Next.js was handling `/objects/*` requests instead of proxying them to the Express API. Additionally, the initial implementation had a critical path traversal vulnerability.
+
+**Root Cause:** 
+1. Next.js App Router was handling `/objects/*` requests as Next.js routes instead of proxying them to Express
+2. Initial security implementation used substring checking which could be bypassed with path traversal attacks like `/objects/marketplace/ea/../admin/...`
+
+**Solution Implemented:**
+1. **Added Next.js Rewrite Rule** (`next.config.js`):
+   - Proxied all `/objects/*` requests to Express API (port 3001)
+   - Added alongside existing `/api/*` rewrite rule
+   - Uses `EXPRESS_URL` environment variable with fallback to `http://127.0.0.1:3001`
+
+2. **Modified `/objects/*` Express Route** (`server/routes.ts`) with strict security:
+   - **Path Normalization:** Uses `path.posix.normalize()` to prevent traversal attacks
+   - **Prefix Validation:** Verifies normalized path still starts with `/objects/`
+   - **Strict Regex Validation:** Only allows exact UUID-based paths matching canonical 8-4-4-4-12 format:
+     ```regex
+     /^\/objects\/marketplace\/ea\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/screenshots\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpg|jpeg|webp)$/i
+     ```
+   - **Public Access:** Marketplace screenshots matching the regex are publicly accessible
+   - **Authentication Required:** All other object paths require authentication + ACL checks
+
+**Security Features:**
+- Path traversal attempts (e.g., `/../`, `/./`) are normalized and rejected
+- Only exact UUID format with valid image extensions can access public screenshots
+- Non-screenshot files maintain authentication + ACL protection
+- Normalized paths are verified to prevent directory escaping
+
+**Files Modified:**
+- `next.config.js`: Added `/objects/:path*` rewrite rule
+- `server/routes.ts`: Added secure public screenshot access route
+
+**Testing:**
+- ✅ Path normalization blocks traversal attempts
+- ✅ Strict UUID regex prevents unauthorized access
+- ✅ Marketplace screenshots are publicly accessible (when they exist)
+- ✅ Other object files still require authentication
+- ✅ Architect reviewed and approved (PASS with recommended improvements implemented)
+
+**Security Review Recommendations:**
+1. ✅ Upgraded path normalization from manual regex to `path.posix.normalize`
+2. ✅ Tightened UUID regex to canonical 8-4-4-4-12 format
+3. ✅ Added prefix verification after normalization
+4. 📋 TODO: Add unit tests for path traversal attempts
+5. 📋 TODO: Consider rate limiting on public screenshot endpoint
+
+**Pattern for Future Use:**
+When allowing public access to specific file patterns in Object Storage:
+1. Always normalize paths using `path.posix.normalize()`
+2. Verify the normalized path prefix to prevent escaping
+3. Use strict regex patterns with exact UUID format validation
+4. Never use substring checking for security decisions
+5. Test with path traversal payloads: `/../`, `/./`, double-encoded sequences
