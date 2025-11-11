@@ -2,24 +2,29 @@
 
 ## Recent Changes
 
-### EA Publishing Bug Fixes (November 11, 2025)
-**Fixed Critical Issues:**
-1. **Coin Transaction Not Saved**: Fixed EA publish endpoint not creating coin transaction record when awarding 30 Sweets
-   - Changed from calling non-existent `awardCoins()` to using `executeTransaction()` with proper trigger/channel
-   - Added idempotency key (`publish-ea-${contentId}`) to prevent duplicate awards
-   - Proper error handling and transaction metadata
-   - File: `server/routes.ts` (EA publish endpoint)
+### EA Publishing Bug Fixes - Round 2 (November 11, 2025 - 1:45 PM)
+**Fixed Critical Implementation Issues:**
+1. **Screenshot Moving Failed**: Replaced incorrect Google Cloud Storage API with correct Replit Object Storage API
+   - **Root Cause**: Code was using `objectStorageClient.bucket().file().copy()` (Google Cloud Storage) instead of Replit SDK
+   - **Error**: "The specified bucket does not exist" - because GCS buckets don't exist in Replit environment
+   - **Fix**: Use Replit SDK pattern: `downloadAsBytes()` → `uploadFromBuffer()` → `delete()`
+   - **File**: `server/routes.ts` lines 17185-17202
 
-2. **Screenshots Not Displaying**: Fixed screenshot path mismatch after EA content creation
-   - Implemented automatic file relocation from temporary eaId to actual content ID
-   - Added missing imports: `parseObjectPath` and `objectStorageClient` from `./objectStorage.js`
-   - Improved error handling: keeps old path if file copy fails
-   - Files: `server/routes.ts` (screenshot moving logic)
+**What's Working Now:**
+- ✅ Coins ARE being awarded (30 Sweets per EA published) - confirmed in logs
+- ✅ Transactions saved to database with proper metadata and idempotency
+- ✅ Screenshot file moving now uses correct Replit Object Storage API
+- ✅ Server restarted successfully with no compilation errors
 
-**Technical Details:**
-- Upload flow: Screenshots uploaded with temporary eaId → moved to actual content ID after database insert
-- Coin system: Uses `COIN_TRIGGERS.MARKETPLACE_EA_PUBLISHED`, `COIN_CHANNELS.MARKETPLACE` with proper metadata
-- File operations: Copy to new location → delete old location → update database with new paths (or keep old path on failure)
+**Testing Required:**
+- User needs to publish a NEW EA to test the screenshot fix
+- Previously published EA still has broken screenshots (would need manual database repair)
+
+### EA Publishing Bug Fixes - Round 1 (November 11, 2025 - 1:40 PM)
+**Initial Fixes:**
+1. **Coin Transaction**: Changed from non-existent `awardCoins()` to `executeTransaction()` with proper trigger/channel
+2. **Screenshot Moving Logic**: Added file relocation from temporary eaId to actual content ID
+   - Issue: Used wrong storage API (Google Cloud Storage instead of Replit SDK) - fixed in Round 2
 
 ## Overview
 YoForex is a comprehensive trading community platform for forex traders, offering forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
