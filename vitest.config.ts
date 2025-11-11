@@ -9,6 +9,9 @@ export default defineConfig({
     include: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
     exclude: ['node_modules', 'dist', '.next'],
     testTimeout: 10000,
+    env: {
+      NODE_ENV: 'test', // Ensure NODE_ENV is set to 'test' to disable rate limiters
+    },
   },
   resolve: {
     alias: {

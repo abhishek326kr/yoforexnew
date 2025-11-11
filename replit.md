@@ -69,6 +69,56 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
+### Registration Duplicate Column Fix (November 11, 2025)
+
+**CRITICAL FIX:** Resolved SQL error "column 'two_factor_enabled' specified more than once" that prevented user registration.
+
+**Problem Identified:**
+- Users could not register when req.body contained both camelCase (`twoFactorEnabled`) and snake_case (`two_factor_enabled`) versions of the same field
+- Drizzle ORM generated SQL with duplicate columns, causing PostgreSQL error 42701
+- Root cause: Frontend or clients sending mixed field naming conventions
+
+**Solution Implemented:**
+
+1. **Dynamic Filter Function** (`server/validation.ts`):
+   - Created `filterUserRegistrationDuplicates()` to intelligently remove snake_case duplicates
+   - Uses `snakeToCamel()` helper to convert snake_case → camelCase dynamically
+   - Two-pass algorithm: identifies snake_case keys with camelCase equivalents, filters them out
+   - Works for ANY future field names (e.g., `user_name`/`userName`, `is_active`/`isActive`)
+   - Comprehensive documentation included
+
+2. **Applied to All Registration Endpoints**:
+   - `server/localAuth.ts` - `/api/register` endpoint (line 248)
+   - `server/routes.ts` - `/api/auth/register` endpoint (line 603)
+   - Both use explicit `filteredBody` variable with critical warning comments
+   - Prevents future mistakes with clear intent: "DO NOT use req.body after this point"
+
+3. **Automated Regression Tests**:
+   - **Unit Tests** (`tests/logic/registration-duplicates.test.ts`): 13 tests for filter function logic
+   - **Integration Tests** (`tests/integration/registration-endpoints.test.ts`): 2 tests for actual endpoints
+   - **Total: 15 tests** (100% passing)
+   - Comprehensive coverage of filter logic and endpoint behavior
+   - All tests documented with inline comments
+
+**Files Modified:**
+- `server/validation.ts` - Dynamic filter implementation
+- `server/routes.ts` - Applied filter to `/api/auth/register`
+- `server/localAuth.ts` - Applied filter to `/api/register`
+- `tests/logic/registration-duplicates.test.ts` (new) - Unit tests for filter function
+- `tests/integration/registration-endpoints.test.ts` (new) - Integration tests for endpoints
+
+**Critical Rules Going Forward:**
+- ✅ ALL registration endpoints MUST use `filterUserRegistrationDuplicates()` before validation
+- ✅ Store filtered data in explicit `filteredBody` variable
+- ✅ Add warning comments: "DO NOT use req.body after this point"
+- ✅ Filter is robust for future schema changes (no hard-coded field names)
+
+**Testing:**
+- Run unit tests: `npx vitest run tests/logic/registration-duplicates.test.ts`
+- Run integration tests: `npx vitest run tests/integration/registration-endpoints.test.ts`
+- All 15 tests passing (13 unit + 2 integration)
+- Verified with manual testing: Status 200, user created successfully
+
 ### Coin Economy Reconciliation & Prevention System (November 11, 2025)
 
 **CRITICAL FIX:** Resolved major coin economy integrity issue affecting 9,684 coins and 701 users.

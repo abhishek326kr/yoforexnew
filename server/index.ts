@@ -141,8 +141,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize the server with proper async handling
-async function initializeServer() {
+// Initialize the app with all middleware and routes (without starting the server)
+// This allows tests to import the app without starting an HTTP server
+async function initializeApp() {
   try {
     // Session middleware MUST be set up BEFORE routes
     // Import and setup authentication middleware first
@@ -209,6 +210,23 @@ async function initializeServer() {
       });
     });
 
+    log("Express app initialized (routes and middleware configured)");
+    return expressApp;
+  } catch (error) {
+    console.error('Failed to initialize app:', error);
+    throw error;
+  }
+}
+
+// Export the app initialization promise for testing
+// Tests can await this to get a fully configured Express app without starting the server
+export const appPromise = initializeApp();
+
+// Start the HTTP server (only when running as main module, not when imported by tests)
+async function startServer() {
+  try {
+    const expressApp = await appPromise;
+    
     // React SPA removed - Next.js runs separately on port 3000
     // Express server now only serves API endpoints
     log("Express server running API-only mode (React SPA archived)");
@@ -250,13 +268,16 @@ async function initializeServer() {
 
     return httpServer;
   } catch (error) {
-    console.error('Failed to initialize server:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 }
 
-// Start the server with proper error handling
-initializeServer().catch((error) => {
-  console.error('Fatal server initialization error:', error);
-  process.exit(1);
-});
+// Only start the server if this file is run directly (not imported by tests)
+// In ES modules, we check import.meta.url, but in CommonJS we check require.main
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('Fatal server startup error:', error);
+    process.exit(1);
+  });
+}
