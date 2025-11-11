@@ -17183,8 +17183,19 @@ export async function registerRoutes(app: Express): Promise<Express> {
               const newPublicPath = `/objects/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               
               try {
+                console.log(`[EA Screenshot Migration] Processing ${filename}...`);
+                console.log(`[EA Screenshot Migration]   From: ${oldStoragePath}`);
+                console.log(`[EA Screenshot Migration]   To: ${newStoragePath}`);
+                
                 // Step 1: Download from temp location
                 const fileBuffer = await replitClient.downloadAsBytes(oldStoragePath);
+                
+                // Validate download
+                if (!fileBuffer || fileBuffer.byteLength === 0) {
+                  throw new Error(`Downloaded file is empty or invalid (byteLength: ${fileBuffer?.byteLength})`);
+                }
+                
+                console.log(`[EA Screenshot Migration]   Downloaded: ${fileBuffer.byteLength} bytes`);
                 
                 // Step 2: Determine content type
                 const ext = path.extname(filename).toLowerCase();
@@ -17193,18 +17204,38 @@ export async function registerRoutes(app: Express): Promise<Express> {
                                   ext === '.webp' ? 'image/webp' : 'image/jpeg';
                 
                 // Step 3: Upload to final location
-                await replitClient.uploadFromBytes(newStoragePath, fileBuffer, {
+                console.log(`[EA Screenshot Migration]   Uploading as ${contentType}...`);
+                const uploadResult = await replitClient.uploadFromBytes(newStoragePath, fileBuffer, {
                   contentType
                 });
                 
-                // Step 4: Delete temp file
+                if (!uploadResult || !uploadResult.ok) {
+                  throw new Error(`Upload failed: ${JSON.stringify(uploadResult)}`);
+                }
+                
+                console.log(`[EA Screenshot Migration]   Upload successful`);
+                
+                // Step 4: Verify file exists at new location
+                try {
+                  const verifyBuffer = await replitClient.downloadAsBytes(newStoragePath);
+                  if (!verifyBuffer || verifyBuffer.byteLength === 0) {
+                    throw new Error('Verification failed: file not found or empty at new location');
+                  }
+                  console.log(`[EA Screenshot Migration]   Verified: ${verifyBuffer.byteLength} bytes at new location`);
+                } catch (verifyError) {
+                  throw new Error(`Verification failed: ${verifyError.message}`);
+                }
+                
+                // Step 5: Delete temp file only after verification
+                console.log(`[EA Screenshot Migration]   Deleting temp file...`);
                 await replitClient.delete(oldStoragePath);
                 
                 // Success - use new path
                 correctedImageUrls.push(newPublicPath);
-                console.log(`[EA Screenshot Migration] ✅ Migrated ${filename} (${fileBuffer.length} bytes)`);
+                console.log(`[EA Screenshot Migration] ✅ Successfully migrated ${filename}`);
               } catch (moveError) {
-                console.error(`[EA Screenshot Migration] ❌ Failed to migrate ${filename}:`, moveError);
+                console.error(`[EA Screenshot Migration] ❌ FAILED to migrate ${filename}:`, moveError);
+                console.error(`[EA Screenshot Migration]    Error details:`, moveError.stack);
                 allMovesSucceeded = false;
                 // ABORT: Don't save broken paths to database
                 throw new Error(`Screenshot migration failed for ${filename}: ${moveError.message}`);
