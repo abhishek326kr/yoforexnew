@@ -10649,6 +10649,11 @@ export class DrizzleStorage implements IStorage {
     return result[0];
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  }
+
   async getForumStats(): Promise<{
     totalThreads: number;
     totalMembers: number;
