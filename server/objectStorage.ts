@@ -340,28 +340,54 @@ export class ObjectStorageService {
   }
 
   async getObjectEntityFile(objectPath: string): Promise<File> {
+    console.log('[getObjectEntityFile] ========== START ==========');
+    console.log('[getObjectEntityFile] Input objectPath:', objectPath);
+    
     if (!objectPath.startsWith("/objects/")) {
+      console.log('[getObjectEntityFile] ERROR: Path does not start with /objects/');
       throw new ObjectNotFoundError();
     }
 
     const parts = objectPath.slice(1).split("/");
+    console.log('[getObjectEntityFile] Path parts:', parts);
+    
     if (parts.length < 2) {
+      console.log('[getObjectEntityFile] ERROR: Not enough path parts');
       throw new ObjectNotFoundError();
     }
 
     const entityId = parts.slice(1).join("/");
+    console.log('[getObjectEntityFile] Entity ID:', entityId);
+    
     let entityDir = this.getPrivateObjectDir();
+    console.log('[getObjectEntityFile] Entity dir (before slash):', entityDir);
+    
     if (!entityDir.endsWith("/")) {
       entityDir = `${entityDir}/`;
     }
+    console.log('[getObjectEntityFile] Entity dir (after slash):', entityDir);
+    
     const objectEntityPath = `${entityDir}${entityId}`;
+    console.log('[getObjectEntityFile] Full object entity path:', objectEntityPath);
+    
     const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+    console.log('[getObjectEntityFile] Bucket name:', bucketName);
+    console.log('[getObjectEntityFile] Object name:', objectName);
+    
     const bucket = objectStorageClient.bucket(bucketName);
     const objectFile = bucket.file(objectName);
+    
+    console.log('[getObjectEntityFile] Checking if file exists...');
     const [exists] = await objectFile.exists();
+    console.log('[getObjectEntityFile] File exists:', exists);
+    
     if (!exists) {
+      console.log('[getObjectEntityFile] ERROR: File not found');
+      console.log('[getObjectEntityFile] ========== END (NOT FOUND) ==========');
       throw new ObjectNotFoundError();
     }
+    
+    console.log('[getObjectEntityFile] ========== END (SUCCESS) ==========');
     return objectFile;
   }
 
