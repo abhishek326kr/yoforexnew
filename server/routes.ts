@@ -17159,88 +17159,77 @@ export async function registerRoutes(app: Express): Promise<Express> {
       // FIX SCREENSHOT PATHS: Replace temporary eaId with actual content ID
       if (publishedContent && imageUrls && imageUrls.length > 0) {
         try {
-          const objectStorage = new ObjectStorageService();
-          const privateDir = objectStorage.getPrivateObjectDir();
-          const { Client } = await import('@replit/object-storage');
-          const storageClient = new Client();
+          const { Client: ReplitClient } = await import('@replit/object-storage');
+          const replitClient = new ReplitClient();
           
           // Extract temp eaId from first image URL  
           // Format: /objects/marketplace/ea/{tempEaId}/screenshots/{filename}
           const tempEaIdMatch = imageUrls[0].match(/\/objects\/marketplace\/ea\/([a-f0-9-]+)\//);
           if (tempEaIdMatch && tempEaIdMatch[1] !== publishedContent.id) {
             const tempEaId = tempEaIdMatch[1];
-            console.log(`[EA Publish] Fixing screenshot paths: ${tempEaId} → ${publishedContent.id}`);
+            console.log(`[EA Screenshot Migration] Moving screenshots from temp ID ${tempEaId} to content ID ${publishedContent.id}`);
+            
+            const objectStorage = new ObjectStorageService();
+            const privateDir = objectStorage.getPrivateObjectDir().replace(/\/+$/, '');
             
             // Move files in object storage and update paths
             const correctedImageUrls = [];
+            let allMovesSucceeded = true;
+            
             for (const oldPath of imageUrls) {
               const filename = path.basename(oldPath);
-              // Remove any trailing slash from privateDir to avoid double slashes
-              const cleanPrivateDir = privateDir.replace(/\/+$/, '');
-              const oldStoragePath = `${cleanPrivateDir}/marketplace/ea/${tempEaId}/screenshots/${filename}`;
-              const newStoragePath = `${cleanPrivateDir}/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
+              const oldStoragePath = `${privateDir}/marketplace/ea/${tempEaId}/screenshots/${filename}`;
+              const newStoragePath = `${privateDir}/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               const newPublicPath = `/objects/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               
-              console.log(`[EA Publish] Screenshot move plan for ${filename}:`);
-              console.log(`[EA Publish]   Old path: ${oldStoragePath}`);
-              console.log(`[EA Publish]   New path: ${newStoragePath}`);
-              console.log(`[EA Publish]   Public URL: ${newPublicPath}`);
-              
               try {
-                // Download file from old location
-                console.log(`[EA Publish] Step 1: Downloading ${filename}...`);
-                const fileBuffer = await storageClient.downloadAsBytes(oldStoragePath);
-                console.log(`[EA Publish] Step 1: Downloaded ${fileBuffer.length} bytes`);
+                // Step 1: Download from temp location
+                const fileBuffer = await replitClient.downloadAsBytes(oldStoragePath);
                 
-                // Determine content type from filename
+                // Step 2: Determine content type
                 const ext = path.extname(filename).toLowerCase();
                 const contentType = ext === '.png' ? 'image/png' :
                                   ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
                                   ext === '.webp' ? 'image/webp' : 'image/jpeg';
                 
-                // Upload to new location
-                console.log(`[EA Publish] Step 2: Uploading ${filename} (${contentType})...`);
-                const uploadedPath = await objectStorage.uploadFromBuffer(newStoragePath, Buffer.from(fileBuffer), contentType);
-                console.log(`[EA Publish] Step 2: Uploaded to ${uploadedPath}`);
+                // Step 3: Upload to final location
+                await replitClient.uploadFromBytes(newStoragePath, fileBuffer, {
+                  contentType
+                });
                 
-                // Verify the file exists at new location
-                console.log(`[EA Publish] Step 3: Verifying file exists at new location...`);
-                try {
-                  await storageClient.downloadAsBytes(newStoragePath);
-                  console.log(`[EA Publish] Step 3: Verified file exists!`);
-                } catch (verifyError) {
-                  throw new Error(`File verification failed: ${verifyError.message}`);
-                }
+                // Step 4: Delete temp file
+                await replitClient.delete(oldStoragePath);
                 
-                // Delete old file
-                console.log(`[EA Publish] Step 4: Deleting old file...`);
-                await storageClient.delete(oldStoragePath);
-                console.log(`[EA Publish] Step 4: Old file deleted`);
-                
-                // Only use new path if move succeeded
+                // Success - use new path
                 correctedImageUrls.push(newPublicPath);
-                console.log(`[EA Publish] ✅ Successfully moved screenshot: ${filename}`);
+                console.log(`[EA Screenshot Migration] ✅ Migrated ${filename} (${fileBuffer.length} bytes)`);
               } catch (moveError) {
-                console.error(`[EA Publish] ❌ Failed to move screenshot ${filename}:`, moveError);
-                console.error(`[EA Publish] Error details:`, moveError.stack);
-                // Keep old path if move failed
-                correctedImageUrls.push(oldPath);
+                console.error(`[EA Screenshot Migration] ❌ Failed to migrate ${filename}:`, moveError);
+                allMovesSucceeded = false;
+                // ABORT: Don't save broken paths to database
+                throw new Error(`Screenshot migration failed for ${filename}: ${moveError.message}`);
               }
             }
             
-            // Update content with corrected paths
-            const updatedContent = await db.update(content)
-              .set({
-                imageUrls: correctedImageUrls,
-                imageUrl: correctedImageUrls[0] || null,
-              })
-              .where(eq(content.id, publishedContent.id))
-              .returning();
-            
-            console.log(`[EA Publish] Updated ${correctedImageUrls.length} screenshot paths`);
+            // Only update database if ALL screenshots migrated successfully
+            if (allMovesSucceeded && correctedImageUrls.length === imageUrls.length) {
+              await db.update(content)
+                .set({
+                  imageUrls: correctedImageUrls,
+                  imageUrl: correctedImageUrls[0] || null,
+                })
+                .where(eq(content.id, publishedContent.id));
+              
+              console.log(`[EA Screenshot Migration] ✅ Successfully migrated ${correctedImageUrls.length} screenshots`);
+            }
+          } else {
+            console.log(`[EA Screenshot Migration] No migration needed (temp ID matches content ID or no temp ID found)`);
           }
         } catch (error) {
-          console.error('[EA Publish] Failed to fix screenshot paths:', error);
+          console.error('[EA Screenshot Migration] CRITICAL: Migration failed, screenshots may be broken:', error);
+          // Don't let screenshot migration failure block the publish
+          // The EA is published but screenshots might be broken - log for manual intervention
+          console.error(`[EA Screenshot Migration] Content ID ${publishedContent.id} may have broken screenshots - manual repair needed`);
         }
       }
 
