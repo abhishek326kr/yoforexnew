@@ -2,6 +2,27 @@
 
 ## Recent Changes
 
+### EA Marketplace Auto-Approval Fix (November 11, 2025 - 3:19 PM)
+**Issue:**
+- Published EAs were defaulting to "pending" status and not appearing in marketplace
+- Marketplace query filters for `status = 'approved'` only
+- Users couldn't see their published content immediately
+
+**Solution:**
+- Updated `/api/publish` endpoint to set `status: 'approved'` on content creation (line 4195)
+- Updated `/api/content` endpoint to set `status: 'approved'` on content creation (line 4255)
+- All published content now auto-approves and appears in marketplace immediately
+
+**Design Decision:**
+- Auto-approval simplifies user experience (no manual admin approval needed)
+- Admin moderation system still exists for post-publication content management
+- Can be adjusted later if stricter pre-publication review is needed
+
+**Verified Working:**
+- ✅ Published EAs appear in marketplace immediately
+- ✅ Marketplace displays multiple items correctly
+- ✅ Coin rewards system working (30 Sweets per EA published)
+
 ### EA & Screenshot Upload - IN-MEMORY STORAGE SOLUTION (November 11, 2025 - 3:04 PM)
 **Root Cause:**
 - Replit Object Storage SDK `uploadFromBytes()` is fundamentally broken
