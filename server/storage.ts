@@ -10654,6 +10654,15 @@ export class DrizzleStorage implements IStorage {
     return result[0];
   }
 
+  async updateUser(userId: string, data: Partial<User>): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
   async getForumStats(): Promise<{
     totalThreads: number;
     totalMembers: number;
