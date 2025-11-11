@@ -525,10 +525,57 @@ export class ObjectStorageService {
     
     let uploadedPath: string;
     
-    // ALWAYS use Google Cloud Storage API directly (bypass Replit SDK)
-    // Reason: Replit SDK uploads claim success but files don't actually appear in storage
-    // Since downloads use GCS API, uploads must also use GCS API for consistency
-    if (true) {  // Force GCS upload path regardless of mode
+    if (mode === 'replit') {
+      // On Replit: Use official Replit SDK with contentType support
+      console.log('[uploadFromBuffer] Using Replit SDK for upload...');
+      
+      try {
+        // The Replit SDK handles bucket mapping internally - we just pass the full path
+        // Path format: /bucket-id/content/... → SDK translates bucket-id to actual GCS bucket
+        const client = new ReplitStorageClient();
+        
+        console.log('[uploadFromBuffer] Uploading via Replit SDK with contentType...');
+        console.log('[uploadFromBuffer] Path:', objectPath);
+        console.log('[uploadFromBuffer] Content-Type:', contentType);
+        
+        // Upload the buffer with contentType metadata via options parameter
+        // Replit SDK signature: uploadFromBytes(path, data, options?)
+        // UploadOptions interface includes: { contentType?: string; metadata?: Record<string, string> }
+        const result = await client.uploadFromBytes(objectPath, buffer, {
+          contentType: contentType
+        });
+        
+        console.log('[uploadFromBuffer] Replit SDK upload returned:', result);
+        
+        // CRITICAL: Verify file actually exists after upload
+        // Replit SDK claims success but files may not exist
+        const { bucketName, objectName } = parseObjectPath(objectPath);
+        const bucket = objectStorageClient.bucket(bucketName);
+        const file = bucket.file(objectName);
+        
+        console.log('[uploadFromBuffer] Verifying upload...');
+        console.log('[uploadFromBuffer] Checking bucket:', bucketName);
+        console.log('[uploadFromBuffer] Checking object:', objectName);
+        
+        const [exists] = await file.exists();
+        console.log('[uploadFromBuffer] File exists after upload:', exists);
+        
+        if (!exists) {
+          throw new Error('Upload claimed success but file does not exist in storage');
+        }
+        
+        console.log('[uploadFromBuffer] Upload verified successfully!');
+        
+        // Use the object path for normalization
+        uploadedPath = objectPath;
+      } catch (error: any) {
+        console.error('[uploadFromBuffer] ERROR in Replit mode:');
+        console.error('[uploadFromBuffer] Error name:', error.name);
+        console.error('[uploadFromBuffer] Error message:', error.message);
+        console.error('[uploadFromBuffer] Error stack:', error.stack);
+        throw error;
+      }
+    } else {
       // On non-Replit: Use Storage SDK directly
       console.log('[uploadFromBuffer] Using GCS SDK direct upload...');
       
