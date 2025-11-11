@@ -234,6 +234,68 @@ export function sanitizeRequestBody(body: any, htmlFields: string[] = []): any {
   return sanitized;
 }
 
+/**
+ * Filter out snake_case keys that duplicate camelCase fields in user registration data
+ * 
+ * CRITICAL: Prevents Drizzle ORM duplicate column error during user insert operations.
+ * When both `twoFactorEnabled` (camelCase) and `two_factor_enabled` (snake_case) are
+ * present in req.body, Drizzle maps both to the same column, causing SQL error:
+ * "column \"two_factor_enabled\" specified more than once"
+ * 
+ * DYNAMIC APPROACH: Instead of hard-coding specific field names, this function:
+ * 1. Converts snake_case keys to camelCase equivalents
+ * 2. If both versions exist, keeps only the camelCase version
+ * 3. Works for ANY field name, making it robust for future schema changes
+ * 
+ * @param body - Request body object from user registration
+ * @returns Cleaned object with snake_case duplicates removed
+ */
+export function filterUserRegistrationDuplicates(body: any): any {
+  if (typeof body !== 'object' || body === null) {
+    return body;
+  }
+
+  /**
+   * Convert snake_case to camelCase
+   * Examples: two_factor_enabled -> twoFactorEnabled, user_name -> userName
+   */
+  const snakeToCamel = (str: string): string => {
+    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  };
+
+  /**
+   * Check if a string is in snake_case format
+   * Must contain underscore and be all lowercase
+   */
+  const isSnakeCase = (str: string): boolean => {
+    return str.includes('_') && str === str.toLowerCase() && /^[a-z][a-z0-9_]*$/.test(str);
+  };
+
+  const filtered: any = {};
+  const keysToSkip = new Set<string>();
+
+  // First pass: identify snake_case keys that have camelCase equivalents
+  const allKeys = Object.keys(body);
+  for (const key of allKeys) {
+    if (isSnakeCase(key)) {
+      const camelVersion = snakeToCamel(key);
+      // If the camelCase version exists in the body, mark snake_case for removal
+      if (allKeys.includes(camelVersion)) {
+        keysToSkip.add(key);
+      }
+    }
+  }
+
+  // Second pass: copy all keys except the ones marked for skipping
+  for (const [key, value] of Object.entries(body)) {
+    if (!keysToSkip.has(key)) {
+      filtered[key] = value;
+    }
+  }
+
+  return filtered;
+}
+
 // ============================================================================
 // Admin User Management Validation Schemas
 // ============================================================================

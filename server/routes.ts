@@ -205,6 +205,7 @@ import {
   approveWithdrawalSchema,
   rejectWithdrawalSchema,
   financeExportSchema,
+  filterUserRegistrationDuplicates,
 } from "./validation.js";
 import { 
   ObjectStorageService, 
@@ -596,7 +597,10 @@ export async function registerRoutes(app: Express): Promise<Express> {
   // POST /api/auth/register - Email/password registration with email verification
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, referredBy } = req.body;
+      // CRITICAL: Filter out snake_case/camelCase duplicates to prevent Drizzle column errors
+      // DO NOT use req.body after this point - only use filteredBody or its destructured values
+      const filteredBody = filterUserRegistrationDuplicates(req.body);
+      const { email, password, referredBy } = filteredBody;
 
       // Validate inputs
       if (!email || !password) {

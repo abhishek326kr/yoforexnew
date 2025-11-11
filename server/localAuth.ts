@@ -17,6 +17,7 @@ import {
   isAccountLocked 
 } from "./middleware/rateLimiter";
 import { CoinTransactionService } from "./services/coinTransactionService";
+import { filterUserRegistrationDuplicates } from "./validation";
 
 // Validation schemas
 const loginSchema = z.object({
@@ -243,8 +244,12 @@ export async function setupLocalAuth(app: Express) {
   if (process.env.ALLOW_REGISTRATION !== "false") {
     app.post("/api/register", registerRateLimiter, async (req, res) => {
       try {
+        // CRITICAL: Filter out snake_case/camelCase duplicates to prevent Drizzle column errors
+        // DO NOT use req.body after this point - only use filteredBody or validated data
+        const filteredBody = filterUserRegistrationDuplicates(req.body);
+        
         // Validate input
-        const validation = registerSchema.safeParse(req.body);
+        const validation = registerSchema.safeParse(filteredBody);
         if (!validation.success) {
           const firstError = validation.error.errors[0];
           let errorMessage = "Registration information is incomplete or invalid";
