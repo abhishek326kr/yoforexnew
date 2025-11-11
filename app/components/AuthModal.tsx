@@ -233,17 +233,14 @@ export default function AuthModal({
       
       toast({
         title: "Account Created!",
-        description: "Please check your email to verify your account and claim your 150 welcome Sweets!",
+        description: "Please check your email for a 6-digit verification code to verify your account!",
       });
 
-      // Auto-switch to login mode after 5 seconds
+      // Redirect to verify-email page with email parameter
       setTimeout(() => {
-        setMode("signin");
-        setPassword("");
-        setConfirmPassword("");
-        setAcceptedTerms(false);
-        setShowVerificationMessage(false);
-      }, 5000);
+        onOpenChange(false);
+        window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
+      }, 2000);
     } catch (error: any) {
       console.error("Registration error:", error);
       toast({
@@ -493,11 +490,12 @@ export default function AuthModal({
                   <p className="text-xs text-muted-foreground text-right mt-1">
                     <button 
                       type="button" 
-                      className="hover:underline"
-                      onClick={() => toast({
-                        title: "Password Reset",
-                        description: "Password reset feature coming soon!",
-                      })}
+                      className="text-primary hover:underline"
+                      onClick={() => {
+                        onOpenChange(false);
+                        window.location.href = '/auth/forgot-password';
+                      }}
+                      data-testid="link-forgot-password"
                     >
                       Forgot password?
                     </button>

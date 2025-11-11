@@ -224,6 +224,7 @@ import {
   marketplaceActionLimiter,
   financeActionLimiter,
   smtpTestLimiter,
+  authLimiter,
 } from "./rateLimiting.js";
 import rateLimit from 'express-rate-limit';
 import DOMPurify from 'isomorphic-dompurify';
@@ -686,40 +687,26 @@ export async function registerRoutes(app: Express): Promise<Express> {
 
       const newUser = newUserResults[0];
 
-      // Generate verification token
-      const token = crypto.randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      // Generate OTP for email verification
+      const { generateOTP, hashOTP, getOTPExpiration } = await import('./utils/otp.js');
+      const otp = generateOTP();
+      const codeHash = await hashOTP(otp);
 
-      // Store verification token
-      await db.insert(emailVerificationTokens).values({
+      // Create OTP record
+      await storage.createOTP({
         userId: newUser.id,
-        email: newUser.email!,
-        token,
-        expiresAt,
+        codeHash,
+        purpose: 'verify_email',
+        expiresAt: getOTPExpiration(),
+        attemptCount: 0,
+        maxAttempts: 5,
+        used: false,
       });
 
-      // Send verification email
-      const verificationLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5000'}/api/auth/verify-email?token=${token}`;
-      
+      // Send OTP email instead of token link
       try {
-        await emailService.sendEmail({
-          to: email,
-          subject: "Verify your YoForex account",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #2563eb;">Welcome to YoForex!</h2>
-              <p>Thank you for creating an account. Please verify your email address to activate your account and claim your <strong>150 welcome Sweets</strong>!</p>
-              <p>Click the button below to verify your email:</p>
-              <a href="${verificationLink}" style="display: inline-block; background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">Verify Email</a>
-              <p>Or copy and paste this link into your browser:</p>
-              <p style="color: #6b7280; word-break: break-all;">${verificationLink}</p>
-              <p style="color: #ef4444; margin-top: 20px;"><strong>This link expires in 24 hours.</strong></p>
-              <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;" />
-              <p style="color: #6b7280; font-size: 14px;">If you didn't create this account, please ignore this email.</p>
-              <p style="color: #6b7280; font-size: 14px;">Best regards,<br/>The YoForex Team</p>
-            </div>
-          `,
-        });
+        await emailService.sendEmailVerificationOTP(newUser.email!, newUser.username, otp);
+        console.log(`[REGISTRATION] OTP sent to ${newUser.email}`);
       } catch (emailError) {
         console.error("Failed to send verification email:", emailError);
         // Don't fail registration if email fails - user can resend
@@ -925,6 +912,160 @@ export async function registerRoutes(app: Express): Promise<Express> {
     } catch (error: any) {
       console.error("Resend verification error:", error);
       res.status(500).json({ error: error.message || "Failed to resend verification email" });
+    }
+  });
+
+  // POST /api/auth/verify-email-otp - Verify email with OTP code
+  app.post("/api/auth/verify-email-otp", authLimiter, async (req, res) => {
+    try {
+      const { email, code } = req.body;
+
+      if (!email || !code) {
+        return res.status(400).json({ error: "Email and code are required" });
+      }
+
+      // Find user (don't reveal if user exists - security measure against email enumeration)
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Return success to prevent email enumeration attack
+        return res.json({
+          success: true,
+          message: "If a valid code was entered, your email has been verified."
+        });
+      }
+
+      // Check if already verified
+      if (user.is_email_verified) {
+        return res.json({ success: true, message: "Email already verified" });
+      }
+
+      // Get OTP record
+      const otpRecord = await storage.getOTPByUserAndPurpose(user.id, 'verify_email');
+      if (!otpRecord) {
+        // Don't reveal if OTP exists
+        return res.json({
+          success: true,
+          message: "If a valid code was entered, your email has been verified."
+        });
+      }
+
+      // Check if expired
+      if (new Date() > new Date(otpRecord.expiresAt)) {
+        await storage.deleteOTP(otpRecord.id);
+        return res.status(400).json({ error: "Code has expired. Please request a new one." });
+      }
+
+      // Check attempt limit
+      if (otpRecord.attemptCount >= otpRecord.maxAttempts) {
+        await storage.deleteOTP(otpRecord.id);
+        return res.status(429).json({ error: "Too many attempts. Please request a new code." });
+      }
+
+      // Verify code
+      const { verifyOTPHash } = await import('./utils/otp.js');
+      const isValid = await verifyOTPHash(code, otpRecord.codeHash);
+
+      if (!isValid) {
+        // Increment attempt count
+        await storage.incrementOTPAttempts(otpRecord.id);
+        const remainingAttempts = otpRecord.maxAttempts - (otpRecord.attemptCount + 1);
+        return res.status(401).json({
+          error: `Invalid code. ${remainingAttempts} attempts remaining.`
+        });
+      }
+
+      // Code is valid - verify email and grant welcome bonus
+      await storage.updateUser(user.id, {
+        is_email_verified: true,
+      });
+
+      // Mark OTP as used
+      await storage.markOTPAsUsed(otpRecord.id);
+
+      // Grant onboarding welcome bonus (50 coins)
+      const CoinTransactionService = (await import('./services/coinTransactionService.js')).default;
+      const coinService = new CoinTransactionService(storage);
+      
+      try {
+        await coinService.awardCoins({
+          userId: user.id,
+          amount: 50,
+          reason: 'Email verification completed',
+          trigger: 'onboarding.email.verified',
+          channel: 'onboarding',
+          metadata: { verified_at: new Date().toISOString() }
+        });
+        console.log(`[EMAIL VERIFIED] User ${user.id} verified email and received 50 welcome coins`);
+      } catch (coinError) {
+        console.error('[EMAIL VERIFIED] Coin award failed:', coinError);
+      }
+
+      res.json({
+        success: true,
+        message: "Email verified successfully! You've earned 50 Sweets."
+      });
+    } catch (error: any) {
+      console.error('[VERIFY EMAIL OTP ERROR]', error);
+      res.status(500).json({ error: "Failed to verify email" });
+    }
+  });
+
+  // POST /api/auth/resend-verification-otp - Resend verification OTP
+  app.post("/api/auth/resend-verification-otp", authLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Find user (don't reveal if user exists)
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Return success to prevent email enumeration attack
+        return res.json({
+          success: true,
+          message: "If your email is registered, a new code has been sent."
+        });
+      }
+
+      // Check if already verified
+      if (user.is_email_verified) {
+        return res.status(400).json({ error: "Email already verified" });
+      }
+
+      // Delete existing OTP
+      const existingOTP = await storage.getOTPByUserAndPurpose(user.id, 'verify_email');
+      if (existingOTP) {
+        await storage.deleteOTP(existingOTP.id);
+      }
+
+      // Generate new OTP
+      const { generateOTP, hashOTP, getOTPExpiration } = await import('./utils/otp.js');
+      const otp = generateOTP();
+      const codeHash = await hashOTP(otp);
+
+      // Create new OTP record
+      await storage.createOTP({
+        userId: user.id,
+        codeHash,
+        purpose: 'verify_email',
+        expiresAt: getOTPExpiration(),
+        attemptCount: 0,
+        maxAttempts: 5,
+        used: false,
+      });
+
+      // Send OTP email
+      await emailService.sendEmailVerificationOTP(user.email, user.username, otp);
+
+      res.json({
+        success: true,
+        message: "If your email is registered, a new code has been sent."
+      });
+    } catch (error: any) {
+      console.error('[RESEND VERIFICATION OTP ERROR]', error);
+      res.status(500).json({ error: "Failed to resend verification code" });
     }
   });
 
@@ -1662,6 +1803,271 @@ export async function registerRoutes(app: Express): Promise<Express> {
       res.json(user);
     } catch (error: any) {
       return res.status(401).json({ error: "Invalid session" });
+    }
+  });
+
+  // POST /api/user/change-password - Change user password
+  app.post("/api/user/change-password", authLimiter, isAuthenticated, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      // Validation
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "Current and new passwords are required" });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: "New password must be at least 8 characters" });
+      }
+
+      // Get user from database
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify current password (check both password_hash and legacy password field)
+      const passwordToCheck = user.password_hash || user.password;
+      if (!passwordToCheck) {
+        return res.status(400).json({ error: "No password set for this account" });
+      }
+
+      const isValidPassword = await bcrypt.compare(currentPassword, passwordToCheck);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+
+      // Check if new password is different from old password
+      const isSamePassword = await bcrypt.compare(newPassword, passwordToCheck);
+      if (isSamePassword) {
+        return res.status(400).json({ error: "New password must be different from current password" });
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update password in database
+      await storage.updateUser(req.user.id, {
+        password_hash: hashedPassword,
+        password: null, // Clear legacy password field
+      });
+
+      // Log audit event
+      console.log(`[PASSWORD CHANGE] User ${req.user.id} (${user.email}) changed password`);
+
+      // TODO: Send confirmation email
+      // await emailService.sendPasswordChangedConfirmation(user.email, user.username);
+
+      res.json({
+        success: true,
+        message: "Password changed successfully"
+      });
+    } catch (error: any) {
+      console.error('[PASSWORD CHANGE ERROR]', error);
+      res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
+  // POST /api/auth/request-password-reset - Request password reset OTP
+  app.post("/api/auth/request-password-reset", authLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Find user by email (don't reveal if user exists for security)
+      const user = await storage.getUserByEmail(email);
+      
+      // Always return success to prevent user enumeration
+      if (!user) {
+        return res.json({
+          success: true,
+          message: "If an account exists with this email, a reset code has been sent"
+        });
+      }
+
+      // Generate OTP
+      const { generateOTP, hashOTP, getOTPExpiration } = await import('./utils/otp.js');
+      const otp = generateOTP();
+      const codeHash = await hashOTP(otp);
+
+      // Delete any existing password reset OTPs for this user
+      const existingOTP = await storage.getOTPByUserAndPurpose(user.id, 'reset_password');
+      if (existingOTP) {
+        await storage.deleteOTP(existingOTP.id);
+      }
+
+      // Create new OTP record
+      await storage.createOTP({
+        userId: user.id,
+        codeHash,
+        purpose: 'reset_password',
+        expiresAt: getOTPExpiration(),
+        attemptCount: 0,
+        maxAttempts: 5,
+        used: false,
+      });
+
+      // Send OTP email
+      await emailService.sendPasswordResetOTP(user.email, user.username, otp);
+
+      res.json({
+        success: true,
+        message: "If an account exists with this email, a reset code has been sent"
+      });
+    } catch (error: any) {
+      console.error('[REQUEST PASSWORD RESET ERROR]', error);
+      res.status(500).json({ error: "Failed to process password reset request" });
+    }
+  });
+
+  // POST /api/auth/verify-reset-code - Verify OTP code and issue reset token
+  app.post("/api/auth/verify-reset-code", authLimiter, async (req, res) => {
+    try {
+      const { email, code } = req.body;
+
+      if (!email || !code) {
+        return res.status(400).json({ error: "Email and code are required" });
+      }
+
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: "Invalid email or code" });
+      }
+
+      // Get OTP record
+      const otpRecord = await storage.getOTPByUserAndPurpose(user.id, 'reset_password');
+      if (!otpRecord) {
+        return res.status(404).json({ error: "No reset code found. Please request a new one." });
+      }
+
+      // Check if expired
+      if (new Date() > new Date(otpRecord.expiresAt)) {
+        await storage.deleteOTP(otpRecord.id);
+        return res.status(400).json({ error: "Code has expired. Please request a new one." });
+      }
+
+      // Check attempt limit
+      if (otpRecord.attemptCount >= otpRecord.maxAttempts) {
+        await storage.deleteOTP(otpRecord.id);
+        return res.status(429).json({ error: "Too many attempts. Please request a new code." });
+      }
+
+      // Verify code
+      const { verifyOTPHash } = await import('./utils/otp.js');
+      const isValid = await verifyOTPHash(code, otpRecord.codeHash);
+
+      if (!isValid) {
+        // Increment attempt count
+        await storage.incrementOTPAttempts(otpRecord.id);
+        const remainingAttempts = otpRecord.maxAttempts - (otpRecord.attemptCount + 1);
+        return res.status(401).json({
+          error: `Invalid code. ${remainingAttempts} attempts remaining.`
+        });
+      }
+
+      // Code is valid - mark as used
+      await storage.markOTPAsUsed(otpRecord.id);
+
+      // Generate a short-lived reset token (valid for 15 minutes)
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = await bcrypt.hash(resetToken, 10);
+      const tokenExpiration = new Date();
+      tokenExpiration.setMinutes(tokenExpiration.getMinutes() + 15);
+
+      // Store reset token in OTP table (reuse purpose with different meaning)
+      await storage.createOTP({
+        userId: user.id,
+        codeHash: tokenHash,
+        purpose: 'reset_token',
+        expiresAt: tokenExpiration,
+        attemptCount: 0,
+        maxAttempts: 1,
+        used: false,
+      });
+
+      res.json({
+        success: true,
+        resetToken,
+        expiresIn: 900000, // 15 minutes in milliseconds
+      });
+    } catch (error: any) {
+      console.error('[VERIFY RESET CODE ERROR]', error);
+      res.status(500).json({ error: "Failed to verify code" });
+    }
+  });
+
+  // PATCH /api/auth/reset-password - Reset password with token
+  app.patch("/api/auth/reset-password", authLimiter, async (req, res) => {
+    try {
+      const { resetToken, newPassword } = req.body;
+
+      if (!resetToken || !newPassword) {
+        return res.status(400).json({ error: "Reset token and new password are required" });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: "Password must be at least 8 characters" });
+      }
+
+      // Find the reset token in database
+      // We need to check all reset_token OTP records to find the matching one
+      const allUsers = await storage.getAllUsers();
+      let matchingUser = null;
+      let matchingToken = null;
+
+      for (const user of allUsers) {
+        const tokenRecord = await storage.getOTPByUserAndPurpose(user.id, 'reset_token');
+        if (tokenRecord && !tokenRecord.used) {
+          const isValidToken = await bcrypt.compare(resetToken, tokenRecord.codeHash);
+          if (isValidToken) {
+            matchingUser = user;
+            matchingToken = tokenRecord;
+            break;
+          }
+        }
+      }
+
+      if (!matchingUser || !matchingToken) {
+        return res.status(404).json({ error: "Invalid or expired reset token" });
+      }
+
+      // Check if token is expired
+      if (new Date() > new Date(matchingToken.expiresAt)) {
+        await storage.deleteOTP(matchingToken.id);
+        return res.status(400).json({ error: "Reset token has expired" });
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update password
+      await storage.updateUser(matchingUser.id, {
+        password_hash: hashedPassword,
+        password: null,
+      });
+
+      // Delete the reset token
+      await storage.deleteOTP(matchingToken.id);
+
+      // Delete any other OTP codes for this user
+      const resetOTP = await storage.getOTPByUserAndPurpose(matchingUser.id, 'reset_password');
+      if (resetOTP) {
+        await storage.deleteOTP(resetOTP.id);
+      }
+
+      console.log(`[PASSWORD RESET] User ${matchingUser.id} (${matchingUser.email}) reset password`);
+
+      res.json({
+        success: true,
+        message: "Password reset successfully. You can now log in with your new password."
+      });
+    } catch (error: any) {
+      console.error('[RESET PASSWORD ERROR]', error);
+      res.status(500).json({ error: "Failed to reset password" });
     }
   });
 

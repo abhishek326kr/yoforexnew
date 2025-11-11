@@ -1,139 +1,135 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Mail, ArrowLeft } from "lucide-react";
 
 export default function VerifyEmailClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
-  
-  const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
-  const [message, setMessage] = useState('');
+  const email = searchParams.get("email") || "";
+  const { toast } = useToast();
+  const [otp, setOtp] = useState("");
 
-  useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      setMessage('Invalid verification link - no token provided');
-      return;
-    }
-
-    // Verify email with backend
-    fetch('/api/auth/verify-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token }),
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        
-        if (res.ok) {
-          setStatus('success');
-          setMessage(data.message || 'Email verified successfully!');
-        } else {
-          setStatus('error');
-          setMessage(data.message || data.error || 'Verification failed');
-        }
-      })
-      .catch((error) => {
-        console.error('Verification error:', error);
-        setStatus('error');
-        setMessage('Network error - please try again later');
+  const verifyMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/auth/verify-email-otp", { email, code });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "✅ Email Verified!",
+        description: data.message || "Your email has been verified successfully.",
       });
-  }, [token]);
+      // Redirect to home or dashboard
+      setTimeout(() => router.push("/"), 1500);
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Verification Failed",
+        description: error.message,
+      });
+      setOtp(""); // Clear OTP on error
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/resend-verification-otp", { email });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Code Sent",
+        description: "A new verification code has been sent to your email.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Resend",
+        description: error.message,
+      });
+    },
+  });
+
+  const handleComplete = (value: string) => {
+    setOtp(value);
+    if (value.length === 6) {
+      verifyMutation.mutate(value);
+    }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background to-muted">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            {status === 'verifying' && (
-              <Loader2 className="w-16 h-16 text-blue-600 animate-spin" />
-            )}
-            {status === 'success' && (
-              <CheckCircle2 className="w-16 h-16 text-green-600" />
-            )}
-            {status === 'error' && (
-              <XCircle className="w-16 h-16 text-red-600" />
-            )}
+          <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <Mail className="w-8 h-8 text-primary" />
           </div>
-          
-          <CardTitle className="text-2xl">
-            {status === 'verifying' && 'Verifying Your Email'}
-            {status === 'success' && 'Email Verified!'}
-            {status === 'error' && 'Verification Failed'}
-          </CardTitle>
-          
-          <CardDescription className="mt-2">
-            {status === 'verifying' && 'Please wait while we verify your email address...'}
-            {status === 'success' && 'Your email has been successfully verified'}
-            {status === 'error' && 'We could not verify your email address'}
+          <CardTitle>Verify Your Email</CardTitle>
+          <CardDescription>
+            We've sent a 6-digit code to<br />
+            <strong>{email}</strong>
           </CardDescription>
         </CardHeader>
-        
-        <CardContent className="text-center">
-          <p className="text-sm text-muted-foreground">{message}</p>
-          
-          {status === 'success' && (
-            <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <div className="flex items-start gap-3">
-                <Mail className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div className="text-left text-sm text-green-900 dark:text-green-100">
-                  <p className="font-medium mb-1">Welcome to YoForex!</p>
-                  <p className="text-green-700 dark:text-green-300">
-                    You now have full access to all features including the marketplace, forums, and earning coins.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {status === 'error' && (
-            <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-              <p className="text-sm text-red-900 dark:text-red-100">
-                The verification link may have expired or is invalid. Please try registering again or contact support.
-              </p>
-            </div>
-          )}
-        </CardContent>
-        
-        <CardFooter className="flex flex-col gap-2">
-          {status === 'success' && (
-            <Button 
-              className="w-full" 
-              onClick={() => window.location.href = '/dashboard'}
-              data-testid="button-go-dashboard"
+        <CardContent className="space-y-6">
+          <div className="flex flex-col items-center space-y-4">
+            <InputOTP
+              maxLength={6}
+              value={otp}
+              onChange={setOtp}
+              onComplete={handleComplete}
+              data-testid="input-otp-verification"
             >
-              Go to Dashboard
-            </Button>
-          )}
-          
-          {status === 'error' && (
-            <Button 
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+
+            <p className="text-sm text-muted-foreground">
+              Code expires in 10 minutes
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Button
               variant="outline"
-              className="w-full" 
-              onClick={() => window.location.href = '/'}
-              data-testid="button-go-home"
+              onClick={() => resendMutation.mutate()}
+              disabled={resendMutation.isPending || verifyMutation.isPending}
+              className="w-full"
+              data-testid="button-resend-code"
             >
-              Return to Home
+              {resendMutation.isPending ? "Sending..." : "Resend Code"}
             </Button>
-          )}
-          
-          {(status === 'success' || status === 'error') && (
-            <Button 
+
+            <Button
               variant="ghost"
-              className="w-full" 
-              onClick={() => window.location.href = '/earn'}
-              data-testid="button-explore"
+              onClick={() => router.push("/")}
+              className="w-full"
+              data-testid="button-back-to-login"
             >
-              {status === 'success' ? 'Start Earning Coins' : 'Explore YoForex'}
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Login
             </Button>
-          )}
-        </CardFooter>
+          </div>
+
+          <div className="text-center text-sm text-muted-foreground">
+            <p>Didn't receive the code? Check your spam folder or resend.</p>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

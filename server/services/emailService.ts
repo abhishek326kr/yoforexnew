@@ -2362,6 +2362,89 @@ export const emailService = {
     });
   },
 
+  async sendEmailVerificationOTP(email: string, username: string, otp: string): Promise<void> {
+    const content = `
+      <div style="text-align: center; padding: 20px 0;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 32px 24px; border-radius: 12px; margin: 16px 0;">
+          <h2 style="margin: 0 0 16px 0; font-size: 28px;">Verify Your Email</h2>
+          <p style="font-size: 16px; margin: 0 0 24px 0; opacity: 0.95;">
+            Welcome to YoForex, ${escapeHtml(username)}!
+          </p>
+          <div style="background: white; color: #1f2937; padding: 20px; border-radius: 8px; font-size: 36px; font-weight: bold; letter-spacing: 8px; font-family: monospace;">
+            ${escapeHtml(otp)}
+          </div>
+          <p style="font-size: 14px; margin: 24px 0 0 0; opacity: 0.9;">
+            This code expires in 10 minutes
+          </p>
+        </div>
+      </div>
+      <div style="text-align: center; color: #6b7280; font-size: 14px; margin: 20px 0;">
+        <p>If you didn't create an account, you can safely ignore this email.</p>
+        <p style="margin-top: 12px;">Need help? Contact us at <a href="mailto:${process.env.SMTP_FROM_EMAIL}" style="color: #2563eb;">${process.env.SMTP_FROM_EMAIL}</a></p>
+      </div>
+    `;
+
+    const userId = await getUserIdFromEmail(email);
+    const { html } = await createEmailTemplate(content, {
+      recipientEmail: email,
+      userId: userId || undefined,
+      templateKey: 'email_verification_otp',
+      subject: `Verify Your Email - Code: ${otp}`
+    });
+
+    const info = await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'YoForex'}" <${process.env.SMTP_FROM_EMAIL}>`,
+      to: email,
+      subject: `🔐 Verify Your Email - Code: ${otp}`,
+      html
+    });
+
+    console.log(`[VERIFICATION OTP] Sent to ${email}, code expires in 10 minutes`);
+  },
+
+  async sendPasswordResetOTP(email: string, username: string, otp: string): Promise<void> {
+    const content = `
+      <div style="text-align: center; padding: 20px 0;">
+        <div style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); color: white; padding: 32px 24px; border-radius: 12px; margin: 16px 0;">
+          <h2 style="margin: 0 0 16px 0; font-size: 28px;">🔒 Reset Your Password</h2>
+          <p style="font-size: 16px; margin: 0 0 24px 0; opacity: 0.95;">
+            Hello, ${escapeHtml(username)}!
+          </p>
+          <p style="font-size: 15px; margin: 0 0 20px 0;">
+            We received a request to reset your password. Use the code below:
+          </p>
+          <div style="background: white; color: #1f2937; padding: 20px; border-radius: 8px; font-size: 36px; font-weight: bold; letter-spacing: 8px; font-family: monospace;">
+            ${escapeHtml(otp)}
+          </div>
+          <p style="font-size: 14px; margin: 24px 0 0 0; opacity: 0.9;">
+            This code expires in 10 minutes
+          </p>
+        </div>
+      </div>
+      <div style="text-align: center; color: #6b7280; font-size: 14px; margin: 20px 0;">
+        <p><strong>Didn't request this?</strong> Your account is safe. You can ignore this email.</p>
+        <p style="margin-top: 12px;">For security questions, contact <a href="mailto:${process.env.SMTP_FROM_EMAIL}" style="color: #2563eb;">${process.env.SMTP_FROM_EMAIL}</a></p>
+      </div>
+    `;
+
+    const userId = await getUserIdFromEmail(email);
+    const { html } = await createEmailTemplate(content, {
+      recipientEmail: email,
+      userId: userId || undefined,
+      templateKey: 'password_reset_otp',
+      subject: `Reset Your Password - Code: ${otp}`
+    });
+
+    await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'YoForex'}" <${process.env.SMTP_FROM_EMAIL}>`,
+      to: email,
+      subject: `🔐 Reset Your Password - Code: ${otp}`,
+      html
+    });
+
+    console.log(`[PASSWORD RESET OTP] Sent to ${email}, code expires in 10 minutes`);
+  },
+
   async sendTestEmail(
     to: string,
     customMessage?: string

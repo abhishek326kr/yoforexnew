@@ -200,6 +200,9 @@ import {
   type InsertSpamDetectionLog,
   type TicketMessage,
   type InsertTicketMessage,
+  // OTP types
+  type OTPCode,
+  type InsertOTPCode,
   users,
   userActivity,
   coinTransactions,
@@ -208,6 +211,7 @@ import {
   withdrawalRequests,
   feedback,
   content,
+  otpCodes,
   newsletterSubscribers,
   contentPurchases,
   contentReviews,
@@ -533,6 +537,8 @@ export interface IStorage {
     sort?: string;
   }): Promise<{ users: User[]; total: number }>;
   getUserById(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  updateUser(userId: string, data: Partial<User>): Promise<User | undefined>;
   getForumStats(): Promise<{
     totalThreads: number;
     totalMembers: number;
@@ -3362,6 +3368,41 @@ export interface IStorage {
    * Get users matching audience criteria
    */
   getUsersByAudience(audience: any): Promise<User[]>;
+
+  // ============================================================================
+  // OTP MANAGEMENT
+  // ============================================================================
+  
+  /**
+   * Create a new OTP code
+   */
+  createOTP(data: InsertOTPCode): Promise<OTPCode>;
+  
+  /**
+   * Get the latest valid OTP for a user and purpose
+   */
+  getOTPByUserAndPurpose(userId: string, purpose: string): Promise<OTPCode | null>;
+  
+  /**
+   * Increment attempt count for an OTP
+   */
+  incrementOTPAttempts(id: string): Promise<void>;
+  
+  /**
+   * Mark an OTP as used
+   */
+  markOTPAsUsed(id: string): Promise<void>;
+  
+  /**
+   * Delete a specific OTP
+   */
+  deleteOTP(id: string): Promise<void>;
+  
+  /**
+   * Cleanup all expired OTPs
+   * @returns Number of OTPs deleted
+   */
+  cleanupExpiredOTPs(): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -5449,6 +5490,20 @@ export class MemStorage implements IStorage {
 
   async getUserById(id: string): Promise<User | undefined> {
     return this.users.get(id);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const allUsers = Array.from(this.users.values());
+    return allUsers.find(user => user.email === email);
+  }
+
+  async updateUser(userId: string, data: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(userId);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, ...data, id: user.id, updatedAt: new Date() };
+    this.users.set(userId, updatedUser);
+    return updatedUser;
   }
 
   async getUserStats(userId: string): Promise<{
@@ -23005,6 +23060,60 @@ export class DrizzleStorage implements IStorage {
       console.error('Error exporting audit logs:', error);
       throw error;
     }
+  }
+
+  // ============================================================================
+  // OTP MANAGEMENT
+  // ============================================================================
+
+  async createOTP(data: InsertOTPCode): Promise<OTPCode> {
+    const [otp] = await db.insert(otpCodes).values(data).returning();
+    return otp;
+  }
+
+  async getOTPByUserAndPurpose(userId: string, purpose: string): Promise<OTPCode | null> {
+    const result = await db
+      .select()
+      .from(otpCodes)
+      .where(
+        and(
+          eq(otpCodes.userId, userId),
+          eq(otpCodes.purpose, purpose),
+          eq(otpCodes.used, false),
+          gt(otpCodes.expiresAt, new Date())
+        )
+      )
+      .orderBy(desc(otpCodes.createdAt))
+      .limit(1);
+    
+    return result[0] || null;
+  }
+
+  async incrementOTPAttempts(id: string): Promise<void> {
+    await db
+      .update(otpCodes)
+      .set({ attemptCount: sql`${otpCodes.attemptCount} + 1` })
+      .where(eq(otpCodes.id, id));
+  }
+
+  async markOTPAsUsed(id: string): Promise<void> {
+    await db
+      .update(otpCodes)
+      .set({ used: true })
+      .where(eq(otpCodes.id, id));
+  }
+
+  async deleteOTP(id: string): Promise<void> {
+    await db.delete(otpCodes).where(eq(otpCodes.id, id));
+  }
+
+  async cleanupExpiredOTPs(): Promise<number> {
+    const result = await db
+      .delete(otpCodes)
+      .where(lt(otpCodes.expiresAt, new Date()))
+      .returning();
+    
+    return result.length;
   }
 }
 

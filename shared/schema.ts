@@ -123,6 +123,27 @@ export const sessions = pgTable(
   }),
 );
 
+// OTP Codes table - For email verification and password reset
+export const otpCodes = pgTable("otp_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  codeHash: varchar("code_hash", { length: 255 }).notNull(), // bcrypt hash of 6-digit code
+  purpose: varchar("purpose", { length: 50 }).notNull(), // 'verify_email' or 'reset_password'
+  expiresAt: timestamp("expires_at").notNull(), // 10 minutes from creation
+  attemptCount: integer("attempt_count").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  userIdIdx: index("idx_otp_user_id").on(table.userId),
+  purposeIdx: index("idx_otp_purpose").on(table.purpose),
+  expiresIdx: index("idx_otp_expires").on(table.expiresAt),
+}));
+
+export type OTPCode = typeof otpCodes.$inferSelect;
+export const insertOTPCodeSchema = createInsertSchema(otpCodes).omit({ id: true, createdAt: true });
+export type InsertOTPCode = z.infer<typeof insertOTPCodeSchema>;
+
 // User storage table - Merged Replit Auth + YoForex fields
 export const users = pgTable("users", {
   // Core identity field (NEVER change this type - breaking change)
