@@ -44,16 +44,28 @@ const nextConfig = {
       }
       // Development fallback only (matches api-config.ts)
       console.warn('⚠️  EXPRESS_URL not set, using development fallback: http://127.0.0.1:3001');
-      return [{
-        source: '/api/:path*',
-        destination: 'http://127.0.0.1:3001/api/:path*',
-      }];
+      return [
+        {
+          source: '/api/:path*',
+          destination: 'http://127.0.0.1:3001/api/:path*',
+        },
+        {
+          source: '/objects/:path*',
+          destination: 'http://127.0.0.1:3001/objects/:path*',
+        },
+      ];
     }
     
-    return [{
-      source: '/api/:path*',
-      destination: `${expressUrl}/api/:path*`,
-    }];
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${expressUrl}/api/:path*`,
+      },
+      {
+        source: '/objects/:path*',
+        destination: `${expressUrl}/objects/:path*`,
+      },
+    ];
   },
 
   // Image optimization

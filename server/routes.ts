@@ -1529,13 +1529,41 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
 
-  // Download protected files with ACL check
-  app.get("/objects/:objectPath(*)", isAuthenticated, async (req, res) => {
+  // Download files with ACL check (marketplace screenshots are public, others require auth)
+  app.get("/objects/:objectPath(*)", async (req, res) => {
     try {
+      const objectPath = req.path;
+      
+      // Normalize path using Node.js path module to prevent path traversal attacks
+      const normalizedPath = path.posix.normalize(objectPath);
+      
+      // Verify the normalized path still starts with /objects/ to prevent escaping
+      if (!normalizedPath.startsWith('/objects/')) {
+        return res.status(400).json({ error: "Invalid path" });
+      }
+      
+      // Strict validation for marketplace screenshots using canonical UUID format
+      // Format: /objects/marketplace/ea/{uuid}/screenshots/{uuid}.{ext}
+      // UUID format: 8-4-4-4-12 hex characters (e.g., 123e4567-e89b-12d3-a456-426614174000)
+      const marketplaceScreenshotRegex = /^\/objects\/marketplace\/ea\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/screenshots\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpg|jpeg|webp)$/i;
+      const isMarketplaceScreenshot = marketplaceScreenshotRegex.test(normalizedPath);
+      
+      // Marketplace screenshots are publicly accessible
+      if (isMarketplaceScreenshot) {
+        const objectStorageService = new ObjectStorageService();
+        const objectFile = await objectStorageService.getObjectEntityFile(normalizedPath);
+        return objectStorageService.downloadObject(objectFile, res);
+      }
+      
+      // All other files require authentication
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
       const userId = (req.user as any)?.claims?.sub;
       const objectStorageService = new ObjectStorageService();
       
-      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      const objectFile = await objectStorageService.getObjectEntityFile(normalizedPath);
       const canAccess = await objectStorageService.canAccessObjectEntity({
         objectFile,
         userId: userId,
