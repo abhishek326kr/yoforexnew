@@ -4191,7 +4191,8 @@ export async function registerRoutes(app: Express): Promise<Express> {
         }
       }
       
-      const content = await storage.createContent(validated);
+      // Auto-approve published content so it appears in marketplace immediately
+      const content = await storage.createContent({ ...validated, status: 'approved' });
       
       // Check and award badges after content publishing
       try {
@@ -4248,8 +4249,10 @@ export async function registerRoutes(app: Express): Promise<Express> {
         ? generateImageAltTexts(validated.title, validated.images.length)
         : [];
       
+      // Auto-approve published content so it appears in marketplace immediately
       const content = await storage.createContent({
         ...validated,
+        status: 'approved',
       });
       
       // AWARD COINS: Publishing rewards based on content type
