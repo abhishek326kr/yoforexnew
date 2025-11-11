@@ -128,6 +128,58 @@ export function startBackgroundJobs(storage: IStorage) {
   console.log('[JOBS] Bot purchase refunds scheduled (runs daily at 3 AM)');
   
   // ============================================
+  // MONITORING AND CLEANUP JOBS
+  // ============================================
+  
+  // Error Cleanup Job - Runs at 02:30 daily
+  cron.schedule('30 2 * * *', async () => {
+    try {
+      console.log('[ERROR CLEANUP] Starting error cleanup job...');
+      
+      const { runErrorCleanup } = await import('./errorCleanup.js');
+      const result = await runErrorCleanup();
+      
+      console.log(`[ERROR CLEANUP] Job completed: ${result.deletedGroups} groups, ${result.archivedEvents} events archived, ${result.errors} errors`);
+    } catch (error: any) {
+      console.error('[ERROR CLEANUP] Error during error cleanup execution:', error);
+    }
+  });
+  
+  console.log('[JOBS] Error cleanup scheduled (runs daily at 02:30 AM)');
+  
+  // Coin Health Monitor - Runs at 07:00 daily (after treasurySnapshot)
+  cron.schedule('0 7 * * *', async () => {
+    try {
+      console.log('[COIN HEALTH] Starting coin health monitor job...');
+      
+      const { runCoinHealthMonitor } = await import('./coinHealthMonitor.js');
+      const result = await runCoinHealthMonitor();
+      
+      console.log(`[COIN HEALTH] Job completed: ${result.totalDrift} total drift, ${result.usersAffected} users affected, ${result.alertsCreated} alerts created`);
+    } catch (error: any) {
+      console.error('[COIN HEALTH] Error during coin health monitor execution:', error);
+    }
+  });
+  
+  console.log('[JOBS] Coin health monitor scheduled (runs daily at 07:00 AM)');
+  
+  // Error Growth Monitor - Runs every hour
+  cron.schedule('0 * * * *', async () => {
+    try {
+      console.log('[ERROR GROWTH] Starting error growth monitor job...');
+      
+      const { runErrorGrowthMonitor } = await import('./errorGrowthMonitor.js');
+      const result = await runErrorGrowthMonitor();
+      
+      console.log(`[ERROR GROWTH] Job completed: ${result.totalEvents} events, ${result.growthRate.toFixed(2)}x growth rate, ${result.alerts} alerts`);
+    } catch (error: any) {
+      console.error('[ERROR GROWTH] Error during error growth monitor execution:', error);
+    }
+  });
+  
+  console.log('[JOBS] Error growth monitor scheduled (runs every hour)');
+  
+  // ============================================
   // SEO SCAN BACKGROUND JOBS
   // ============================================
   

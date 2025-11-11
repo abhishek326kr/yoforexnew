@@ -125,6 +125,15 @@ import {
   type InsertErrorEvent,
   type ErrorStatusChange,
   type InsertErrorStatusChange,
+  // Monitoring and Cleanup types
+  type MonitoringRun,
+  type InsertMonitoringRun,
+  type MonitoringMetric,
+  type InsertMonitoringMetric,
+  type MonitoringAlert,
+  type InsertMonitoringAlert,
+  type ErrorArchive,
+  type InsertErrorArchive,
   // SEO Performance types
   type SeoPerformanceMetric,
   type InsertSeoPerformanceMetric,
@@ -267,6 +276,11 @@ import {
   errorGroups,
   errorEvents,
   errorStatusChanges,
+  // Monitoring and Cleanup tables
+  monitoringRuns,
+  monitoringMetrics,
+  monitoringAlerts,
+  errorArchives,
   // SEO Performance tables
   seoPerformanceMetrics,
   // Bot Economy tables
@@ -3111,6 +3125,55 @@ export interface IStorage {
    * Update fraud signal review status
    */
   updateFraudSignalStatus(id: string, status: "pending" | "reviewed" | "false_positive" | "confirmed", reviewedBy: string): Promise<FraudSignal | null>;
+
+  // ============================================================================
+  // MONITORING AND CLEANUP SYSTEM
+  // ============================================================================
+  
+  /**
+   * Get monitoring runs with optional filters
+   */
+  getMonitoringRuns(filters?: { jobName?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<MonitoringRun[]>;
+  
+  /**
+   * Create a monitoring run record
+   */
+  createMonitoringRun(data: InsertMonitoringRun): Promise<MonitoringRun>;
+  
+  /**
+   * Update a monitoring run
+   */
+  updateMonitoringRun(id: string, updates: { status?: 'running' | 'completed' | 'failed'; completedAt?: Date; metadata?: Record<string, any> }): Promise<void>;
+  
+  /**
+   * Get monitoring metrics with optional filters
+   */
+  getMonitoringMetrics(filters?: { metricType?: string; component?: string; beforeDate?: Date; afterDate?: Date }): Promise<MonitoringMetric[]>;
+  
+  /**
+   * Create a monitoring metric
+   */
+  createMonitoringMetric(data: InsertMonitoringMetric): Promise<MonitoringMetric>;
+  
+  /**
+   * Get monitoring alerts with optional filters
+   */
+  getMonitoringAlerts(filters?: { alertType?: string; severity?: string; delivered?: boolean }): Promise<MonitoringAlert[]>;
+  
+  /**
+   * Create a monitoring alert
+   */
+  createMonitoringAlert(data: InsertMonitoringAlert): Promise<MonitoringAlert>;
+  
+  /**
+   * Mark an alert as delivered
+   */
+  markAlertDelivered(id: string): Promise<void>;
+  
+  /**
+   * Archive error groups and return stats
+   */
+  archiveErrorGroups(groupIds: string[]): Promise<{ archived: number; events: number }>;
 
   // ============================================================================
   // SWEETS ECONOMY SYSTEM - Treasury Management
@@ -21847,6 +21910,238 @@ export class DrizzleStorage implements IStorage {
       return updated || null;
     } catch (error) {
       console.error('Error updating fraud signal status:', error);
+      throw error;
+    }
+  }
+
+  // ============================================================================
+  // MONITORING AND CLEANUP SYSTEM
+  // ============================================================================
+
+  async getMonitoringRuns(filters?: { jobName?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<MonitoringRun[]> {
+    try {
+      let query = db.select().from(monitoringRuns);
+      
+      const conditions = [];
+      if (filters?.jobName) {
+        conditions.push(eq(monitoringRuns.jobName, filters.jobName as any));
+      }
+      if (filters?.status) {
+        conditions.push(eq(monitoringRuns.status, filters.status as any));
+      }
+      if (filters?.startDate) {
+        conditions.push(gte(monitoringRuns.startedAt, filters.startDate));
+      }
+      if (filters?.endDate) {
+        conditions.push(lte(monitoringRuns.startedAt, filters.endDate));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+      
+      const runs = await query.orderBy(desc(monitoringRuns.startedAt));
+      return runs;
+    } catch (error) {
+      console.error('Error getting monitoring runs:', error);
+      throw error;
+    }
+  }
+
+  async createMonitoringRun(data: InsertMonitoringRun): Promise<MonitoringRun> {
+    try {
+      const [run] = await db
+        .insert(monitoringRuns)
+        .values(data)
+        .returning();
+      return run;
+    } catch (error) {
+      console.error('Error creating monitoring run:', error);
+      throw error;
+    }
+  }
+
+  async updateMonitoringRun(id: string, updates: { status?: 'running' | 'completed' | 'failed'; completedAt?: Date; metadata?: Record<string, any> }): Promise<void> {
+    try {
+      await db
+        .update(monitoringRuns)
+        .set(updates)
+        .where(eq(monitoringRuns.id, id));
+    } catch (error) {
+      console.error('Error updating monitoring run:', error);
+      throw error;
+    }
+  }
+
+  async getMonitoringMetrics(filters?: { metricType?: string; component?: string; beforeDate?: Date; afterDate?: Date }): Promise<MonitoringMetric[]> {
+    try {
+      let query = db.select().from(monitoringMetrics);
+      
+      const conditions = [];
+      if (filters?.metricType) {
+        conditions.push(eq(monitoringMetrics.metricType, filters.metricType as any));
+      }
+      if (filters?.component) {
+        conditions.push(eq(monitoringMetrics.component, filters.component));
+      }
+      if (filters?.beforeDate) {
+        conditions.push(lte(monitoringMetrics.createdAt, filters.beforeDate));
+      }
+      if (filters?.afterDate) {
+        conditions.push(gte(monitoringMetrics.createdAt, filters.afterDate));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+      
+      const metrics = await query.orderBy(desc(monitoringMetrics.createdAt));
+      return metrics;
+    } catch (error) {
+      console.error('Error getting monitoring metrics:', error);
+      throw error;
+    }
+  }
+
+  async createMonitoringMetric(data: InsertMonitoringMetric): Promise<MonitoringMetric> {
+    try {
+      const [metric] = await db
+        .insert(monitoringMetrics)
+        .values(data)
+        .returning();
+      return metric;
+    } catch (error) {
+      console.error('Error creating monitoring metric:', error);
+      throw error;
+    }
+  }
+
+  async getMonitoringAlerts(filters?: { alertType?: string; severity?: string; delivered?: boolean }): Promise<MonitoringAlert[]> {
+    try {
+      let query = db.select().from(monitoringAlerts);
+      
+      const conditions = [];
+      if (filters?.alertType) {
+        conditions.push(eq(monitoringAlerts.alertType, filters.alertType as any));
+      }
+      if (filters?.severity) {
+        conditions.push(eq(monitoringAlerts.severity, filters.severity as any));
+      }
+      if (filters?.delivered !== undefined) {
+        conditions.push(eq(monitoringAlerts.delivered, filters.delivered));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+      
+      const alerts = await query.orderBy(desc(monitoringAlerts.createdAt));
+      return alerts;
+    } catch (error) {
+      console.error('Error getting monitoring alerts:', error);
+      throw error;
+    }
+  }
+
+  async createMonitoringAlert(data: InsertMonitoringAlert): Promise<MonitoringAlert> {
+    try {
+      const [alert] = await db
+        .insert(monitoringAlerts)
+        .values(data)
+        .returning();
+      return alert;
+    } catch (error) {
+      console.error('Error creating monitoring alert:', error);
+      throw error;
+    }
+  }
+
+  async markAlertDelivered(id: string): Promise<void> {
+    try {
+      await db
+        .update(monitoringAlerts)
+        .set({ 
+          delivered: true,
+          deliveredAt: new Date()
+        })
+        .where(eq(monitoringAlerts.id, id));
+    } catch (error) {
+      console.error('Error marking alert as delivered:', error);
+      throw error;
+    }
+  }
+
+  async archiveErrorGroups(groupIds: string[]): Promise<{ archived: number; events: number }> {
+    try {
+      if (groupIds.length === 0) {
+        return { archived: 0, events: 0 };
+      }
+
+      return await db.transaction(async (tx) => {
+        // 1. Fetch all groups to archive (batch query)
+        const groups = await tx
+          .select()
+          .from(errorGroups)
+          .where(inArray(errorGroups.id, groupIds));
+
+        if (groups.length === 0) {
+          return { archived: 0, events: 0 };
+        }
+
+        const foundGroupIds = groups.map(g => g.id);
+
+        // 2. Count events per group (batch query)
+        const eventCounts = await tx
+          .select({
+            groupId: errorEvents.groupId,
+            count: sql<number>`COUNT(*)::int`.as('count')
+          })
+          .from(errorEvents)
+          .where(inArray(errorEvents.groupId, foundGroupIds))
+          .groupBy(errorEvents.groupId);
+
+        const eventCountMap = new Map(eventCounts.map(e => [e.groupId, e.count]));
+
+        // 3. Create archive records (batch insert)
+        const archiveRecords = groups.map(group => ({
+          originalGroupId: group.id,
+          fingerprint: group.fingerprint,
+          message: group.message,
+          component: group.component || null,
+          severity: group.severity,
+          firstSeen: group.firstSeen,
+          lastSeen: group.lastSeen,
+          resolvedAt: group.resolvedAt!,
+          occurrenceCount: group.occurrenceCount,
+          eventsArchived: eventCountMap.get(group.id) || 0,
+          metadata: {
+            ...group.metadata,
+            archiveReason: 'Automatic cleanup operation',
+            archivedAt: new Date().toISOString()
+          }
+        }));
+
+        await tx.insert(errorArchives).values(archiveRecords);
+
+        // 4. Delete events FIRST (prevents foreign key violation)
+        const deletedEvents = await tx
+          .delete(errorEvents)
+          .where(inArray(errorEvents.groupId, foundGroupIds))
+          .returning();
+
+        // 5. Delete groups AFTER events are deleted
+        const deletedGroups = await tx
+          .delete(errorGroups)
+          .where(inArray(errorGroups.id, foundGroupIds))
+          .returning();
+
+        return { 
+          archived: deletedGroups.length, 
+          events: deletedEvents.length 
+        };
+      });
+    } catch (error) {
+      console.error('Error archiving error groups:', error);
       throw error;
     }
   }

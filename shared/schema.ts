@@ -4097,6 +4097,158 @@ export type InsertErrorStatusChange = z.infer<typeof insertErrorStatusChangeSche
 export type ErrorStatusChange = typeof errorStatusChanges.$inferSelect;
 
 // ============================================================================
+// MONITORING AND CLEANUP SYSTEM TABLES
+// ============================================================================
+
+// Monitoring Runs - Track each monitoring job execution
+export const monitoringRuns = pgTable("monitoring_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobName: varchar("job_name", { length: 50 }).notNull().$type<"error_cleanup" | "coin_health" | "error_growth">(),
+  status: varchar("status", { length: 20 }).notNull().$type<"running" | "completed" | "failed">().default("running"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  metadata: jsonb("metadata").$type<{
+    deletedGroups?: number;
+    archivedEvents?: number;
+    totalDrift?: number;
+    usersAffected?: number;
+    alertsCreated?: number;
+    totalEvents?: number;
+    growthRate?: number;
+    components?: Record<string, number>;
+    errors?: number;
+    [key: string]: any;
+  }>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  jobNameIdx: index("idx_monitoring_runs_job_name").on(table.jobName),
+  statusIdx: index("idx_monitoring_runs_status").on(table.status),
+  startedAtIdx: index("idx_monitoring_runs_started_at").on(table.startedAt),
+}));
+
+// Monitoring Metrics - Store time-series metrics
+export const monitoringMetrics = pgTable("monitoring_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricType: varchar("metric_type", { length: 50 }).notNull().$type<"coin_balance_drift" | "error_event_count" | "db_size" | "growth_rate">(),
+  metricValue: numeric("metric_value").notNull(),
+  component: varchar("component", { length: 255 }),
+  metadata: jsonb("metadata").$type<{
+    userId?: string;
+    walletBalance?: number;
+    journalBalance?: number;
+    period?: string;
+    average?: number;
+    threshold?: number;
+    [key: string]: any;
+  }>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  metricTypeIdx: index("idx_monitoring_metrics_metric_type").on(table.metricType),
+  componentIdx: index("idx_monitoring_metrics_component").on(table.component),
+  createdAtIdx: index("idx_monitoring_metrics_created_at").on(table.createdAt),
+}));
+
+// Monitoring Alerts - Alert records with delivery tracking
+export const monitoringAlerts = pgTable("monitoring_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  alertType: varchar("alert_type", { length: 50 }).notNull().$type<"wallet_discrepancy" | "coin_anomaly" | "error_spike" | "disk_space">(),
+  severity: varchar("severity", { length: 20 }).notNull().$type<"low" | "medium" | "high" | "critical">(),
+  message: text("message").notNull(),
+  affectedEntities: jsonb("affected_entities").$type<{
+    userIds?: string[];
+    components?: string[];
+    groupIds?: string[];
+    [key: string]: any;
+  }>(),
+  delivered: boolean("delivered").notNull().default(false),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  alertTypeIdx: index("idx_monitoring_alerts_alert_type").on(table.alertType),
+  severityIdx: index("idx_monitoring_alerts_severity").on(table.severity),
+  deliveredIdx: index("idx_monitoring_alerts_delivered").on(table.delivered),
+  createdAtIdx: index("idx_monitoring_alerts_created_at").on(table.createdAt),
+}));
+
+// Error Archives - Archived resolved errors older than 30 days
+export const errorArchives = pgTable("error_archives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalGroupId: varchar("original_group_id").notNull(),
+  fingerprint: varchar("fingerprint", { length: 64 }).notNull(),
+  message: text("message").notNull(),
+  component: varchar("component", { length: 255 }),
+  severity: varchar("severity", { length: 20 }).notNull().$type<"critical" | "error" | "warning" | "info">(),
+  firstSeen: timestamp("first_seen").notNull(),
+  lastSeen: timestamp("last_seen").notNull(),
+  resolvedAt: timestamp("resolved_at").notNull(),
+  occurrenceCount: integer("occurrence_count").notNull(),
+  eventsArchived: integer("events_archived").notNull().default(0),
+  metadata: jsonb("metadata").$type<{
+    browser?: string;
+    os?: string;
+    url?: string;
+    archiveReason?: string;
+    resolvedBy?: string;
+    [key: string]: any;
+  }>(),
+  archivedAt: timestamp("archived_at").notNull().defaultNow(),
+}, (table) => ({
+  fingerprintIdx: index("idx_error_archives_fingerprint").on(table.fingerprint),
+  componentIdx: index("idx_error_archives_component").on(table.component),
+  archivedAtIdx: index("idx_error_archives_archived_at").on(table.archivedAt),
+}));
+
+// Monitoring Runs Schema
+export const insertMonitoringRunSchema = createInsertSchema(monitoringRuns).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+}).extend({
+  jobName: z.enum(["error_cleanup", "coin_health", "error_growth"]),
+  status: z.enum(["running", "completed", "failed"]).default("running"),
+});
+export type InsertMonitoringRun = z.infer<typeof insertMonitoringRunSchema>;
+export type MonitoringRun = typeof monitoringRuns.$inferSelect;
+
+// Monitoring Metrics Schema
+export const insertMonitoringMetricSchema = createInsertSchema(monitoringMetrics).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  metricType: z.enum(["coin_balance_drift", "error_event_count", "db_size", "growth_rate"]),
+  metricValue: z.coerce.number(),
+});
+export type InsertMonitoringMetric = z.infer<typeof insertMonitoringMetricSchema>;
+export type MonitoringMetric = typeof monitoringMetrics.$inferSelect;
+
+// Monitoring Alerts Schema
+export const insertMonitoringAlertSchema = createInsertSchema(monitoringAlerts).omit({
+  id: true,
+  delivered: true,
+  deliveredAt: true,
+  createdAt: true,
+}).extend({
+  alertType: z.enum(["wallet_discrepancy", "coin_anomaly", "error_spike", "disk_space"]),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  message: z.string().min(1),
+});
+export type InsertMonitoringAlert = z.infer<typeof insertMonitoringAlertSchema>;
+export type MonitoringAlert = typeof monitoringAlerts.$inferSelect;
+
+// Error Archives Schema
+export const insertErrorArchiveSchema = createInsertSchema(errorArchives).omit({
+  id: true,
+  archivedAt: true,
+}).extend({
+  originalGroupId: z.string().uuid(),
+  fingerprint: z.string().length(64),
+  message: z.string().min(1),
+  severity: z.enum(["critical", "error", "warning", "info"]),
+});
+export type InsertErrorArchive = z.infer<typeof insertErrorArchiveSchema>;
+export type ErrorArchive = typeof errorArchives.$inferSelect;
+
+// ============================================================================
 // SEO MONITORING SYSTEM TABLES
 // ============================================================================
 
