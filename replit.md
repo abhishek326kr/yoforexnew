@@ -67,6 +67,80 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### Coin Economy Reconciliation & Prevention System (November 11, 2025)
+
+**CRITICAL FIX:** Resolved major coin economy integrity issue affecting 9,684 coins and 701 users.
+
+**Problem Identified:**
+- 9,684 coin discrepancy between user wallets (18,710) and transaction ledger (28,394)
+- 29 users had transactions but no wallet records (7,451 coins)
+- 8 users had wallet-transaction mismatches (2,233 coins)
+- 676 users had no wallet records at all
+- Root cause: Legacy code bypassed CoinTransactionService, creating transactions without updating/creating wallets
+
+**Solution Implemented:**
+
+1. **Reconciliation Script** (`scripts/reconcile-coin-economy.ts`):
+   - Created 676 missing wallets
+   - Updated 25 wallet balances to match transaction history
+   - Reconciled all 9,684 missing coins
+   - Final state: 896 users, all balanced at 28,394 total coins
+   - Can be run with `npx tsx scripts/reconcile-coin-economy.ts --force`
+   - Includes dry-run mode for safety verification
+
+2. **Service Enforcement** (10 locations refactored):
+   - `server/storage/domains/users.ts`: Active engagement rewards
+   - `server/storage/domains/content.ts`: Free downloads, purchases, content likes
+   - `server/localAuth.ts`: Welcome bonus with idempotency key
+   - `server/services/botBehaviorEngine.ts`: Bot marketplace transactions + engagement rewards
+   - All now use CoinTransactionService.executeTransaction() with proper triggers/channels
+
+3. **Transaction Context Support**:
+   - Added optional `providedTx` parameter to CoinTransactionService
+   - Prevents nested transaction issues (atomicity preservation)
+   - Callers with existing db.transaction() pass their context
+   - Standalone calls create their own transaction
+
+4. **Side-Effect Safety**:
+   - WebSocket events (balance updates) deferred until after transaction commits
+   - Success guard ensures events only emit on successful transactions
+   - Prevents phantom balance notifications on rollbacks
+
+5. **Performance Optimization**:
+   - BotBehaviorEngine uses singleton CoinTransactionService instance
+   - Enhanced error logging for failed coin transactions
+   - Reduced database connection overhead
+
+6. **Database Safeguard** (`server/migrations/add-wallet-existence-trigger.sql`):
+   - PostgreSQL trigger ensures wallet exists before coin_transactions insert
+   - Auto-creates wallets with zero balance if missing
+   - Defense-in-depth against future wallet-transaction mismatches
+
+**Files Modified:**
+- `scripts/reconcile-coin-economy.ts` (new)
+- `server/services/coinTransactionService.ts`
+- `server/storage/domains/content.ts`
+- `server/storage/domains/users.ts`
+- `server/localAuth.ts`
+- `server/services/botBehaviorEngine.ts`
+- `server/migrations/add-wallet-existence-trigger.sql` (new)
+
+**Critical Rules Going Forward:**
+- ✅ ALL coin transactions MUST use CoinTransactionService.executeTransaction()
+- ✅ NEVER directly insert into coin_transactions table
+- ✅ Pass transaction context (providedTx) when within existing db.transaction()
+- ✅ Only emit side-effects after transaction commits successfully
+- ✅ Use proper SWEETS_TRIGGERS and SWEETS_CHANNELS taxonomy
+- ✅ Add idempotency keys for critical transactions (welcome bonus, purchases)
+
+**Monitoring:**
+- Database trigger provides automatic wallet creation safety net
+- Enhanced logging tracks all failed coin transactions
+- Service validates all triggers/channels against taxonomy
+- Fraud detection and rate limiting remain active
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.

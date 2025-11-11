@@ -16,11 +16,15 @@ import {
 import { eq, and, lt, gte, sql, desc, notInArray, or, isNull } from 'drizzle-orm';
 import { spend, wouldExceedWalletCap, getEconomySettings } from './treasuryService.js';
 import { storage } from '../storage.js';
+import { CoinTransactionService } from './coinTransactionService.js';
 
 /**
  * Bot Behavior Engine - Implements automated bot actions
  * Runs every 10 minutes to scan and execute bot activities
  */
+
+// Singleton instance of CoinTransactionService for performance
+const coinService = new CoinTransactionService();
 
 /**
  * Scan for new threads that bots haven't interacted with yet
@@ -112,7 +116,7 @@ export async function executeLikes(threadId: string, aggressionLevel: number = 5
         continue;
       }
       
-      // Credit thread author
+      // Credit thread author using CoinTransactionService
       const thread = await db.select().from(forumThreads).where(eq(forumThreads.id, threadId)).limit(1);
       
       if (thread.length) {
@@ -120,23 +124,18 @@ export async function executeLikes(threadId: string, aggressionLevel: number = 5
         const wouldExceed = await wouldExceedWalletCap(thread[0].authorId, 1);
         
         if (!wouldExceed) {
-          await db.update(users)
-            .set({
-              totalCoins: sql`${users.totalCoins} + 1`
-            })
-            .where(eq(users.id, thread[0].authorId));
-          
-          // Create transaction
-          await db.insert(coinTransactions).values({
+          const txResult = await coinService.executeTransaction({
             userId: thread[0].authorId,
-            type: 'earn',
             amount: 1,
             trigger: COIN_TRIGGERS.FORUM_LIKE_RECEIVED,
             channel: COIN_CHANNELS.FORUM,
             description: 'Thread liked',
-            status: 'completed',
-            botId: bot.id
+            metadata: { threadId, botId: bot.id, botLike: true }
           });
+          
+          if (!txResult.success) {
+            console.error(`[BOT ENGINE] Failed to credit thread author ${thread[0].authorId} for like on thread ${threadId}: ${txResult.error}`);
+          }
         }
       }
       
@@ -227,24 +226,19 @@ export async function executeFollow(userId: string) {
     const wouldExceed = await wouldExceedWalletCap(userId, 1);
     
     if (!wouldExceed) {
-      // Credit user
-      await db.update(users)
-        .set({
-          totalCoins: sql`${users.totalCoins} + 1`
-        })
-        .where(eq(users.id, userId));
-      
-      // Create transaction
-      await db.insert(coinTransactions).values({
+      // Credit user using CoinTransactionService
+      const txResult = await coinService.executeTransaction({
         userId,
-        type: 'earn',
         amount: 1,
         trigger: COIN_TRIGGERS.ENGAGEMENT_FOLLOWER_GAINED,
         channel: COIN_CHANNELS.ENGAGEMENT,
         description: 'New follower',
-        status: 'completed',
-        botId: bot.id
+        metadata: { botId: bot.id, botFollow: true }
       });
+      
+      if (!txResult.success) {
+        console.error(`[BOT ENGINE] Failed to credit user ${userId} for new follower from bot ${bot.id}: ${txResult.error}`);
+      }
     }
     
     // Create follow relationship
@@ -348,43 +342,54 @@ export async function executePurchase(contentId: string) {
         continue;
       }
       
-      // Credit seller (80%)
-      await db.update(users)
-        .set({
-          totalCoins: sql`${users.totalCoins} + ${sellerEarnings}`
-        })
-        .where(eq(users.id, sellerId));
-      
-      // Create transaction for seller
-      await db.insert(coinTransactions).values({
+      // Credit seller using CoinTransactionService (handles wallet + totalCoins atomically)
+      const sellerTxResult = await coinService.executeTransaction({
         userId: sellerId,
-        type: 'earn',
         amount: sellerEarnings,
         trigger: COIN_TRIGGERS.MARKETPLACE_SALE_ITEM,
         channel: COIN_CHANNELS.MARKETPLACE,
         description: `Sale of "${contentItem[0].title}" (bot order)`,
-        status: 'completed',
-        botId: bot.id
+        metadata: { 
+          contentId, 
+          buyerId: bot.id, 
+          botPurchase: true, 
+          fullPrice: price,
+          sellerShare: sellerEarnings 
+        }
       });
       
-      // Create purchase record
-      const txn = await db.insert(coinTransactions).values({
+      if (!sellerTxResult.success) {
+        console.error(`[BOT ENGINE] Failed to credit seller ${sellerId} for bot purchase of content ${contentId}: ${sellerTxResult.error}`);
+        continue;
+      }
+      
+      // Create bot purchase transaction using CoinTransactionService
+      const botTxResult = await coinService.executeTransaction({
         userId: bot.id,
-        type: 'spend',
-        amount: -price,
+        amount: -price, // Negative for spending
         trigger: COIN_TRIGGERS.MARKETPLACE_PURCHASE_ITEM,
         channel: COIN_CHANNELS.MARKETPLACE,
         description: `Purchased "${contentItem[0].title}"`,
-        status: 'completed',
-        botId: bot.id
-      }).returning();
+        metadata: { 
+          contentId, 
+          sellerId, 
+          botPurchase: true,
+          sellerEarnings 
+        },
+        idempotencyKey: `bot-purchase-${bot.id}-${contentId}`
+      });
+      
+      if (!botTxResult.success) {
+        console.warn(`[BOT ENGINE] Failed to create bot purchase transaction: ${botTxResult.error}`);
+        continue;
+      }
       
       await db.insert(contentPurchases).values({
         contentId,
         buyerId: bot.id,
         sellerId,
         priceCoins: price,
-        transactionId: txn[0].id
+        transactionId: botTxResult.transactionId!
       });
       
       // Log bot action

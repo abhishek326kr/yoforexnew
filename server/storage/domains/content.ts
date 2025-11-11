@@ -7,7 +7,9 @@ import {
   contentLikes,
   contentReplies,
   users,
-  coinTransactions
+  coinTransactions,
+  COIN_TRIGGERS,
+  COIN_CHANNELS
 } from '@shared/schema';
 import type { 
   Content,
@@ -22,6 +24,8 @@ import type {
   InsertContentReply
 } from '@shared/schema';
 import { applySEOAutomations, generateUniqueSlug } from '../utils';
+import { CoinTransactionService } from '../../services/coinTransactionService';
+import { emitSweetsBalanceUpdated, emitAdminSweetsTransaction } from '../../services/dashboardWebSocket';
 
 /**
  * ContentStorage - Handles all content-related database operations
@@ -108,7 +112,10 @@ export class ContentStorage {
   }
 
   async purchaseContent(contentId: string, buyerId: string, getUserWallet: (userId: string) => Promise<any>, beginLedgerTransaction: (...args: any[]) => Promise<any>): Promise<ContentPurchase> {
-    return await db.transaction(async (tx) => {
+    // Track side effects to emit after transaction commits
+    let sideEffectsToEmit: any = null;
+    
+    const purchase = await db.transaction(async (tx) => {
       // 1. Get content details
       const contentList = await tx.select().from(content).where(eq(content.id, contentId));
       if (contentList.length === 0) throw new Error('Content not found');
@@ -125,21 +132,33 @@ export class ContentStorage {
 
       // 4. Handle free content without ledger transaction
       if (item.isFree || item.priceCoins === 0) {
-        // Create a zero-value transaction for free content
-        const [txRecord] = await tx.insert(coinTransactions).values({
+        // Use CoinTransactionService for zero-value transaction
+        const coinService = new CoinTransactionService();
+        const txResult = await coinService.executeTransaction({
           userId: buyerId,
-          type: 'spend',
           amount: 0,
+          trigger: COIN_TRIGGERS.MARKETPLACE_PURCHASE_ITEM,
+          channel: COIN_CHANNELS.MARKETPLACE,
           description: `Free download: ${item.title}`,
-          status: 'completed',
-        }).returning();
+          metadata: { contentId, sellerId: item.authorId, free: true },
+          idempotencyKey: `free-content-${buyerId}-${contentId}`
+        }, tx);
+
+        if (!txResult.success) {
+          throw new Error(`Failed to record free content transaction: ${txResult.error}`);
+        }
+
+        // Collect side effects for emission after commit (only on success)
+        if (txResult.success && txResult.sideEffects) {
+          sideEffectsToEmit = txResult.sideEffects;
+        }
 
         const [purchase] = await tx.insert(contentPurchases).values({
           contentId,
           buyerId,
           sellerId: item.authorId,
           priceCoins: 0,
-          transactionId: txRecord.id,
+          transactionId: txResult.transactionId!,
         }).returning();
 
         // Update download counter
@@ -190,21 +209,39 @@ export class ContentStorage {
         { contentId, buyerId, sellerId: item.authorId, price: item.priceCoins }
       );
 
-      // 9. Create transaction record and purchase record
-      const [txRecord] = await tx.insert(coinTransactions).values({
+      // 9. Create transaction record using CoinTransactionService
+      const coinService = new CoinTransactionService();
+      const txResult = await coinService.executeTransaction({
         userId: buyerId,
-        type: 'spend',
-        amount: item.priceCoins,
+        amount: -item.priceCoins, // Negative for spending
+        trigger: COIN_TRIGGERS.MARKETPLACE_PURCHASE_ITEM,
+        channel: COIN_CHANNELS.MARKETPLACE,
         description: `Purchased: ${item.title}`,
-        status: 'completed',
-      }).returning();
+        metadata: { 
+          contentId, 
+          sellerId: item.authorId, 
+          priceCoins: item.priceCoins,
+          sellerAmount,
+          platformAmount 
+        },
+        idempotencyKey: `purchase-${buyerId}-${contentId}`
+      }, tx);
+
+      if (!txResult.success) {
+        throw new Error(`Failed to create purchase transaction: ${txResult.error}`);
+      }
+
+      // Collect side effects for emission after commit (only on success)
+      if (txResult.success && txResult.sideEffects) {
+        sideEffectsToEmit = txResult.sideEffects;
+      }
 
       const [purchase] = await tx.insert(contentPurchases).values({
         contentId,
         buyerId,
         sellerId: item.authorId,
         priceCoins: item.priceCoins,
-        transactionId: txRecord.id,
+        transactionId: txResult.transactionId!,
       }).returning();
 
       // 10. Update download counter
@@ -214,6 +251,25 @@ export class ContentStorage {
 
       return purchase;
     });
+    
+    // Emit events AFTER transaction commits successfully
+    if (sideEffectsToEmit) {
+      emitSweetsBalanceUpdated(sideEffectsToEmit.userId, {
+        newBalance: sideEffectsToEmit.newBalance,
+        change: sideEffectsToEmit.amount,
+      });
+      
+      emitAdminSweetsTransaction({
+        userId: sideEffectsToEmit.userId,
+        transactionId: sideEffectsToEmit.transactionId,
+        amount: sideEffectsToEmit.amount,
+        trigger: sideEffectsToEmit.trigger,
+        channel: sideEffectsToEmit.channel,
+        newBalance: sideEffectsToEmit.newBalance,
+      });
+    }
+    
+    return purchase;
   }
 
   async getUserPurchases(userId: string): Promise<ContentPurchase[]> {
@@ -293,8 +349,11 @@ export class ContentStorage {
       throw new Error("Daily like limit reached (5 per day)");
     }
 
+    // Track side effects to emit after transaction commits
+    let sideEffectsToEmit: any = null;
+
     // Use transaction for atomic multi-step operation
-    return await db.transaction(async (tx) => {
+    const like = await db.transaction(async (tx) => {
       // 1. Create like record
       const [like] = await tx.insert(contentLikes).values(insertLike).returning();
 
@@ -303,26 +362,48 @@ export class ContentStorage {
         .set({ likes: sql`${content.likes} + 1` })
         .where(eq(content.id, insertLike.contentId));
 
-      // 3. Create coin transaction for reward
-      await tx.insert(coinTransactions).values({
+      // 3. Use CoinTransactionService for reward (handles wallet + user balance atomically)
+      const coinService = new CoinTransactionService();
+      const txResult = await coinService.executeTransaction({
         userId: insertLike.userId,
-        type: "earn",
         amount: 1,
+        trigger: COIN_TRIGGERS.MARKETPLACE_PURCHASE_ITEM, // Using marketplace trigger for content interaction
+        channel: COIN_CHANNELS.MARKETPLACE,
         description: `Liked: ${item.title}`,
-        status: "completed",
-      });
+        metadata: { contentId: insertLike.contentId, contentType: 'like' },
+        idempotencyKey: `content-like-${insertLike.userId}-${insertLike.contentId}`
+      }, tx);
 
-      // 4. Update user coins
-      await tx.update(users)
-        .set({ 
-          totalCoins: sql`${users.totalCoins} + 1`,
-          level: sql`FLOOR((${users.totalCoins} + 1) / 1000)`,
-          weeklyEarned: sql`${users.weeklyEarned} + 1`
-        })
-        .where(eq(users.id, insertLike.userId));
+      if (!txResult.success) {
+        throw new Error(`Failed to award like reward: ${txResult.error}`);
+      }
+
+      // Collect side effects for emission after commit (only on success)
+      if (txResult.success && txResult.sideEffects) {
+        sideEffectsToEmit = txResult.sideEffects;
+      }
 
       return like;
     });
+    
+    // Emit events AFTER transaction commits successfully
+    if (sideEffectsToEmit) {
+      emitSweetsBalanceUpdated(sideEffectsToEmit.userId, {
+        newBalance: sideEffectsToEmit.newBalance,
+        change: sideEffectsToEmit.amount,
+      });
+      
+      emitAdminSweetsTransaction({
+        userId: sideEffectsToEmit.userId,
+        transactionId: sideEffectsToEmit.transactionId,
+        amount: sideEffectsToEmit.amount,
+        trigger: sideEffectsToEmit.trigger,
+        channel: sideEffectsToEmit.channel,
+        newBalance: sideEffectsToEmit.newBalance,
+      });
+    }
+    
+    return like;
   }
 
   async hasLiked(userId: string, contentId: string): Promise<boolean> {

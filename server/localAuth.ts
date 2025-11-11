@@ -16,6 +16,7 @@ import {
   clearFailedAttempts,
   isAccountLocked 
 } from "./middleware/rateLimiter";
+import { CoinTransactionService } from "./services/coinTransactionService";
 
 // Validation schemas
 const loginSchema = z.object({
@@ -291,7 +292,7 @@ export async function setupLocalAuth(app: Express) {
         // Hash password
         const hashedPassword = await hashPassword(password);
         
-        // Create user
+        // Create user (start with 0 coins, will be awarded via CoinTransactionService)
         const [newUser] = await db
           .insert(users)
           .values({
@@ -302,24 +303,31 @@ export async function setupLocalAuth(app: Express) {
             lastName: lastName || null,
             role: "member",
             status: "active",
-            totalCoins: 100, // Welcome bonus
+            totalCoins: 0, // Will be awarded via CoinTransactionService
             createdAt: new Date(),
             updatedAt: new Date(),
           })
           .returning();
         
-        // Create coin transaction for welcome bonus
+        // Award welcome bonus using CoinTransactionService
         try {
-          await db.insert(coinTransactions).values({
+          const coinService = new CoinTransactionService();
+          const result = await coinService.executeTransaction({
             userId: newUser.id,
             amount: 100,
-            type: 'earn',
+            trigger: COIN_TRIGGERS.SYSTEM_WELCOME_BONUS,
+            channel: COIN_CHANNELS.SYSTEM,
             description: 'Welcome bonus',
-            trigger: 'user.registration.welcome_bonus' as any,
-            channel: 'system' as any,
-            createdAt: new Date(),
+            metadata: { registrationDate: new Date().toISOString() },
+            idempotencyKey: `welcome-bonus-${newUser.id}`
           });
-          console.log(`[WELCOME BONUS] Created welcome bonus transaction for user ${newUser.username}`);
+          
+          if (result.success) {
+            console.log(`[WELCOME BONUS] Awarded 100 coins to user ${newUser.username}`);
+          } else {
+            console.error("[WELCOME BONUS] Failed to award coins:", result.error);
+            // Don't fail registration if coin transaction fails
+          }
         } catch (coinError) {
           console.error("[WELCOME BONUS] Failed to create coin transaction:", coinError);
           // Don't fail registration if coin transaction fails

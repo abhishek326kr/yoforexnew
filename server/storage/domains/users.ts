@@ -12,7 +12,9 @@ import {
   contentPurchases,
   activityFeed,
   content,
-  coinTransactions
+  coinTransactions,
+  COIN_TRIGGERS,
+  COIN_CHANNELS
 } from '@shared/schema';
 import type { 
   User, 
@@ -27,6 +29,7 @@ import type {
   ForumThread
 } from '@shared/schema';
 import { calculateUserLevel, randomUUID } from '../utils';
+import { CoinTransactionService } from '../../services/coinTransactionService';
 
 /**
  * UserStorage - Handles all user-related database operations
@@ -445,20 +448,19 @@ export class UserStorage {
 
     // Award coins if any new coins earned
     if (newCoins > 0) {
-      await db.update(users)
-        .set({ 
-          totalCoins: sql`${users.totalCoins} + ${newCoins}`,
-          level: sql`FLOOR((${users.totalCoins} + ${newCoins}) / 1000)`
-        })
-        .where(eq(users.id, userId));
-
-      await db.insert(coinTransactions).values({
+      const coinService = new CoinTransactionService();
+      const result = await coinService.executeTransaction({
         userId,
-        type: 'earn',
         amount: newCoins,
+        trigger: COIN_TRIGGERS.ENGAGEMENT_DAILY_LOGIN,
+        channel: COIN_CHANNELS.ENGAGEMENT,
         description: `Active engagement reward (${minutes} minutes)`,
-        status: 'completed'
+        metadata: { minutes, activeMinutes: cappedMinutes }
       });
+
+      if (!result.success) {
+        throw new Error(`Failed to award engagement coins: ${result.error}`);
+      }
     }
 
     return {

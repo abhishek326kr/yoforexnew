@@ -21,6 +21,15 @@ interface CoinTransactionResult {
   newBalance?: number;
   error?: string;
   duplicate?: boolean; // True if idempotency key matched existing transaction
+  // Side-effect data for caller to emit after commit
+  sideEffects?: {
+    userId: string;
+    newBalance: number;
+    transactionId: string;
+    amount: number;
+    trigger: string;
+    channel: string;
+  };
 }
 
 /**
@@ -47,8 +56,14 @@ export class CoinTransactionService {
    * - Fraud detection (rate limits, negative balance check)
    * - Audit logging
    * - Trigger/channel enforcement
+   * 
+   * @param request - Transaction details
+   * @param providedTx - Optional transaction context from caller (fixes nested transaction issue)
    */
-  async executeTransaction(request: CoinTransactionRequest): Promise<CoinTransactionResult> {
+  async executeTransaction(
+    request: CoinTransactionRequest,
+    providedTx?: typeof db
+  ): Promise<CoinTransactionResult> {
     try {
       // Step 1: Check idempotency (prevent duplicate transactions)
       if (request.idempotencyKey) {
@@ -104,154 +119,49 @@ export class CoinTransactionService {
         };
       }
 
-      // Step 4: Execute atomic transaction (dual-write with optimistic locking)
-      const result = await db.transaction(async (tx) => {
-        // Get current wallet with row-level lock
-        let walletRows = await tx.select()
-          .from(userWallet)
-          .where(eq(userWallet.userId, request.userId))
-          .for('update');
+      // Step 4: Execute atomic transaction with provided or new transaction context
+      let result: CoinTransactionResult;
+      
+      if (providedTx) {
+        // Use provided transaction context (caller already has a transaction)
+        result = await this.executeWithinTransaction(providedTx, request);
         
-        // Auto-create wallet if it doesn't exist (defensive programming)
-        if (!walletRows || walletRows.length === 0) {
-          console.log(`[CoinTransactionService] Wallet not found for user ${request.userId}, creating one...`);
-          
-          // Create a new wallet for the user
-          const newWallet = await tx.insert(userWallet)
-            .values({
-              walletId: crypto.randomUUID(),
-              userId: request.userId,
-              balance: 0,
-              availableBalance: 0,
-              status: 'active',
-              version: 0,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            })
-            .returning();
-          
-          if (!newWallet || newWallet.length === 0) {
-            throw new Error(`Failed to create wallet for userId: ${request.userId}`);
-          }
-          
-          walletRows = newWallet;
-          console.log(`[CoinTransactionService] Successfully created wallet for user ${request.userId}`);
-        }
-
-        const currentWallet = walletRows[0];
-        const newBalance = currentWallet.balance + request.amount;
-
-        // Prevent negative balance (unless admin override)
-        if (newBalance < 0 && request.channel !== 'admin') {
-          throw new Error(`Insufficient balance. Current: ${currentWallet.balance}, Required: ${Math.abs(request.amount)}`);
-        }
-
-        // Infer transaction type from amount if not provided
-        const transactionType = request.type || (request.amount >= 0 ? "earn" : "spend");
-
-        // Insert into coinTransactions
-        const [transaction] = await tx.insert(coinTransactions)
-          .values({
+        // Populate sideEffects ONLY if transaction succeeded
+        if (result.success && result.transactionId) {
+          result.sideEffects = {
             userId: request.userId,
+            newBalance: result.newBalance!,
+            transactionId: result.transactionId!,
             amount: request.amount,
-            type: transactionType,
             trigger: request.trigger,
             channel: request.channel,
-            description: request.description,
-            metadata: request.metadata || null,
-            idempotencyKey: request.idempotencyKey || null,
-            status: "completed",
-            createdAt: new Date()
-          })
-          .returning();
-
-        // Update user_wallet with version check (optimistic concurrency)
-        const [updatedWallet] = await tx.update(userWallet)
-          .set({
-            balance: newBalance,
-            availableBalance: newBalance, // Update both balance and availableBalance
-            updatedAt: new Date(),
-            version: currentWallet.version + 1
-          })
-          .where(
-            and(
-              eq(userWallet.userId, request.userId),
-              eq(userWallet.version, currentWallet.version) // Optimistic lock
-            )
-          )
-          .returning();
-
-        if (!updatedWallet) {
-          throw new Error('Wallet version conflict - transaction was modified concurrently. Please retry.');
+          };
         }
-
-        // Update users.total_coins (dual-write for backward compatibility)
-        await tx.update(users)
-          .set({
-            totalCoins: sql`${users.totalCoins} + ${request.amount}`,
-            updatedAt: new Date()
-          })
-          .where(eq(users.id, request.userId));
-
-        // Insert into coinLedgerTransactions for additional audit trail
-        // Note: This requires creating a ledger transaction header first
-        const [ledgerTx] = await tx.insert(coinLedgerTransactions)
-          .values({
-            type: request.trigger,
-            context: {
-              channel: request.channel,
-              description: request.description,
-              metadata: request.metadata,
-            },
-            externalRef: transaction.id,
-            initiatorUserId: request.userId,
-            status: "completed",
-            closedAt: new Date(),
-            createdAt: new Date()
-          })
-          .returning();
-
-        // Audit logging (only for admin actions or high-value transactions)
-        if (request.channel === 'admin' || Math.abs(request.amount) > 500) {
-          await this.logAudit(tx, request.userId, 'coin_transaction', {
-            transactionId: transaction.id,
-            ledgerTransactionId: ledgerTx.id,
-            trigger: request.trigger,
-            channel: request.channel,
-            amount: request.amount,
-            balanceBefore: currentWallet.balance,
-            balanceAfter: newBalance,
-            description: request.description,
-            metadata: request.metadata,
-            idempotencyKey: request.idempotencyKey,
-          });
-        }
-
-        return {
-          success: true,
-          transactionId: transaction.id,
-          newBalance: newBalance,
-          duplicate: false,
-        };
-      });
-
-      console.log(`[CoinTransactionService] Transaction completed: ${result.transactionId}, User: ${request.userId}, Amount: ${request.amount}, New Balance: ${result.newBalance}`);
-      
-      // Emit to CLIENT namespace (user gets notified)
-      emitSweetsBalanceUpdated(request.userId, {
-        newBalance: result.newBalance!,
-        change: request.amount,
-      });
-      
-      // Emit to ADMIN namespace (admins get notified of ALL transactions)
-      emitAdminSweetsTransaction({
-        userId: request.userId,
-        transactionId: result.transactionId!,
-        amount: request.amount,
-        trigger: request.trigger,
-        channel: request.channel,
-        newBalance: result.newBalance!,
-      });
+        
+        console.log(`[CoinTransactionService] Transaction completed (side-effects deferred): ${result.transactionId}, User: ${request.userId}, Amount: ${request.amount}, New Balance: ${result.newBalance}`);
+      } else {
+        // Create new transaction (standalone call)
+        result = await db.transaction(async (tx) => {
+          return await this.executeWithinTransaction(tx, request);
+        });
+        
+        console.log(`[CoinTransactionService] Transaction completed: ${result.transactionId}, User: ${request.userId}, Amount: ${request.amount}, New Balance: ${result.newBalance}`);
+        
+        // Emit events immediately for standalone transactions (transaction already committed)
+        emitSweetsBalanceUpdated(request.userId, {
+          newBalance: result.newBalance!,
+          change: request.amount,
+        });
+        
+        emitAdminSweetsTransaction({
+          userId: request.userId,
+          transactionId: result.transactionId!,
+          amount: request.amount,
+          trigger: request.trigger,
+          channel: request.channel,
+          newBalance: result.newBalance!,
+        });
+      }
       
       return result;
 
@@ -262,6 +172,146 @@ export class CoinTransactionService {
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
+  }
+
+  /**
+   * Execute transaction logic within an existing transaction context
+   * This method contains all the database operations and should be used by both
+   * the standalone transaction path and the provided transaction path
+   * 
+   * @param tx - Transaction context (either provided or newly created)
+   * @param request - Transaction details
+   */
+  private async executeWithinTransaction(
+    tx: typeof db,
+    request: CoinTransactionRequest
+  ): Promise<CoinTransactionResult> {
+    // Get current wallet with row-level lock
+    let walletRows = await tx.select()
+      .from(userWallet)
+      .where(eq(userWallet.userId, request.userId))
+      .for('update');
+    
+    // Auto-create wallet if it doesn't exist (defensive programming)
+    if (!walletRows || walletRows.length === 0) {
+      console.log(`[CoinTransactionService] Wallet not found for user ${request.userId}, creating one...`);
+      
+      // Create a new wallet for the user
+      const newWallet = await tx.insert(userWallet)
+        .values({
+          walletId: crypto.randomUUID(),
+          userId: request.userId,
+          balance: 0,
+          availableBalance: 0,
+          status: 'active',
+          version: 0,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+      
+      if (!newWallet || newWallet.length === 0) {
+        throw new Error(`Failed to create wallet for userId: ${request.userId}`);
+      }
+      
+      walletRows = newWallet;
+      console.log(`[CoinTransactionService] Successfully created wallet for user ${request.userId}`);
+    }
+
+    const currentWallet = walletRows[0];
+    const newBalance = currentWallet.balance + request.amount;
+
+    // Prevent negative balance (unless admin override)
+    if (newBalance < 0 && request.channel !== 'admin') {
+      throw new Error(`Insufficient balance. Current: ${currentWallet.balance}, Required: ${Math.abs(request.amount)}`);
+    }
+
+    // Infer transaction type from amount if not provided
+    const transactionType = request.type || (request.amount >= 0 ? "earn" : "spend");
+
+    // Insert into coinTransactions
+    const [transaction] = await tx.insert(coinTransactions)
+      .values({
+        userId: request.userId,
+        amount: request.amount,
+        type: transactionType,
+        trigger: request.trigger,
+        channel: request.channel,
+        description: request.description,
+        metadata: request.metadata || null,
+        idempotencyKey: request.idempotencyKey || null,
+        status: "completed",
+        createdAt: new Date()
+      })
+      .returning();
+
+    // Update user_wallet with version check (optimistic concurrency)
+    const [updatedWallet] = await tx.update(userWallet)
+      .set({
+        balance: newBalance,
+        availableBalance: newBalance, // Update both balance and availableBalance
+        updatedAt: new Date(),
+        version: currentWallet.version + 1
+      })
+      .where(
+        and(
+          eq(userWallet.userId, request.userId),
+          eq(userWallet.version, currentWallet.version) // Optimistic lock
+        )
+      )
+      .returning();
+
+    if (!updatedWallet) {
+      throw new Error('Wallet version conflict - transaction was modified concurrently. Please retry.');
+    }
+
+    // Update users.total_coins (dual-write for backward compatibility)
+    await tx.update(users)
+      .set({
+        totalCoins: sql`${users.totalCoins} + ${request.amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, request.userId));
+
+    // Insert into coinLedgerTransactions for additional audit trail
+    const [ledgerTx] = await tx.insert(coinLedgerTransactions)
+      .values({
+        type: request.trigger,
+        context: {
+          channel: request.channel,
+          description: request.description,
+          metadata: request.metadata,
+        },
+        externalRef: transaction.id,
+        initiatorUserId: request.userId,
+        status: "completed",
+        closedAt: new Date(),
+        createdAt: new Date()
+      })
+      .returning();
+
+    // Audit logging (only for admin actions or high-value transactions)
+    if (request.channel === 'admin' || Math.abs(request.amount) > 500) {
+      await this.logAudit(tx, request.userId, 'coin_transaction', {
+        transactionId: transaction.id,
+        ledgerTransactionId: ledgerTx.id,
+        trigger: request.trigger,
+        channel: request.channel,
+        amount: request.amount,
+        balanceBefore: currentWallet.balance,
+        balanceAfter: newBalance,
+        description: request.description,
+        metadata: request.metadata,
+        idempotencyKey: request.idempotencyKey,
+      });
+    }
+
+    return {
+      success: true,
+      transactionId: transaction.id,
+      newBalance: newBalance,
+      duplicate: false,
+    };
   }
 
   /**
