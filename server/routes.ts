@@ -209,7 +209,9 @@ import {
 } from "./validation.js";
 import { 
   ObjectStorageService, 
-  ObjectNotFoundError 
+  ObjectNotFoundError,
+  parseObjectPath,
+  objectStorageClient
 } from "./objectStorage.js";
 import { ObjectPermission, ObjectAccessGroupType } from "./objectAcl.js";
 import {
@@ -17153,20 +17155,84 @@ export async function registerRoutes(app: Express): Promise<Express> {
       };
 
       const publishedContent = await storage.createContent(contentData);
+      
+      // FIX SCREENSHOT PATHS: Replace temporary eaId with actual content ID
+      if (publishedContent && imageUrls && imageUrls.length > 0) {
+        try {
+          const objectStorage = new ObjectStorageService();
+          const privateDir = objectStorage.getPrivateObjectDir();
+          
+          // Extract temp eaId from first image URL  
+          // Format: /objects/marketplace/ea/{tempEaId}/screenshots/{filename}
+          const tempEaIdMatch = imageUrls[0].match(/\/objects\/marketplace\/ea\/([a-f0-9-]+)\//);
+          if (tempEaIdMatch && tempEaIdMatch[1] !== publishedContent.id) {
+            const tempEaId = tempEaIdMatch[1];
+            console.log(`[EA Publish] Fixing screenshot paths: ${tempEaId} → ${publishedContent.id}`);
+            
+            // Move files in object storage and update paths
+            const correctedImageUrls = [];
+            for (const oldPath of imageUrls) {
+              const filename = path.basename(oldPath);
+              const oldStoragePath = `${privateDir}/marketplace/ea/${tempEaId}/screenshots/${filename}`;
+              const newStoragePath = `${privateDir}/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
+              const newPublicPath = `/objects/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
+              
+              try {
+                // Copy file to new location
+                const { bucketName: oldBucket, objectName: oldObject } = parseObjectPath(oldStoragePath);
+                const { bucketName: newBucket, objectName: newObject } = parseObjectPath(newStoragePath);
+                
+                const bucket = objectStorageClient.bucket(oldBucket);
+                await bucket.file(oldObject).copy(bucket.file(newObject));
+                await bucket.file(oldObject).delete(); // Delete old file
+                
+                // Only use new path if move succeeded
+                correctedImageUrls.push(newPublicPath);
+                console.log(`[EA Publish] Moved screenshot: ${filename}`);
+              } catch (moveError) {
+                console.error(`[EA Publish] Failed to move screenshot ${filename}:`, moveError);
+                // Keep old path if move failed
+                correctedImageUrls.push(oldPath);
+              }
+            }
+            
+            // Update content with corrected paths
+            await storage.updateContent(publishedContent.id, {
+              imageUrls: correctedImageUrls,
+              imageUrl: correctedImageUrls[0] || null,
+            });
+            
+            console.log(`[EA Publish] Updated ${correctedImageUrls.length} screenshot paths`);
+          }
+        } catch (error) {
+          console.error('[EA Publish] Failed to fix screenshot paths:', error);
+        }
+      }
 
-      // Award coins for publishing EA (onboarding reward)
+      // Award coins for publishing EA
       if (publishedContent) {
         try {
-          await coinTransactionService.awardCoins({
+          const result = await coinTransactionService.executeTransaction({
             userId: authenticatedUserId,
             amount: 30,
             trigger: COIN_TRIGGERS.MARKETPLACE_EA_PUBLISHED,
             channel: COIN_CHANNELS.MARKETPLACE,
+            description: `Published EA: ${publishedContent.title}`,
             metadata: {
               contentId: publishedContent.id,
               title: publishedContent.title,
+              type: 'ea'
             },
+            idempotencyKey: `publish-ea-${publishedContent.id}`, // Prevent duplicate rewards
           });
+          
+          if (result.success && !result.duplicate) {
+            console.log(`[EA Publish] Awarded 30 coins to user ${authenticatedUserId} for publishing EA`);
+          } else if (result.duplicate) {
+            console.log(`[EA Publish] Skipped duplicate coin award for content ${publishedContent.id}`);
+          } else {
+            console.error(`[EA Publish] Failed to award coins: ${result.error}`);
+          }
         } catch (coinError) {
           console.error("[EA Publish] Failed to award coins:", coinError);
         }
