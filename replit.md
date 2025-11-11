@@ -1,5 +1,26 @@
 # YoForex - Expert Advisor Forum & Marketplace
 
+## Recent Changes
+
+### EA Publishing Bug Fixes (November 11, 2025)
+**Fixed Critical Issues:**
+1. **Coin Transaction Not Saved**: Fixed EA publish endpoint not creating coin transaction record when awarding 30 Sweets
+   - Changed from calling non-existent `awardCoins()` to using `executeTransaction()` with proper trigger/channel
+   - Added idempotency key (`publish-ea-${contentId}`) to prevent duplicate awards
+   - Proper error handling and transaction metadata
+   - File: `server/routes.ts` (EA publish endpoint)
+
+2. **Screenshots Not Displaying**: Fixed screenshot path mismatch after EA content creation
+   - Implemented automatic file relocation from temporary eaId to actual content ID
+   - Added missing imports: `parseObjectPath` and `objectStorageClient` from `./objectStorage.js`
+   - Improved error handling: keeps old path if file copy fails
+   - Files: `server/routes.ts` (screenshot moving logic)
+
+**Technical Details:**
+- Upload flow: Screenshots uploaded with temporary eaId → moved to actual content ID after database insert
+- Coin system: Uses `COIN_TRIGGERS.MARKETPLACE_EA_PUBLISHED`, `COIN_CHANNELS.MARKETPLACE` with proper metadata
+- File operations: Copy to new location → delete old location → update database with new paths (or keep old path on failure)
+
 ## Overview
 YoForex is a comprehensive trading community platform for forex traders, offering forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
 
