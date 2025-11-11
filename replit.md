@@ -67,6 +67,46 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### Email Service Critical Fix (November 11, 2025)
+
+**URGENT FIX:** Resolved duplicate function definition that prevented ALL emails from being sent.
+
+**Problem Identified:**
+- Users were not receiving verification emails during registration
+- Password reset emails were not being sent
+- No notification emails were working
+- Root cause: Duplicate `sendWeeklyDigest` method definition in `server/services/emailService.ts` (lines 1583 and 2365)
+- TypeScript compilation error prevented entire `emailService` module from loading
+- This blocked ALL outgoing email functionality across the platform
+
+**Solution Implemented:**
+- Removed duplicate `sendWeeklyDigest` alias method (line 2365) as recommended by architect
+- Kept original feature-complete implementation (line 1583) with structured stats payload
+- Verified TypeScript compilation now succeeds with zero LSP diagnostics
+- Server restarted and email service now loading correctly
+
+**Files Modified:**
+- `server/services/emailService.ts` - Removed duplicate function definition
+
+**Testing:**
+- LSP diagnostics: ✅ Clear (no errors)
+- Server compilation: ✅ Successful
+- Email service loading: ✅ Working
+- Test endpoint available: `/api/test-email` (admin only)
+
+**Critical Rules Going Forward:**
+- ✅ NEVER create duplicate function/method names in TypeScript modules
+- ✅ Always check LSP diagnostics before committing changes
+- ✅ Test email functionality after any changes to emailService.ts
+- ✅ Monitor logs for `[WELCOME EMAIL]` messages to confirm verification emails are sent
+
+**User Action Required:**
+- Users who previously tried to register should try again
+- Verification emails will now be sent successfully
+- Check spam folder if email doesn't arrive within 2 minutes
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.

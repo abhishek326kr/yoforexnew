@@ -2362,20 +2362,6 @@ export const emailService = {
     });
   },
 
-  async sendWeeklyDigest(email: string, username: string, notifications: any[]): Promise<void> {
-    // Alias to sendWeeklyActivitySummary with notification count
-    const stats = {
-      postsCreated: 0,
-      commentsReceived: notifications.filter((n: any) => n.type === 'reply').length,
-      likesReceived: notifications.filter((n: any) => n.type === 'like').length,
-      newFollowers: notifications.filter((n: any) => n.type === 'follow').length,
-      coinsEarned: 0,
-      viewsReceived: 0
-    };
-    
-    await this.sendWeeklyActivitySummary(email, username, stats);
-  },
-
   async sendTestEmail(
     to: string,
     customMessage?: string
