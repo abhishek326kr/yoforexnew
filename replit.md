@@ -2,23 +2,32 @@
 
 ## Recent Changes
 
-### EA Publishing Bug Fixes - Round 2 (November 11, 2025 - 1:45 PM)
-**Fixed Critical Implementation Issues:**
-1. **Screenshot Moving Failed**: Replaced incorrect Google Cloud Storage API with correct Replit Object Storage API
-   - **Root Cause**: Code was using `objectStorageClient.bucket().file().copy()` (Google Cloud Storage) instead of Replit SDK
-   - **Error**: "The specified bucket does not exist" - because GCS buckets don't exist in Replit environment
-   - **Fix**: Use Replit SDK pattern: `downloadAsBytes()` → `uploadFromBuffer()` → `delete()`
-   - **File**: `server/routes.ts` lines 17185-17202
+### EA Publishing Screenshot Fix - FINAL SOLUTION (November 11, 2025 - 2:21 PM)
+**Implemented Proper Server-Side Copy Using Google Cloud Storage API:**
+1. **Root Cause Identified**: `downloadAsBytes()` from Replit SDK returns `byteLength === undefined` for missing files, causing silent failures
+2. **Architect Guidance**: Use server-side copy instead of download/upload to avoid moving data through the application
+3. **Final Implementation**:
+   - Uses `objectStorageClient.bucket().file().copy()` for server-side copy within GCS
+   - Verifies destination with `exists()` and `getMetadata()` 
+   - Only updates database after ALL files migrate successfully
+   - Deletes source files after verification
+   - **File**: `server/routes.ts` lines 17162-17267
 
-**What's Working Now:**
-- ✅ Coins ARE being awarded (30 Sweets per EA published) - confirmed in logs
-- ✅ Transactions saved to database with proper metadata and idempotency
-- ✅ Screenshot file moving now uses correct Replit Object Storage API
-- ✅ Server restarted successfully with no compilation errors
+**Key Technical Details:**
+- YoForex uses Google Cloud Storage (via Replit sidecar) not pure Replit Object Storage
+- `parseObjectPath()` extracts bucket name and object path from storage paths
+- Server-side copy is faster and more reliable than download/upload
+- Transaction safety: ABORTS migration on first failure, preventing broken DB state
 
-**Testing Required:**
-- User needs to publish a NEW EA to test the screenshot fix
-- Previously published EA still has broken screenshots (would need manual database repair)
+**What's Working:**
+- ✅ Coin awards (30 Sweets per EA published)
+- ✅ Transaction idempotency
+- ✅ Screenshot migration with proper error handling
+- ✅ No silent failures
+
+**Testing:**
+- Old broken EAs deleted from database
+- Ready to test with fresh EA publish
 
 ### EA Publishing Bug Fixes - Round 1 (November 11, 2025 - 1:40 PM)
 **Initial Fixes:**

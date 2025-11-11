@@ -17156,25 +17156,24 @@ export async function registerRoutes(app: Express): Promise<Express> {
 
       const publishedContent = await storage.createContent(contentData);
       
-      // FIX SCREENSHOT PATHS: Replace temporary eaId with actual content ID
+      // FIX SCREENSHOT PATHS: Replace temporary eaId with actual content ID  
+      // Uses server-side copy (GCS API) instead of download/upload for reliability
       if (publishedContent && imageUrls && imageUrls.length > 0) {
         try {
-          const { Client: ReplitClient } = await import('@replit/object-storage');
-          const replitClient = new ReplitClient();
+          const { objectStorageClient, parseObjectPath } = await import('./objectStorage');
           
           // Extract temp eaId from first image URL  
           // Format: /objects/marketplace/ea/{tempEaId}/screenshots/{filename}
           const tempEaIdMatch = imageUrls[0].match(/\/objects\/marketplace\/ea\/([a-f0-9-]+)\//);
           if (tempEaIdMatch && tempEaIdMatch[1] !== publishedContent.id) {
             const tempEaId = tempEaIdMatch[1];
-            console.log(`[EA Screenshot Migration] Moving screenshots from temp ID ${tempEaId} to content ID ${publishedContent.id}`);
+            console.log(`[EA Screenshot Migration] Starting server-side copy: ${tempEaId} → ${publishedContent.id}`);
             
             const objectStorage = new ObjectStorageService();
             const privateDir = objectStorage.getPrivateObjectDir().replace(/\/+$/, '');
             
-            // Move files in object storage and update paths
+            // Move files using server-side copy
             const correctedImageUrls = [];
-            let allMovesSucceeded = true;
             
             for (const oldPath of imageUrls) {
               const filename = path.basename(oldPath);
@@ -17182,68 +17181,66 @@ export async function registerRoutes(app: Express): Promise<Express> {
               const newStoragePath = `${privateDir}/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               const newPublicPath = `/objects/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               
+              console.log(`[EA Screenshot Migration] ${filename}:`);
+              console.log(`[EA Screenshot Migration]   From: ${oldStoragePath}`);
+              console.log(`[EA Screenshot Migration]   To:   ${newStoragePath}`);
+              
               try {
-                console.log(`[EA Screenshot Migration] Processing ${filename}...`);
-                console.log(`[EA Screenshot Migration]   From: ${oldStoragePath}`);
-                console.log(`[EA Screenshot Migration]   To: ${newStoragePath}`);
+                // Parse bucket and object paths
+                const { bucketName: srcBucket, objectName: srcObject } = parseObjectPath(oldStoragePath);
+                const { bucketName: destBucket, objectName: destObject } = parseObjectPath(newStoragePath);
                 
-                // Step 1: Download from temp location
-                const fileBuffer = await replitClient.downloadAsBytes(oldStoragePath);
+                // Step 1: Server-side copy (no download/upload needed!)
+                const srcFile = objectStorageClient.bucket(srcBucket).file(srcObject);
+                const destFile = objectStorageClient.bucket(destBucket).file(destObject);
                 
-                // Validate download
-                if (!fileBuffer || fileBuffer.byteLength === 0) {
-                  throw new Error(`Downloaded file is empty or invalid (byteLength: ${fileBuffer?.byteLength})`);
-                }
+                console.log(`[EA Screenshot Migration]   Copying ${srcBucket}/${srcObject} → ${destBucket}/${destObject}`);
                 
-                console.log(`[EA Screenshot Migration]   Downloaded: ${fileBuffer.byteLength} bytes`);
-                
-                // Step 2: Determine content type
-                const ext = path.extname(filename).toLowerCase();
-                const contentType = ext === '.png' ? 'image/png' :
-                                  ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
-                                  ext === '.webp' ? 'image/webp' : 'image/jpeg';
-                
-                // Step 3: Upload to final location
-                console.log(`[EA Screenshot Migration]   Uploading as ${contentType}...`);
-                const uploadResult = await replitClient.uploadFromBytes(newStoragePath, fileBuffer, {
-                  contentType
-                });
-                
-                if (!uploadResult || !uploadResult.ok) {
-                  throw new Error(`Upload failed: ${JSON.stringify(uploadResult)}`);
-                }
-                
-                console.log(`[EA Screenshot Migration]   Upload successful`);
-                
-                // Step 4: Verify file exists at new location
                 try {
-                  const verifyBuffer = await replitClient.downloadAsBytes(newStoragePath);
-                  if (!verifyBuffer || verifyBuffer.byteLength === 0) {
-                    throw new Error('Verification failed: file not found or empty at new location');
+                  await srcFile.copy(destFile);
+                  console.log(`[EA Screenshot Migration]   ✓ Server-side copy completed`);
+                } catch (copyError: any) {
+                  throw new Error(`Copy failed: ${copyError.message}`);
+                }
+                
+                // Step 2: Verify destination exists
+                try {
+                  const [exists] = await destFile.exists();
+                  if (!exists) {
+                    throw new Error('Destination file does not exist after copy');
                   }
-                  console.log(`[EA Screenshot Migration]   Verified: ${verifyBuffer.byteLength} bytes at new location`);
-                } catch (verifyError) {
+                  
+                  // Get file metadata to verify
+                  const [metadata] = await destFile.getMetadata();
+                  const size = parseInt(metadata.size || '0');
+                  console.log(`[EA Screenshot Migration]   ✓ Verified destination exists (${size} bytes)`);
+                } catch (verifyError: any) {
                   throw new Error(`Verification failed: ${verifyError.message}`);
                 }
                 
-                // Step 5: Delete temp file only after verification
-                console.log(`[EA Screenshot Migration]   Deleting temp file...`);
-                await replitClient.delete(oldStoragePath);
+                // Step 3: Delete source file
+                try {
+                  await srcFile.delete();
+                  console.log(`[EA Screenshot Migration]   ✓ Deleted source file`);
+                } catch (deleteError: any) {
+                  console.warn(`[EA Screenshot Migration]   ⚠ Failed to delete source: ${deleteError.message}`);
+                  // Non-fatal - continue
+                }
                 
-                // Success - use new path
+                // Success!
                 correctedImageUrls.push(newPublicPath);
-                console.log(`[EA Screenshot Migration] ✅ Successfully migrated ${filename}`);
-              } catch (moveError) {
-                console.error(`[EA Screenshot Migration] ❌ FAILED to migrate ${filename}:`, moveError);
-                console.error(`[EA Screenshot Migration]    Error details:`, moveError.stack);
-                allMovesSucceeded = false;
-                // ABORT: Don't save broken paths to database
-                throw new Error(`Screenshot migration failed for ${filename}: ${moveError.message}`);
+                console.log(`[EA Screenshot Migration] ✅ ${filename} migrated successfully`);
+                
+              } catch (fileError: any) {
+                console.error(`[EA Screenshot Migration] ❌ ${filename} FAILED:`, fileError.message);
+                console.error(`[EA Screenshot Migration]    Stack:`, fileError.stack);
+                // ABORT entire migration on first failure
+                throw new Error(`Migration failed for ${filename}: ${fileError.message}`);
               }
             }
             
             // Only update database if ALL screenshots migrated successfully
-            if (allMovesSucceeded && correctedImageUrls.length === imageUrls.length) {
+            if (correctedImageUrls.length === imageUrls.length) {
               await db.update(content)
                 .set({
                   imageUrls: correctedImageUrls,
@@ -17251,16 +17248,18 @@ export async function registerRoutes(app: Express): Promise<Express> {
                 })
                 .where(eq(content.id, publishedContent.id));
               
-              console.log(`[EA Screenshot Migration] ✅ Successfully migrated ${correctedImageUrls.length} screenshots`);
+              console.log(`[EA Screenshot Migration] ✅ Database updated with ${correctedImageUrls.length} new paths`);
+            } else {
+              throw new Error(`Migration incomplete: ${correctedImageUrls.length}/${imageUrls.length} files`);
             }
           } else {
-            console.log(`[EA Screenshot Migration] No migration needed (temp ID matches content ID or no temp ID found)`);
+            console.log(`[EA Screenshot Migration] No migration needed`);
           }
-        } catch (error) {
-          console.error('[EA Screenshot Migration] CRITICAL: Migration failed, screenshots may be broken:', error);
-          // Don't let screenshot migration failure block the publish
-          // The EA is published but screenshots might be broken - log for manual intervention
-          console.error(`[EA Screenshot Migration] Content ID ${publishedContent.id} may have broken screenshots - manual repair needed`);
+        } catch (error: any) {
+          console.error('[EA Screenshot Migration] ❌ CRITICAL FAILURE:', error.message);
+          console.error('[EA Screenshot Migration] Content ID:', publishedContent.id);
+          console.error('[EA Screenshot Migration] Screenshots are BROKEN - manual intervention required');
+          // Migration failure doesn't block EA publish - EA exists but screenshots broken
         }
       }
 
