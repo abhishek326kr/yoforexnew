@@ -17161,8 +17161,8 @@ export async function registerRoutes(app: Express): Promise<Express> {
         try {
           const objectStorage = new ObjectStorageService();
           const privateDir = objectStorage.getPrivateObjectDir();
-          const { ReplitStorageClient } = await import('@replit/object-storage');
-          const storageClient = new ReplitStorageClient();
+          const { Client } = await import('@replit/object-storage');
+          const storageClient = new Client();
           
           // Extract temp eaId from first image URL  
           // Format: /objects/marketplace/ea/{tempEaId}/screenshots/{filename}
