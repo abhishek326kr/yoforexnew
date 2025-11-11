@@ -274,8 +274,11 @@ async function startServer() {
 }
 
 // Only start the server if this file is run directly (not imported by tests)
-// In ES modules, we check import.meta.url, but in CommonJS we check require.main
-if (require.main === module) {
+// In ES modules, we check import.meta.url instead of require.main
+const isMainModule = process.argv[1]?.endsWith('server/index.ts') || 
+                     process.argv[1]?.endsWith('server/index.js');
+
+if (isMainModule) {
   startServer().catch((error) => {
     console.error('Fatal server startup error:', error);
     process.exit(1);
