@@ -1418,6 +1418,35 @@ export async function registerRoutes(app: Express): Promise<Express> {
     res.send(imageData.buffer);
   });
 
+  // Serve uploaded EA files from memory
+  app.get("/api/ea-files/:filename", (req, res) => {
+    const { filename } = req.params;
+    
+    if (!global.uploadedEAFiles || !global.uploadedEAFiles.has(filename)) {
+      return res.status(404).json({ error: "EA file not found" });
+    }
+    
+    const fileData = global.uploadedEAFiles.get(filename);
+    res.setHeader('Content-Type', fileData.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileData.originalName}"`);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.send(fileData.buffer);
+  });
+
+  // Serve uploaded screenshot files from memory
+  app.get("/api/screenshot-files/:filename", (req, res) => {
+    const { filename } = req.params;
+    
+    if (!global.uploadedScreenshots || !global.uploadedScreenshots.has(filename)) {
+      return res.status(404).json({ error: "Screenshot not found" });
+    }
+    
+    const fileData = global.uploadedScreenshots.get(filename);
+    res.setHeader('Content-Type', fileData.mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.send(fileData.buffer);
+  });
+
   // EA FILE UPLOAD ENDPOINT - specifically for EA .ex4/.ex5 files
   app.post("/api/upload/ea", isAuthenticated, uploadSingle.single('file'), async (req, res) => {
     try {
@@ -17003,26 +17032,29 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const ext = path.extname(file.originalname).toLowerCase();
       console.log("[EA Upload] File extension:", ext);
       
-      const objectStorage = new ObjectStorageService();
-      
       const eaId = crypto.randomUUID();
-      const privateDir = objectStorage.getPrivateObjectDir();
-      const objectPath = `${privateDir}/marketplace/ea/${eaId}/${eaId}${ext}`;
+      const filename = `ea_${eaId}${ext}`;
       
-      console.log("[EA Upload] Target path:", objectPath);
-      console.log("[EA Upload] Starting uploadFromBuffer...");
+      console.log("[EA Upload] Storing in memory with filename:", filename);
       
-      await objectStorage.uploadFromBuffer(
-        objectPath,
-        file.buffer,
-        file.mimetype
-      );
+      // Store EA file in global memory map (same approach as profile pictures)
+      if (!global.uploadedEAFiles) {
+        global.uploadedEAFiles = new Map();
+      }
       
-      console.log("[EA Upload] Upload successful! Returning response");
+      global.uploadedEAFiles.set(filename, {
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+        originalName: file.originalname,
+        uploadedAt: new Date(),
+        contentId: eaId,
+      });
+      
+      console.log("[EA Upload] Upload successful! File stored in memory");
       
       return res.json({
         success: true,
-        filePath: `/objects/marketplace/ea/${eaId}/${eaId}${ext}`,
+        filePath: `/api/ea-files/${filename}`,
         contentId: eaId,
       });
       
@@ -17054,23 +17086,24 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const { eaId } = req.body;
       const ext = path.extname(file.originalname).toLowerCase();
       
-      const objectStorage = new ObjectStorageService();
-      
       const screenshotId = crypto.randomUUID();
-      const privateDir = objectStorage.getPrivateObjectDir();
-      const objectPath = eaId 
-        ? `${privateDir}/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
-        : `${privateDir}/marketplace/screenshots/${screenshotId}${ext}`;
+      const filename = `screenshot_${screenshotId}${ext}`;
       
-      await objectStorage.uploadFromBuffer(
-        objectPath,
-        file.buffer,
-        file.mimetype
-      );
+      // Store screenshot in global memory map (same approach as profile pictures)
+      if (!global.uploadedScreenshots) {
+        global.uploadedScreenshots = new Map();
+      }
       
-      const filePath = eaId
-        ? `/objects/marketplace/ea/${eaId}/screenshots/${screenshotId}${ext}`
-        : `/objects/marketplace/screenshots/${screenshotId}${ext}`;
+      global.uploadedScreenshots.set(filename, {
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+        originalName: file.originalname,
+        uploadedAt: new Date(),
+        eaId: eaId || null,
+        screenshotId: screenshotId,
+      });
+      
+      const filePath = `/api/screenshot-files/${filename}`;
       
       return res.json({
         success: true,
