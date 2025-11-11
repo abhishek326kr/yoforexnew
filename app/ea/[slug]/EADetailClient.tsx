@@ -74,12 +74,12 @@ export default function EADetailClient({ ea, similarEAs }: EADetailClientProps) 
   const { requireAuth, AuthPrompt } = useAuthPrompt();
 
   // Fetch user coins
-  const { data: coinsData } = useQuery<{ totalCoins: number }>({
-    queryKey: ["/api/user", user?.id, "coins"],
+  const { data: coinsData } = useQuery<{ balance: number }>({
+    queryKey: ["/api/sweets/balance/me"],
     enabled: !!user?.id,
   });
 
-  const userCoins = coinsData?.totalCoins ?? 0;
+  const userCoins = coinsData?.balance ?? 0;
   const hasEnoughCoins = userCoins >= ea.priceCoins;
 
   // Purchase/Download mutation
@@ -106,7 +106,7 @@ export default function EADetailClient({ ea, similarEAs }: EADetailClientProps) 
       }
       
       // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ["/api/user", user?.id, "coins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sweets/balance/me"] });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
     },
     onError: (error: any) => {
