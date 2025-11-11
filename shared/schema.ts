@@ -2325,7 +2325,6 @@ export const insertContentSchema = createInsertSchema(content).omit({
   views: true,
   downloads: true,
   likes: true,
-  status: true,
 }).extend({
   title: z.string().min(10).max(120),
   description: z.string().min(300), // Will contain HTML for rich text
@@ -2363,6 +2362,9 @@ export const insertContentSchema = createInsertSchema(content).omit({
   focusKeyword: z.string().optional(),
   autoMetaDescription: z.string().optional(),
   autoImageAltTexts: z.array(z.string()).optional(),
+  
+  // Allow status field to be set during content creation
+  status: z.enum(["pending", "approved", "rejected", "suspended"]).optional(),
 });
 
 export const insertContentPurchaseSchema = createInsertSchema(contentPurchases).omit({

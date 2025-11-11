@@ -2,26 +2,33 @@
 
 ## Recent Changes
 
-### EA Marketplace Auto-Approval Fix (November 11, 2025 - 3:19 PM)
+### EA Marketplace Auto-Approval Fix (November 11, 2025 - 3:22 PM)
 **Issue:**
 - Published EAs were defaulting to "pending" status and not appearing in marketplace
 - Marketplace query filters for `status = 'approved'` only
 - Users couldn't see their published content immediately
+- Database inspection showed all recent EAs had status='pending'
+
+**Root Cause:**
+- `insertContentSchema` in `shared/schema.ts` was **omitting** the `status` field
+- Even though publish endpoints set `status: 'approved'`, the schema validation stripped it out
+- `DrizzleStorage.createContent` then defaulted to `status: 'pending'`
 
 **Solution:**
-- Updated `/api/publish` endpoint to set `status: 'approved'` on content creation (line 4195)
-- Updated `/api/content` endpoint to set `status: 'approved'` on content creation (line 4255)
-- All published content now auto-approves and appears in marketplace immediately
+1. Removed `status` from omit list in `insertContentSchema` (line 2328)
+2. Added `status` as optional field: `status: z.enum(["pending", "approved", "rejected", "suspended"]).optional()`
+3. Updated `/api/publish` endpoint to set `status: 'approved'` (line 4198)
+4. Updated `/api/content` endpoint to set `status: 'approved'` (line 4258)
+5. `/api/marketplace/publish-ea` already sets `status: 'approved'` (line 17176)
+
+**Key Files Changed:**
+- `shared/schema.ts` - Added status field to insertContentSchema
+- `server/routes.ts` - Ensured all publish endpoints set status='approved'
 
 **Design Decision:**
 - Auto-approval simplifies user experience (no manual admin approval needed)
 - Admin moderation system still exists for post-publication content management
 - Can be adjusted later if stricter pre-publication review is needed
-
-**Verified Working:**
-- ✅ Published EAs appear in marketplace immediately
-- ✅ Marketplace displays multiple items correctly
-- ✅ Coin rewards system working (30 Sweets per EA published)
 
 ### EA & Screenshot Upload - IN-MEMORY STORAGE SOLUTION (November 11, 2025 - 3:04 PM)
 **Root Cause:**
