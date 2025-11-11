@@ -17161,6 +17161,8 @@ export async function registerRoutes(app: Express): Promise<Express> {
         try {
           const objectStorage = new ObjectStorageService();
           const privateDir = objectStorage.getPrivateObjectDir();
+          const { ReplitStorageClient } = await import('@replit/object-storage');
+          const storageClient = new ReplitStorageClient();
           
           // Extract temp eaId from first image URL  
           // Format: /objects/marketplace/ea/{tempEaId}/screenshots/{filename}
@@ -17178,17 +17180,27 @@ export async function registerRoutes(app: Express): Promise<Express> {
               const newPublicPath = `/objects/marketplace/ea/${publishedContent.id}/screenshots/${filename}`;
               
               try {
-                // Copy file to new location
-                const { bucketName: oldBucket, objectName: oldObject } = parseObjectPath(oldStoragePath);
-                const { bucketName: newBucket, objectName: newObject } = parseObjectPath(newStoragePath);
+                // Download file from old location
+                console.log(`[EA Publish] Downloading ${filename} from ${oldStoragePath}`);
+                const fileBuffer = await storageClient.downloadAsBytes(oldStoragePath);
                 
-                const bucket = objectStorageClient.bucket(oldBucket);
-                await bucket.file(oldObject).copy(bucket.file(newObject));
-                await bucket.file(oldObject).delete(); // Delete old file
+                // Determine content type from filename
+                const ext = path.extname(filename).toLowerCase();
+                const contentType = ext === '.png' ? 'image/png' :
+                                  ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+                                  ext === '.webp' ? 'image/webp' : 'image/jpeg';
+                
+                // Upload to new location
+                console.log(`[EA Publish] Uploading ${filename} to ${newStoragePath}`);
+                await objectStorage.uploadFromBuffer(newStoragePath, Buffer.from(fileBuffer), contentType);
+                
+                // Delete old file
+                console.log(`[EA Publish] Deleting old file: ${oldStoragePath}`);
+                await storageClient.delete(oldStoragePath);
                 
                 // Only use new path if move succeeded
                 correctedImageUrls.push(newPublicPath);
-                console.log(`[EA Publish] Moved screenshot: ${filename}`);
+                console.log(`[EA Publish] Successfully moved screenshot: ${filename}`);
               } catch (moveError) {
                 console.error(`[EA Publish] Failed to move screenshot ${filename}:`, moveError);
                 // Keep old path if move failed
@@ -17197,10 +17209,13 @@ export async function registerRoutes(app: Express): Promise<Express> {
             }
             
             // Update content with corrected paths
-            await storage.updateContent(publishedContent.id, {
-              imageUrls: correctedImageUrls,
-              imageUrl: correctedImageUrls[0] || null,
-            });
+            const updatedContent = await db.update(content)
+              .set({
+                imageUrls: correctedImageUrls,
+                imageUrl: correctedImageUrls[0] || null,
+              })
+              .where(eq(content.id, publishedContent.id))
+              .returning();
             
             console.log(`[EA Publish] Updated ${correctedImageUrls.length} screenshot paths`);
           }
