@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import cors from "cors";
 import crypto from "crypto";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { generalApiLimiter } from "./rateLimiting";
@@ -159,6 +160,39 @@ async function initializeApp() {
     
     const expressApp = await registerRoutes(app);
     
+    // Proxy all non-Express requests to Next.js (running on internal port 3000)
+    // This allows Express to handle API routes while Next.js handles pages
+    const nextJsTarget = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
+    const nextJsProxy = createProxyMiddleware({
+      target: nextJsTarget,
+      changeOrigin: true,
+      ws: true, // Enable WebSocket proxying for Next.js dev tools
+      logLevel: process.env.NODE_ENV === 'production' ? 'error' : 'warn',
+      // Filter: Don't proxy Express-handled routes
+      filter: (pathname: string, req: any) => {
+        if (pathname.startsWith('/api/')) return false;
+        if (pathname.startsWith('/ws/')) return false;
+        if (pathname === '/health') return false;
+        if (pathname.startsWith('/static/')) return false;
+        return true; // Proxy everything else to Next.js
+      },
+      onProxyReq: (proxyReq: any, req: any, res: any) => {
+        // Forward original protocol/host for Next.js to generate correct URLs
+        proxyReq.setHeader('X-Forwarded-Host', req.headers.host || '');
+        proxyReq.setHeader('X-Forwarded-Proto', req.protocol);
+      },
+      onError: (err: any, req: any, res: any) => {
+        log(`[PROXY ERROR] Failed to proxy ${req.url} to Next.js: ${err.message}`);
+        // If Next.js isn't ready yet, send a friendly error
+        if (!res.headersSent) {
+          res.status(503).send('Next.js is starting up, please wait...');
+        }
+      }
+    });
+    
+    expressApp.use(nextJsProxy);
+    log(`[PROXY] Configured Next.js proxy to ${nextJsTarget} (filters: /api/*, /ws/*, /health, /static/*)`);
+    
     // Register error tracking middleware to capture specialized error types
     // This middleware will capture errors and then pass them to the next error handler
     expressApp.use(errorTrackingMiddleware);
@@ -233,6 +267,21 @@ async function startServer() {
 
     // Create HTTP server (WITHOUT initializing WebSocket yet)
     const httpServer = createServer(expressApp);
+    
+    // Wire WebSocket upgrade handler for Next.js dev tools/HMR
+    // This ensures Next.js WebSockets work without interfering with dashboard sockets
+    const nextJsUpgradeTarget = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
+    const nextJsUpgradeProxy = createProxyMiddleware({
+      target: nextJsUpgradeTarget,
+      ws: true,
+      changeOrigin: true,
+    });
+    httpServer.on('upgrade', (req, socket, head) => {
+      // Only proxy Next.js WebSockets (not /ws/* which are handled by Express)
+      if (!req.url?.startsWith('/ws/')) {
+        (nextJsUpgradeProxy as any).upgrade?.(req, socket as any, head);
+      }
+    });
 
     // Express API server with Vite frontend runs on port 5000 (required by Replit)
     // Use PORT env var first (Replit standard), then API_PORT, then default to 5000
