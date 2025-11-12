@@ -135,15 +135,16 @@ export default function ForumThreadCard({
     <Link href={threadUrl} data-testid={`link-thread-${id}`}>
       <Card 
         className={`
-          border-0 shadow-sm
+          border-0
           ${categoryStyles.borderColor} border-l-[3px] 
+          card-depth-1 hover-lift
           hover-elevate active-elevate-2
-          transition-all
+          transition-smooth
         `} 
         data-testid="card-forum-thread"
       >
-        <CardHeader className="pb-2.5">
-          <div className="flex items-start gap-2.5">
+        <CardHeader className="pb-3">
+          <div className="flex items-start gap-3">
             <Avatar className="h-9 w-9 shrink-0">
               <AvatarImage src={author?.avatar} />
               <AvatarFallback className="text-xs">
@@ -152,88 +153,88 @@ export default function ForumThreadCard({
             </Avatar>
             
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
                 {isPinned && (
-                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Pinned</Badge>
+                  <Badge variant="secondary" className="text-xs h-5 px-2 transition-smooth">Pinned</Badge>
                 )}
                 <Badge 
                   variant="outline"
-                  className={`text-[10px] h-4 px-1.5 ${threadConfig.color}`}
+                  className={`text-xs h-5 px-2 transition-smooth ${threadConfig.color}`}
                   data-testid="badge-thread-type"
                 >
-                  <ThreadIcon className="h-2.5 w-2.5 mr-0.5" />
+                  <ThreadIcon className="h-3 w-3 mr-1" />
                   {threadConfig.label}
                 </Badge>
                 <Badge 
-                  className={`text-[10px] h-4 px-1.5 border-0 truncate max-w-[150px] ${categoryStyles.badgeBg} ${categoryStyles.badgeText}`}
+                  className={`text-xs h-5 px-2 border-0 truncate max-w-[150px] transition-smooth ${categoryStyles.badgeBg} ${categoryStyles.badgeText}`}
                   data-testid="badge-category"
                 >
                   {category}
                 </Badge>
                 {isAnswered && (
-                  <div className="flex items-center gap-0.5 text-[10px] text-green-600 dark:text-green-400">
-                    <CheckCircle2 className="h-3 w-3" />
+                  <div className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 transition-smooth">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
                     <span>Solved</span>
                   </div>
                 )}
                 {isLiveVerified && (
-                  <Badge variant="default" className="text-[10px] h-4 px-1.5 bg-green-600">
-                    <Activity className="h-2.5 w-2.5 mr-0.5" />
+                  <Badge variant="default" className="text-xs h-5 px-2 bg-green-600 transition-smooth">
+                    <Activity className="h-3 w-3 mr-1" />
                     Live
                   </Badge>
                 )}
                 {hasSetFile && (
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                    <FileText className="h-2.5 w-2.5 mr-0.5" />
+                  <Badge variant="outline" className="text-xs h-5 px-2 transition-smooth">
+                    <FileText className="h-3 w-3 mr-1" />
                     Set
                   </Badge>
                 )}
                 {hasBacktest && (
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                    <BarChart3 className="h-2.5 w-2.5 mr-0.5" />
+                  <Badge variant="outline" className="text-xs h-5 px-2 transition-smooth">
+                    <BarChart3 className="h-3 w-3 mr-1" />
                     Test
                   </Badge>
                 )}
                 {coinsEarned > 0 && (
-                  <div className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                    <Coins className="h-3 w-3" />
+                  <div className="flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400 transition-smooth">
+                    <Coins className="h-3.5 w-3.5" />
                     <span>+{coinsEarned}</span>
                   </div>
                 )}
               </div>
               
-              <h3 className="font-semibold text-sm mb-1 line-clamp-2 leading-snug" data-testid="text-thread-title">
+              <h3 className="font-semibold text-sm mb-1.5 line-clamp-2 leading-snug" data-testid="text-thread-title">
                 {title}
               </h3>
               
-              <p className="text-xs text-muted-foreground line-clamp-2 mb-2 leading-relaxed">
+              <p className="text-xs text-muted-foreground line-clamp-2 mb-2.5 leading-relaxed">
                 {excerpt}
               </p>
               
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span data-testid="text-author" className="truncate max-w-[120px]">
                   {author?.name || 'Unknown User'}
                 </span>
-                <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-1">
                   <TrendingUp className="h-3 w-3" />
                   <span>{author?.reputation || 0}</span>
                 </div>
                 <span className="hidden sm:inline">•</span>
-                <span className="hidden sm:inline truncate">{timeAgo}</span>
+                <span className="hidden sm:inline truncate" suppressHydrationWarning>{timeAgo}</span>
               </div>
             </div>
           </div>
         </CardHeader>
         
-        <CardContent className="pt-0 pb-3">
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <div className="flex items-center gap-1" data-testid="stat-replies">
+        <CardContent className="pt-1 pb-3">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5" data-testid="stat-replies">
               <MessageCircle className="h-3.5 w-3.5" />
-              <span>{replyCount} {replyCount === 1 ? 'reply' : 'replies'}</span>
+              <span suppressHydrationWarning>{replyCount} {replyCount === 1 ? 'reply' : 'replies'}</span>
             </div>
-            <div className="flex items-center gap-1" data-testid="stat-views">
+            <div className="flex items-center gap-1.5" data-testid="stat-views">
               <Eye className="h-3.5 w-3.5" />
-              <span>{formattedViews || viewCount} views</span>
+              <span suppressHydrationWarning>{formattedViews || viewCount} views</span>
             </div>
           </div>
         </CardContent>

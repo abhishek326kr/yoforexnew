@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MessageCircle, TrendingUp, CheckCircle2, Eye, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
@@ -154,7 +155,7 @@ export default function WeekHighlights({
   const [itemsLimit, setItemsLimit] = useState<number>(10);
 
   // Fetch real trending threads from API (no auto-refresh for performance)
-  const { data: trendingData, refetch: refetchTrending } = useQuery<ForumThread[]>({
+  const { data: trendingData, isLoading: isTrendingLoading, refetch: refetchTrending } = useQuery<ForumThread[]>({
     queryKey: ['/api/threads', { sortBy: 'trending', limit: itemsLimit }],
     queryFn: async () => {
       const res = await fetch(`/api/threads?sortBy=trending&limit=${itemsLimit}`, { credentials: 'include' });
@@ -165,7 +166,7 @@ export default function WeekHighlights({
   });
 
   // Fetch newest threads (no auto-refresh for performance)
-  const { data: newData, refetch: refetchNew } = useQuery<ForumThread[]>({
+  const { data: newData, isLoading: isNewLoading, refetch: refetchNew } = useQuery<ForumThread[]>({
     queryKey: ['/api/threads', { sortBy: 'newest', limit: itemsLimit }],
     queryFn: async () => {
       const res = await fetch(`/api/threads?sortBy=newest&limit=${itemsLimit}`, { credentials: 'include' });
@@ -176,7 +177,7 @@ export default function WeekHighlights({
   });
 
   // Fetch solved threads (answered) (no auto-refresh for performance)
-  const { data: solvedData, refetch: refetchSolved } = useQuery<ForumThread[]>({
+  const { data: solvedData, isLoading: isSolvedLoading, refetch: refetchSolved } = useQuery<ForumThread[]>({
     queryKey: ['/api/threads', { sortBy: 'answered', limit: itemsLimit }],
     queryFn: async () => {
       const res = await fetch(`/api/threads?sortBy=answered&limit=${itemsLimit}`, { credentials: 'include' });
@@ -254,99 +255,122 @@ export default function WeekHighlights({
     }
   };
 
-  const renderThreadList = (threads: HighlightThread[]) => (
-    <div className="space-y-0 divide-y divide-border/40 max-h-[600px] overflow-y-auto custom-scrollbar">
-      {threads.map((thread, index) => (
+  const renderLoadingSkeleton = () => (
+    <div className="space-y-0 divide-y divide-border/40" data-testid="loading-skeleton">
+      {[...Array(5)].map((_, i) => (
         <div 
-          key={thread.id} 
-          className="group py-4 px-3 -mx-3 rounded-lg hover:bg-muted/40 hover-elevate active-elevate-2 cursor-pointer transition-all duration-200" 
-          data-testid={`highlight-thread-${thread.id}`}
-          onClick={() => handleThreadClick(thread)}
+          key={i} 
+          className="py-4 px-3 animate-shimmer"
+          style={{ animationDelay: `${i * 100}ms` }}
         >
-          <div className="flex items-start gap-4">
-            <div className="flex-1 min-w-0 space-y-2">
-              {/* Category badge */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge 
-                  variant="outline" 
-                  className="text-xs font-medium bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary transition-colors"
-                  data-testid={`badge-category-${thread.id}`}
-                >
-                  {thread.category}
-                </Badge>
-                {thread.isAnswered && (
-                  <div className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400" data-testid={`badge-solved-${thread.id}`}>
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Solved</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Thread title */}
-              <h4 
-                className="text-[15px] font-semibold leading-snug line-clamp-1 group-hover:text-primary transition-colors" 
-                data-testid={`text-title-${thread.id}`}
-              >
-                {thread.title}
-              </h4>
-
-              {/* Metadata - smaller ID shown subtly */}
-              <div className="text-[11px] text-muted-foreground/80 font-mono truncate">
-                {thread.id}
-              </div>
-
-              {/* Stats row */}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <MessageCircle className="h-3.5 w-3.5 text-blue-500/70" />
-                  <span className="font-medium" data-testid={`text-replies-${thread.id}`}>
-                    {thread.replies}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Eye className="h-3.5 w-3.5 text-purple-500/70" />
-                  <span className="font-medium" data-testid={`text-views-${thread.id}`}>
-                    {(thread.views ?? 0).toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-orange-500/70" />
-                  <span suppressHydrationWarning>{formatDistanceToNow(thread.lastActivity, { addSuffix: true })}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Solved count or coins badge */}
-            {thread.isAnswered ? (
-              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 transition-transform group-hover:scale-105">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-green-600 dark:text-green-400 leading-none">
-                    0
-                  </div>
-                </div>
-              </div>
-            ) : thread.coins && thread.coins > 0 ? (
-              <Badge 
-                variant="secondary" 
-                className="text-xs font-semibold bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
-                data-testid={`badge-coins-${thread.id}`}
-              >
-                +{thread.coins}
-              </Badge>
-            ) : null}
-          </div>
+          <Skeleton className="h-5 w-24 mb-2" data-testid={`skeleton-badge-${i}`} />
+          <Skeleton className="h-4 w-full mb-2" data-testid={`skeleton-title-${i}`} />
+          <Skeleton className="h-3 w-3/4" data-testid={`skeleton-stats-${i}`} />
         </div>
       ))}
     </div>
   );
 
+  const renderThreadList = (threads: HighlightThread[], isLoading: boolean) => {
+    if (isLoading) {
+      return renderLoadingSkeleton();
+    }
+
+    return (
+      <div className="space-y-0 divide-y divide-border/40 max-h-[600px] overflow-y-auto custom-scrollbar">
+        {threads.map((thread, index) => (
+          <div 
+            key={thread.id} 
+            className="group py-4 px-3 -mx-3 rounded-lg hover:bg-muted/40 hover-elevate active-elevate-2 cursor-pointer transition-fast animate-slide-up hover:-translate-y-0.5" 
+            style={{ animationDelay: `${index * 50}ms` }}
+            data-testid={`highlight-thread-${thread.id}`}
+            onClick={() => handleThreadClick(thread)}
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex-1 min-w-0 space-y-2">
+                {/* Category badge */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs font-medium bg-primary/5 border-primary/20 text-primary transition-fast"
+                    data-testid={`badge-category-${thread.id}`}
+                  >
+                    {thread.category}
+                  </Badge>
+                  {thread.isAnswered && (
+                    <div className="flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400" data-testid={`badge-solved-${thread.id}`}>
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Solved</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Thread title */}
+                <h4 
+                  className="text-[15px] font-semibold leading-snug line-clamp-1 group-hover:text-primary transition-fast" 
+                  data-testid={`text-title-${thread.id}`}
+                >
+                  {thread.title}
+                </h4>
+
+                {/* Metadata - smaller ID shown subtly */}
+                <div className="text-[11px] text-muted-foreground/80 font-mono truncate">
+                  {thread.id}
+                </div>
+
+                {/* Stats row */}
+                <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <MessageCircle className="h-3.5 w-3.5 text-blue-500/70" />
+                    <span className="font-medium" data-testid={`text-replies-${thread.id}`}>
+                      {thread.replies}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Eye className="h-3.5 w-3.5 text-purple-500/70" />
+                    <span className="font-medium" data-testid={`text-views-${thread.id}`}>
+                      {(thread.views ?? 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-orange-500/70" />
+                    <span suppressHydrationWarning>{formatDistanceToNow(thread.lastActivity, { addSuffix: true })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Solved count or coins badge */}
+              {thread.isAnswered ? (
+                <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 transition-fast group-hover:scale-105">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-green-600 dark:text-green-400 leading-none">
+                      0
+                    </div>
+                  </div>
+                </div>
+              ) : thread.coins && thread.coins > 0 ? (
+                <Badge 
+                  variant="secondary" 
+                  className="text-xs font-semibold bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
+                  data-testid={`badge-coins-${thread.id}`}
+                >
+                  +{thread.coins}
+                </Badge>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
-    <Card data-testid="card-week-highlights" className="overflow-hidden">
+    <Card data-testid="card-week-highlights" className="overflow-hidden card-depth-1">
       <CardContent className="p-0">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2 p-5 pb-4 border-b bg-gradient-to-br from-primary/5 to-primary/0">
+        {/* Header with glassmorphism effect */}
+        <div className="glass-subtle flex items-center justify-between gap-2 px-5 py-4 border-b bg-gradient-to-br from-primary/5 via-primary/3 to-primary/0">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-base">This Week's Highlights</h3>
@@ -357,7 +381,7 @@ export default function WeekHighlights({
               <select 
                 value={itemsLimit} 
                 onChange={(e) => setItemsLimit(Number(e.target.value))}
-                className="h-7 px-2 rounded-md border border-input bg-background text-xs hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 cursor-pointer transition-colors"
+                className="h-7 px-2 rounded-md border border-input bg-background text-xs hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 cursor-pointer transition-smooth"
                 data-testid="select-limit"
               >
                 <option value={10}>10</option>
@@ -373,41 +397,41 @@ export default function WeekHighlights({
           </div>
         </div>
         
-        {/* Tabs */}
+        {/* Tabs with enhanced transitions */}
         <Tabs defaultValue="new" className="w-full">
           <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-muted/30">
             <TabsTrigger 
               value="new" 
               data-testid="tab-new"
-              className="rounded-none data-[state=active]:shadow-none"
+              className="rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary transition-smooth"
             >
               New
             </TabsTrigger>
             <TabsTrigger 
               value="trending" 
               data-testid="tab-trending"
-              className="rounded-none data-[state=active]:shadow-none"
+              className="rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary transition-smooth"
             >
               Trending
             </TabsTrigger>
             <TabsTrigger 
               value="solved" 
               data-testid="tab-solved"
-              className="rounded-none data-[state=active]:shadow-none"
+              className="rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary transition-smooth"
             >
               Solved
             </TabsTrigger>
           </TabsList>
 
           <div className="px-5 py-1">
-            <TabsContent value="new" className="mt-0">
-              {renderThreadList(displayNewThreads)}
+            <TabsContent value="new" className="mt-0 animate-fade-in" data-testid="tab-content-new">
+              {renderThreadList(displayNewThreads, isNewLoading)}
             </TabsContent>
-            <TabsContent value="trending" className="mt-0">
-              {renderThreadList(displayTrendingThreads)}
+            <TabsContent value="trending" className="mt-0 animate-fade-in" data-testid="tab-content-trending">
+              {renderThreadList(displayTrendingThreads, isTrendingLoading)}
             </TabsContent>
-            <TabsContent value="solved" className="mt-0">
-              {renderThreadList(displaySolvedThreads)}
+            <TabsContent value="solved" className="mt-0 animate-fade-in" data-testid="tab-content-solved">
+              {renderThreadList(displaySolvedThreads, isSolvedLoading)}
             </TabsContent>
           </div>
         </Tabs>
