@@ -114,6 +114,94 @@ YoForex is a comprehensive trading community platform for forex traders. It offe
 
 ---
 
+### November 12, 2025 - SSR Hydration & Routing Fixes (CRITICAL)
+
+**Issues Fixed:**
+
+1. **API Config Hydration Mismatch:**
+   - Module-time evaluation of `apiConfig.baseUrl` and `apiConfig.siteUrl` caused server/client value inconsistency
+   - Server rendered with one URL, client hydrated with different URL → React hydration errors
+
+2. **Auth Context Infinite Loading:**
+   - Publish EA page showed infinite loading spinner instead of login prompt for unauthenticated users
+   - AuthProvider mounted state gate prevented proper SSR/client hydration
+   - Initial user data not passed from server to client
+
+3. **Marketplace Skeleton Boxes:**
+   - Marketplace page stuck showing skeleton loading boxes instead of EA cards
+   - Duplicate `router.push` effect caused repeated component remounts
+   - Missing URL guard in `router.replace` triggered unnecessary navigations
+
+**Solutions Implemented:**
+
+**1. API Config Lazy Getters** (`app/lib/api-config.ts`):
+```typescript
+// BEFORE: Module-time evaluation (causes hydration mismatch)
+export const apiConfig = {
+  baseUrl: getApiBaseUrl(),
+  siteUrl: getSiteUrl()
+};
+
+// AFTER: Lazy getters (preserves server/client context)
+export const apiConfig = {
+  get baseUrl() { return getApiBaseUrl(); },
+  get siteUrl() { return getSiteUrl(); }
+};
+```
+
+**2. Server-Side Auth Bootstrap**:
+- Created `AppProviders.tsx` (server component) - Fetches `/api/me` with forwarded cookies
+- Created `ClientProviders.tsx` (client component) - Wraps QueryClient, Theme, Tooltip
+- Updated `AuthProvider` to accept `initialUser` prop and use `initialData`/`placeholderData`
+- Removed mounted state gate that blocked proper hydration
+
+**Files Changed:**
+- `app/components/providers/AppProviders.tsx` - Server wrapper with auth fetch
+- `app/components/providers/ClientProviders.tsx` - Client-only providers (new)
+- `app/contexts/AuthContext.tsx` - Accept initialUser, use initialData/placeholderData
+
+**3. Marketplace Router Navigation Guard** (`app/marketplace/MarketplaceEnhanced.tsx`):
+- Deleted duplicate `router.push` effect (lines 302-313)
+- Added guard to `router.replace` to compare query strings before navigation:
+```typescript
+const queryString = params.toString();
+const currentQueryString = searchParams.toString();
+
+// Only update URL if it actually changed
+if (queryString !== currentQueryString) {
+  router.replace(newUrl, { scroll: false });
+}
+```
+
+**Verification:**
+- ✅ Architect approved all changes as production-ready
+- ✅ Publish EA: Shows "Login Required" prompt (no infinite loading)
+- ✅ Marketplace: Renders EA cards with images, titles, pricing, ratings
+- ✅ No hydration mismatch warnings in console
+- ✅ No LSP diagnostics errors
+- ✅ Zero TypeScript compilation errors
+
+**Design Patterns (MANDATORY):**
+
+**API URL Resolution:**
+- **Server Components:** Use `getInternalApiUrl()` for SSR API calls
+- **Client Components:** Use `getApiBaseUrl()` (returns empty string for relative URLs)
+- **Shared Config:** Use lazy getters `apiConfig.baseUrl` / `apiConfig.siteUrl`
+
+**Authentication Bootstrap:**
+- **Server Component (AppProviders):** Fetch auth with cookies → pass to ClientProviders
+- **Client Component (ClientProviders):** Wrap QueryClient, Theme, etc
+- **AuthContext:** Accept initialUser → use initialData/placeholderData in React Query
+
+**Router Navigation:**
+- Always add URL comparison guard before calling `router.replace()`
+- Compare computed query string with `useSearchParams().toString()`
+- Prevents unnecessary navigations and component remounts
+
+**Impact:** All hydration errors resolved. Authentication and marketplace rendering correctly on both server and client.
+
+---
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
