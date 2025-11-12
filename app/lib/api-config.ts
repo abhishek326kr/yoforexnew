@@ -203,13 +203,21 @@ export function buildApiUrl(path: string): string {
 export const apiConfig = {
   /**
    * API base URL (client or server appropriate)
+   * CRITICAL: Getter ensures evaluation in correct context (browser vs server)
+   * - Browser: returns '' (uses relative URLs)
+   * - Server: returns http://127.0.0.1:3001 (internal API)
    */
-  baseUrl: getApiBaseUrl(),
+  get baseUrl(): string {
+    return getApiBaseUrl();
+  },
 
   /**
    * Public site URL
+   * CRITICAL: Getter ensures evaluation in correct context
    */
-  siteUrl: getSiteUrl(),
+  get siteUrl(): string {
+    return getSiteUrl();
+  },
 
   /**
    * Whether we're in production mode
@@ -230,7 +238,7 @@ export const apiConfig = {
     }
     return getInternalApiUrl();
   },
-} as const;
+};
 
 /**
  * Type-safe environment variable access
