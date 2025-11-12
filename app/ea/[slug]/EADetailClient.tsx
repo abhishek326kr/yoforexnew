@@ -291,15 +291,15 @@ export default function EADetailClient({ ea, similarEAs }: EADetailClientProps) 
               <Card>
                 <CardContent className="p-6 space-y-4">
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge data-testid="badge-category">{ea.category}</Badge>
-                        <Badge variant="outline" className="flex items-center gap-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <Badge data-testid="badge-category" className="max-w-[200px] truncate">{ea.category}</Badge>
+                        <Badge variant="outline" className="flex items-center gap-1 flex-shrink-0">
                           <Calendar className="h-3 w-3" />
                           {new Date(ea.createdAt).toLocaleDateString()}
                         </Badge>
                       </div>
-                      <h1 className="text-3xl md:text-4xl font-bold mb-3" data-testid="heading-ea-title">
+                      <h1 className="text-3xl md:text-4xl font-bold mb-3 break-words" data-testid="heading-ea-title">
                         {ea.title}
                       </h1>
                       <div className="flex items-center gap-3">
@@ -550,9 +550,9 @@ export default function EADetailClient({ ea, similarEAs }: EADetailClientProps) 
                 <CardContent className="p-6 space-y-3">
                   <h3 className="text-lg font-bold mb-4">Quick Info</h3>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Category:</span>
-                      <span className="font-medium">{ea.category}</span>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground flex-shrink-0">Category:</span>
+                      <span className="font-medium truncate text-right">{ea.category}</span>
                     </div>
                     <Separator />
                     <div className="flex justify-between">
