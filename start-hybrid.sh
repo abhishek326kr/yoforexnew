@@ -1,27 +1,27 @@
 #!/bin/bash
 
 # YoForex Hybrid Startup Script (Development Mode)
-# Runs Express API (port 3001 internal) and Next.js frontend (port 5000 user-facing)
+# Runs Express (port 5000 user-facing) with Next.js internal (port 3000)
 
 echo "🚀 Starting YoForex in Development Mode..."
 
-# Start Express API server on port 3001 in background using tsx (for hot reload)
-# Unset PORT to prevent Replit's PORT=5000 from conflicting with API_PORT
-echo "📦 Starting Express API server (port 3001)..."
-env -u PORT API_PORT=3001 NODE_ENV=development npx tsx server/index.ts &
-EXPRESS_PID=$!
-
-# Minimal wait for Express to bind port
-sleep 2
-
-# Start Next.js dev server on port 5000 (bind to 0.0.0.0 for Replit webview)
-echo "⚡ Starting Next.js dev server (port 5000)..."
-EXPRESS_URL=http://127.0.0.1:3001 npx next dev -p 5000 -H 0.0.0.0 &
+# Start Next.js dev server on port 3000 (internal only)
+echo "⚡ Starting Next.js dev server (port 3000 internal)..."
+EXPRESS_URL=http://127.0.0.1:5000 npx next dev -p 3000 &
 NEXTJS_PID=$!
 
+# Wait for Next.js to start
+sleep 3
+
+# Start Express server on port 5000 (user-facing, proxies to Next.js)
+# Express handles API routes directly and proxies page requests to Next.js
+echo "📦 Starting Express server (port 5000 user-facing)..."
+PORT=5000 NODE_ENV=development NEXT_INTERNAL_URL=http://127.0.0.1:3000 npx tsx server/index.ts &
+EXPRESS_PID=$!
+
 echo "✅ Development servers started:"
-echo "   - Express API: http://localhost:3001/api/* (internal)"
-echo "   - Next.js App: http://localhost:5000 (user-facing)"
+echo "   - Next.js App: http://localhost:3000 (internal)"
+echo "   - Express Proxy: http://localhost:5000 (user-facing)"
 echo ""
 echo "Press Ctrl+C to stop both servers"
 

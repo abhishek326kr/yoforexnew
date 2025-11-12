@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -176,7 +176,6 @@ const getCategoryImage = (category: string, type: string): string => {
 
 export default function MarketplaceEnhanced({ initialContent, initialFilters = {} }: MarketplaceEnhancedProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   
   // State management - Initialize from server-provided filters
@@ -199,27 +198,6 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
     if (initialFilters.price !== undefined) setPriceFilter(initialFilters.price);
     if (initialFilters.platform !== undefined) setPlatformFilter(initialFilters.platform);
   }, [initialFilters]);
-  
-  // Sync URL when filters change
-  useEffect(() => {
-    const params = new URLSearchParams();
-    
-    if (searchTerm) params.set('search', searchTerm);
-    if (selectedCategory !== 'all') params.set('category', selectedCategory);
-    if (selectedType !== 'all') params.set('type', selectedType);
-    if (sortBy !== 'newest') params.set('sort', sortBy);
-    if (priceFilter !== 'all') params.set('price', priceFilter);
-    if (platformFilter !== 'all') params.set('platform', platformFilter);
-    
-    const queryString = params.toString();
-    const currentQueryString = searchParams.toString();
-    
-    // Only update URL if it actually changed
-    if (queryString !== currentQueryString) {
-      const newUrl = queryString ? `?${queryString}` : '/marketplace';
-      router.replace(newUrl, { scroll: false });
-    }
-  }, [searchTerm, selectedCategory, selectedType, sortBy, priceFilter, platformFilter, router, searchParams]);
   
   // Fetch content with filters
   const { data: content = initialContent, isLoading, refetch } = useQuery<Content[]>({
