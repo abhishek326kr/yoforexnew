@@ -59,6 +59,7 @@ export class ContentStorage {
       focusKeyword: seo.focusKeyword,
       autoMetaDescription: seo.autoMetaDescription,
       autoImageAltTexts: seo.autoImageAltTexts,
+      status: insertContent.status || 'approved', // CRITICAL FIX: Pass status from input or default to 'approved'
     }).returning();
 
     return newContent;
