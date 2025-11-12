@@ -83,23 +83,23 @@ export default function TrustLevel({
 
   if (isLoading) {
     return (
-      <Card className="card-depth-1 transition-smooth" data-testid="card-trust-level">
+      <Card data-testid="card-trust-level">
         <CardContent className="p-4 space-y-4">
-          <Skeleton className="h-12 w-full glass-subtle animate-pulse" style={{ animationDelay: '0ms' }} />
-          <Skeleton className="h-8 w-full glass-subtle animate-pulse" style={{ animationDelay: '100ms' }} />
-          <Skeleton className="h-20 w-full glass-subtle animate-pulse" style={{ animationDelay: '200ms' }} />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-20 w-full" />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="card-depth-1 hover-elevate transition-smooth" data-testid="card-trust-level">
+    <Card data-testid="card-trust-level">
       <CardContent className="p-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`${currentLevelData.color} glass-subtle rounded-lg p-2`}>
+              <div className={`${currentLevelData.color} rounded-lg p-2`}>
                 <Icon className="h-4 w-4 text-primary-foreground" />
               </div>
               <div>
@@ -119,21 +119,21 @@ export default function TrustLevel({
               <span className="text-muted-foreground">Progress to next level</span>
               <span className="font-medium">{xp} / {nextLevelXP}</span>
             </div>
-            <Progress value={progress} className="h-2 transition-smooth" />
+            <Progress value={progress} className="h-2" />
           </div>
 
           <div className="space-y-2">
             <div className="text-xs font-semibold">Achievements</div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="text-center p-2 bg-muted/50 rounded-md hover-elevate transition-smooth">
+              <div className="text-center p-2 bg-muted/50 rounded-md">
                 <div className="font-bold text-sm">{achievements.uploads}</div>
                 <div className="text-xs text-muted-foreground">Uploads</div>
               </div>
-              <div className="text-center p-2 bg-muted/50 rounded-md hover-elevate transition-smooth">
+              <div className="text-center p-2 bg-muted/50 rounded-md">
                 <div className="font-bold text-sm">{achievements.verifiedSets}</div>
                 <div className="text-xs text-muted-foreground">Verified</div>
               </div>
-              <div className="text-center p-2 bg-muted/50 rounded-md hover-elevate transition-smooth">
+              <div className="text-center p-2 bg-muted/50 rounded-md">
                 <div className="font-bold text-sm">{achievements.solutionsMarked}</div>
                 <div className="text-xs text-muted-foreground">Solutions</div>
               </div>

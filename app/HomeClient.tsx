@@ -42,11 +42,8 @@ import {
   FileText,
   AlertTriangle,
   Store,
-  ClipboardList,
-  Users,
-  MessageSquare
+  ClipboardList
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { OrganizationSchema, WebSiteSchema } from "@/components/seo/StructuredData";
 
 // Icon mapping for category icons
@@ -132,108 +129,6 @@ export default function HomeClient({
       
       <Header />
       <StatsBar initialStats={initialStats} />
-      
-      {/* Hero Section */}
-      {/* <section 
-        className="relative w-full min-h-[300px] md:min-h-[450px] flex items-center justify-center overflow-hidden bg-gradient-primary"
-        data-testid="section-hero"
-      >
-        
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60" />
-        
-        {/* Hero Content */}
-        {/* <div className="relative z-10 container max-w-5xl mx-auto px-4 sm:px-6 py-12 md:py-16">
-          <div className="text-center space-y-6 md:space-y-8">
-            
-            <h2 
-              className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight animate-slide-up"
-              data-testid="text-hero-headline"
-            >
-              Join 10,000+ Forex Traders Building Profitable Trading Systems
-            </h2>
-            
-            
-            <p 
-              className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl mx-auto animate-slide-up animate-delay-100"
-              data-testid="text-hero-subheading"
-            >
-              Download free EAs, share strategies, earn coins, and connect with expert traders
-            </p>
-            
-            
-            <div 
-              className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up animate-delay-200"
-              data-testid="container-hero-ctas"
-            >
-              <Link href="/marketplace" data-testid="link-hero-marketplace">
-                <Button 
-                  size="lg"
-                  className="glass-card text-white border-white/20 hover-lift transition-smooth min-w-[200px]"
-                >
-                  Browse Marketplace
-                </Button>
-              </Link>
-              <Link href="/discussions" data-testid="link-hero-discussions">
-                <Button 
-                  variant="outline"
-                  size="lg"
-                  className="glass-card text-white border-white/30 bg-white/10 hover-lift transition-smooth min-w-[200px]"
-                >
-                  Join Community
-                </Button>
-              </Link>
-            </div>
-            
-            
-            <div 
-              className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mt-8 md:mt-12 max-w-4xl mx-auto animate-slide-up animate-delay-300"
-              data-testid="container-hero-stats"
-            >
-             
-              <div 
-                className="glass-panel card-depth-1 p-6 rounded-md text-center transition-smooth"
-                data-testid="stat-active-traders"
-              >
-                <Users className="w-8 h-8 text-white mx-auto mb-3" />
-                <div className="text-2xl md:text-3xl font-bold text-white animate-count-up">
-                  10,000+
-                </div>
-                <div className="text-sm md:text-base text-white/80 mt-2">
-                  Active Traders
-                </div>
-              </div>
-              
-              
-              <div 
-                className="glass-panel card-depth-1 p-6 rounded-md text-center transition-smooth"
-                data-testid="stat-free-eas"
-              >
-                <Download className="w-8 h-8 text-white mx-auto mb-3" />
-                <div className="text-2xl md:text-3xl font-bold text-white animate-count-up">
-                  5,000+
-                </div>
-                <div className="text-sm md:text-base text-white/80 mt-2">
-                  Free EAs
-                </div>
-              </div>
-              
-             
-              <div 
-                className="glass-panel card-depth-1 p-6 rounded-md text-center transition-smooth"
-                data-testid="stat-discussions"
-              >
-                <MessageSquare className="w-8 h-8 text-white mx-auto mb-3" />
-                <div className="text-2xl md:text-3xl font-bold text-white animate-count-up">
-                  100,000+
-                </div>
-                <div className="text-sm md:text-base text-white/80 mt-2">
-                  Discussions
-                </div>
-              </div>
-            </div>
-          </div>
-        </div> 
-      </section> */}
       
       <main className="container max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         {/* SEO-friendly H1 (visually hidden but present for SEO) */}

@@ -4,7 +4,6 @@
 import * as React from "react";
 import { MessageSquare, Users, MessagesSquare, Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import CountUp from "react-countup";
 import { RefreshButton } from "./RefreshButton";
 
 interface StatsData {
@@ -23,75 +22,59 @@ interface StatsBarProps {
 
 export default function StatsBar({ initialStats }: StatsBarProps) {
   const [mounted, setMounted] = React.useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
-
-    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
-      setPrefersReducedMotion(e.matches);
-    };
-
-    mediaQuery.addEventListener?.('change', handleChange);
-    return () => mediaQuery.removeEventListener?.('change', handleChange);
   }, []);
 
+  // Use React Query with initial data from server
   const { data, isLoading, refetch } = useQuery<StatsData>({
     queryKey: ['/api/stats'],
     initialData: initialStats,
-    enabled: mounted,
-    staleTime: 5 * 60 * 1000,
+    enabled: mounted, // Only fetch after mounting
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
+  // Use data if available, regardless of mounted state for initial server data
   const stats = [
     { 
       label: "Forum Threads", 
-      rawValue: data?.totalThreads !== undefined ? data.totalThreads : 0,
+      value: data?.totalThreads !== undefined ? data.totalThreads.toLocaleString('en-US') : "0", 
       icon: MessageSquare, 
-      key: "threads",
-      delay: 0
+      key: "threads" 
     },
     { 
       label: "Community Members", 
-      rawValue: data?.totalMembers !== undefined ? data.totalMembers : 0,
+      // Fixed: Use totalMembers from the API response
+      value: data?.totalMembers !== undefined ? data.totalMembers.toLocaleString('en-US') : "0", 
       icon: Users, 
-      key: "members",
-      delay: 100
+      key: "members" 
     },
     { 
       label: "Total Replies", 
-      rawValue: data?.totalPosts !== undefined ? data.totalPosts : 0,
+      value: data?.totalPosts !== undefined ? data.totalPosts.toLocaleString('en-US') : "0", 
       icon: MessagesSquare, 
-      key: "replies",
-      delay: 200
+      key: "replies" 
     },
     { 
       label: "Active Today", 
-      rawValue: data?.todayActivity?.threads !== undefined ? data.todayActivity.threads : 0,
+      value: data?.todayActivity?.threads !== undefined ? `+${data.todayActivity.threads}` : "+0", 
       icon: Activity, 
-      key: "activity",
-      delay: 300,
-      isIncrement: true
+      key: "activity" 
     }
   ];
 
   if (isLoading && !data) {
     return (
       <div className="border-y bg-muted/30">
-        <div className="container max-w-7xl mx-auto px-4 py-4 md:py-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <div className="container max-w-7xl mx-auto px-4 py-1">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <div 
-                key={i} 
-                className="glass-subtle card-depth-1 rounded-md px-4 py-5 relative overflow-hidden"
-              >
-                <div className="absolute inset-0 shimmer" />
-                <div className="flex flex-col items-center justify-center gap-3 relative z-10">
-                  <div className="bg-muted/60 rounded-md h-10 w-10" />
-                  <div className="h-7 w-16 bg-muted/60 rounded" />
-                  <div className="h-4 w-24 bg-muted/60 rounded" />
+              <div key={i} className="bg-muted/50 rounded-sm px-2 py-1 animate-pulse">
+                <div className="flex flex-col items-center justify-center">
+                  <div className="bg-muted rounded-sm h-5 w-5" />
+                  <div className="h-3.5 w-10 bg-muted rounded mt-1" />
+                  <div className="h-2.5 w-14 bg-muted rounded mt-0.5" />
                 </div>
               </div>
             ))}
@@ -103,64 +86,32 @@ export default function StatsBar({ initialStats }: StatsBarProps) {
 
   return (
     <div className="border-y bg-muted/30">
-      <div className="container max-w-7xl mx-auto px-4 py-4 md:py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-medium text-muted-foreground tracking-wide uppercase">
-            Platform Statistics
-          </div>
+      <div className="container max-w-7xl mx-auto px-4 py-2">
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">Platform Statistics</div>
           <RefreshButton 
             onRefresh={async () => { await refetch(); }}
             size="icon"
             variant="ghost"
-            className="h-7 w-7 -mr-1"
-            data-testid="button-refresh-stats"
+            className="h-6 w-6 -mr-1"
           />
         </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          {stats.map((stat, index) => (
-            <div 
-              key={stat.key} 
-              className={`
-                glass-subtle card-depth-1 hover-lift transition-smooth rounded-md px-4 py-5
-                animate-slide-up animate-delay-${stat.delay}
-              `}
-              style={{
-                animationDelay: prefersReducedMotion ? '0ms' : `${stat.delay}ms`
-              }}
-            >
-              <div className="flex flex-col items-center justify-center text-center gap-3">
-                <div className="bg-gradient-primary rounded-md p-2.5 shadow-sm">
-                  <stat.icon className="h-5 w-5 md:h-6 md:w-6 text-primary-foreground" />
+        {/* Compact grid layout */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+          {stats.map((stat) => (
+            <div key={stat.key} className="bg-card/50 hover:bg-card/70 transition-colors rounded-sm px-3 py-2">
+              {/* Compact inline layout */}
+              <div className="flex flex-col items-center justify-center text-center">
+                {/* Icon */}
+                <div className="bg-primary/10 dark:bg-primary/20 rounded-sm p-1.5 flex items-center justify-center">
+                  <stat.icon className="h-4 w-4 text-primary dark:text-primary" />
                 </div>
-                
-                <div 
-                  className="text-2xl md:text-3xl font-bold leading-none tracking-tight" 
-                  data-testid={`text-stat-${stat.key}`} 
-                  suppressHydrationWarning
-                >
-                  {stat.isIncrement && "+"}
-                  {mounted && !prefersReducedMotion ? (
-                    <CountUp 
-                      end={stat.rawValue} 
-                      duration={2}
-                      separator=","
-                      useEasing={true}
-                      easingFn={(t, b, c, d) => {
-                        t /= d / 2;
-                        if (t < 1) return c / 2 * t * t + b;
-                        t--;
-                        return -c / 2 * (t * (t - 2) - 1) + b;
-                      }}
-                    />
-                  ) : (
-                    stat.rawValue.toLocaleString('en-US')
-                  )}
+                {/* Value text */}
+                <div className="text-base font-semibold leading-none mt-1.5" data-testid={`text-stat-${stat.key}`} suppressHydrationWarning>
+                  {stat.value}
                 </div>
-                
-                <div className="text-xs md:text-sm text-muted-foreground font-medium leading-tight">
-                  {stat.label}
-                </div>
+                {/* Label text */}
+                <div className="text-xs text-muted-foreground font-medium leading-tight mt-1">{stat.label}</div>
               </div>
             </div>
           ))}

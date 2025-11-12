@@ -189,12 +189,12 @@ export default function Header() {
   }, [searchSuggestions]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b glass-subtle">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between gap-4 max-w-7xl mx-auto px-4">
         <div className="flex items-center gap-6">
           <Link href="/">
-            <div className="flex items-center gap-2 hover-lift hover-elevate active-elevate-2 rounded-md px-2 py-1 cursor-pointer transition-fast" data-testid="link-home">
-              <div className="h-8 w-8 rounded-md bg-gradient-primary flex items-center justify-center">
+            <div className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1 cursor-pointer" data-testid="link-home">
+              <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
                 <MessageSquare className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="font-semibold text-lg hidden sm:inline">YoForex</span>
@@ -205,8 +205,7 @@ export default function Header() {
             <Link href="/categories">
               <Button 
                 variant={pathname === "/categories" ? "default" : "ghost"} 
-                size="sm"
-                className="hover-lift transition-fast"
+                size="sm" 
                 data-testid="button-categories"
                 aria-current={pathname === "/categories" ? "page" : undefined}
               >
@@ -216,8 +215,7 @@ export default function Header() {
             <Link href="/discussions">
               <Button 
                 variant={pathname === "/discussions" ? "default" : "ghost"} 
-                size="sm"
-                className="hover-lift transition-fast"
+                size="sm" 
                 data-testid="button-discussions"
                 aria-current={pathname === "/discussions" ? "page" : undefined}
               >
@@ -230,10 +228,10 @@ export default function Header() {
               <NavigationMenu>
                 <NavigationMenuList>
                   <NavigationMenuItem>
-                    <NavigationMenuTrigger className="h-9 text-sm font-medium hover-lift transition-fast" data-testid="button-release-ea">
+                    <NavigationMenuTrigger className="h-9 text-sm font-medium" data-testid="button-release-ea">
                       Release EA
                     </NavigationMenuTrigger>
-                    <NavigationMenuContent className="card-depth-2 animate-fade-in">
+                    <NavigationMenuContent>
                       <ul className="grid w-[500px] gap-2 p-4 md:grid-cols-2" data-testid="menu-release-categories">
                         {publishCategories.map((cat) => (
                           <li key={cat.slug}>
@@ -264,8 +262,7 @@ export default function Header() {
             <Link href="/brokers">
               <Button 
                 variant={pathname === "/brokers" ? "default" : "ghost"} 
-                size="sm"
-                className="hover-lift transition-fast"
+                size="sm" 
                 data-testid="button-broker-reviews"
                 aria-current={pathname === "/brokers" ? "page" : undefined}
               >
@@ -275,8 +272,7 @@ export default function Header() {
             <Link href="/marketplace">
               <Button 
                 variant={pathname === "/marketplace" ? "default" : "ghost"} 
-                size="sm"
-                className="hover-lift transition-fast"
+                size="sm" 
                 data-testid="button-marketplace"
                 aria-current={pathname === "/marketplace" ? "page" : undefined}
               >
@@ -286,8 +282,7 @@ export default function Header() {
             <Link href="/marketplace/publish">
               <Button 
                 variant={pathname === "/marketplace/publish" || pathname === "/publish-ea" || pathname?.startsWith("/publish-ea/") || pathname?.startsWith("/ea/") ? "default" : "ghost"} 
-                size="sm"
-                className="hover-lift transition-fast"
+                size="sm" 
                 data-testid="button-publish-ea"
                 aria-current={pathname === "/marketplace/publish" || pathname === "/publish-ea" || pathname?.startsWith("/publish-ea/") ? "page" : undefined}
               >
@@ -297,8 +292,7 @@ export default function Header() {
             <Link href="/members">
               <Button 
                 variant={pathname === "/members" ? "default" : "ghost"} 
-                size="sm"
-                className="hover-lift transition-fast"
+                size="sm" 
                 data-testid="button-members"
                 aria-current={pathname === "/members" ? "page" : undefined}
               >
@@ -315,7 +309,7 @@ export default function Header() {
               ref={searchInputRef}
               type="search"
               placeholder="Search threads, members, EAs..."
-              className="pl-9 pr-4 focus-ring transition-smooth"
+              className="pl-9 pr-4"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -328,11 +322,11 @@ export default function Header() {
             
             {/* Search Suggestions Dropdown */}
             {showSuggestions && searchSuggestions.length > 0 && (
-              <div className="absolute top-full mt-1 w-full bg-background border rounded-md card-depth-2 z-50 animate-slide-up">
+              <div className="absolute top-full mt-1 w-full bg-background border rounded-md shadow-lg z-50">
                 {searchSuggestions.map((suggestion, index) => (
                   <button
                     key={index}
-                    className={`w-full text-left px-4 py-2 hover:bg-accent transition-fast ${
+                    className={`w-full text-left px-4 py-2 hover:bg-accent ${
                       index === selectedSuggestion ? 'bg-accent' : ''
                     }`}
                     onClick={() => handleSearch(suggestion)}
@@ -373,13 +367,13 @@ export default function Header() {
               <CoinBalanceWidget />
               
               <Link href="/messages">
-                <Button variant="ghost" size="icon" className="hover-lift transition-fast" data-testid="button-messages">
+                <Button variant="ghost" size="icon" data-testid="button-messages">
                   <MessageSquare className="h-5 w-5" />
                 </Button>
               </Link>
               
               <Link href="/notifications">
-                <Button variant="ghost" size="icon" className="hidden md:flex relative hover-lift transition-fast" data-testid="button-notifications">
+                <Button variant="ghost" size="icon" className="hidden md:flex relative" data-testid="button-notifications">
                   <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (
                     <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs" data-testid="badge-unread-count">
@@ -396,14 +390,14 @@ export default function Header() {
           ) : isAuthenticated && user ? (
             <DropdownMenu open={isProfileDropdownOpen} onOpenChange={setIsProfileDropdownOpen}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full hover-lift transition-fast" data-testid="button-user-menu">
+                <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user.profileImageUrl || undefined} alt={user.username} />
                     <AvatarFallback>{(user.firstName?.[0] || user.username?.[0] || 'U').toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 glass-card animate-fade-in">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel data-testid="text-user-name">
                   {user.firstName && user.lastName 
                     ? `${user.firstName} ${user.lastName}` 
@@ -411,7 +405,7 @@ export default function Header() {
                 </DropdownMenuLabel>
                 <div className="px-2 py-3 border-b">
                   <Link href="/recharge">
-                    <div className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-accent cursor-pointer transition-fast">
+                    <div className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-accent cursor-pointer transition-colors">
                       <div className="flex items-center gap-2">
                         <Coins className="h-5 w-5 text-yellow-500" />
                         <span className="font-semibold">{userCoins.toLocaleString()}</span>
@@ -470,19 +464,19 @@ export default function Header() {
           {/* Mobile Menu */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden hover-lift transition-fast" data-testid="button-menu">
+              <Button variant="ghost" size="icon" className="md:hidden" data-testid="button-menu">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[300px] sm:w-[400px] transition-smooth">
+            <SheetContent side="right" className="w-[300px] sm:w-[400px]">
               <SheetHeader>
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
-              <div className="flex flex-col gap-[var(--spacing-md)] mt-6">
+              <div className="flex flex-col gap-4 mt-6">
                 {/* User Profile Section */}
                 {isAuthenticated && user && (
                   <>
-                    <div className="flex items-center gap-[var(--spacing-sm)] p-[var(--spacing-sm)] rounded-lg bg-muted">
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={user.profileImageUrl || undefined} alt={user.username} />
                         <AvatarFallback>{(user.firstName?.[0] || user.username?.[0] || 'U').toUpperCase()}</AvatarFallback>
@@ -497,7 +491,7 @@ export default function Header() {
                     </div>
                     
                     <Link href="/recharge" onClick={() => setMobileMenuOpen(false)}>
-                      <div className="flex items-center justify-between gap-2 p-[var(--spacing-sm)] rounded-md bg-primary/10 border border-primary/20 hover:bg-primary/20 cursor-pointer transition-fast">
+                      <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-primary/10 border border-primary/20 hover:bg-primary/20 cursor-pointer transition-colors">
                         <div className="flex items-center gap-2">
                           <Coins className="h-5 w-5 text-yellow-500" />
                           <span className="font-semibold">{userCoins.toLocaleString()} coins</span>

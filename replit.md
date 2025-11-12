@@ -66,6 +66,36 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### Production Site Failure Fix (Nov 12, 2025)
+**✅ RESOLVED** - Complete production site failure where everything showed skeleton boxes
+
+**Root Causes Identified & Fixed:**
+1. **CSP Blocking Next.js Scripts** - Express was applying strict CSP (`script-src 'self'`) globally, blocking Next.js inline scripts required for hydration
+   - **Fix**: Disabled global CSP in `server/middleware/securityHeaders.ts`, only apply strict CSP to `/api/*` routes
+   
+2. **Architecture Misconfiguration** - Next.js running on port 5000 but Express proxying to port 3000
+   - **Fix**: Reconfigured `start-hybrid.sh` so Next.js runs on port 3000 (internal) and Express on port 5000 (user-facing)
+   
+3. **AppProviders Timeout** - Auth fetch causing production hangs
+   - **Fix**: Added 3-second AbortController timeout to `app/components/providers/AppProviders.tsx`
+   
+4. **Infinite Render Loop** - `useSearchParams()` in dependency array of MarketplaceEnhanced
+   - **Fix**: Removed problematic `useSearchParams` hook and URL sync effect from `app/marketplace/MarketplaceEnhanced.tsx`
+
+**Files Modified:**
+- `server/middleware/securityHeaders.ts` - Disabled global CSP, strict CSP only on API routes
+- `start-hybrid.sh` - Fixed port architecture (Next.js:3000 internal, Express:5000 user-facing)
+- `app/components/providers/AppProviders.tsx` - Added auth fetch timeout
+- `app/marketplace/MarketplaceEnhanced.tsx` - Removed useSearchParams dependency issue
+
+**Verification:**
+- Homepage: ✅ Rendering perfectly
+- Marketplace: ✅ Data loading (39 items, isLoading: false confirmed in logs)
+- API: ✅ All endpoints returning 200 OK
+- CSP: ✅ No longer blocking inline scripts
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
@@ -82,7 +112,7 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
     -   **Retention & Monitoring:** Retention Dashboard with loyalty tiers, badges, AI nudges, abandonment emails, and an Error Tracking & Monitoring System.
     -   **AI Integration:** Gemini AI for SEO content suggestions and bot engagement.
     -   **Messaging System:** Comprehensive private messaging with attachments, reactions, read receipts, typing indicators, full-text search, moderation, and real-time WebSocket updates.
-    -   **Notification System:** Comprehensive infrastructure with dual delivery (WebSocket + Email) and real-time updates.
+    **Notification System:** Comprehensive infrastructure with dual delivery (WebSocket + Email) and real-time updates.
     -   **Feature Flag System:** Enterprise-grade feature flags for controlled rollouts, including tri-state status, in-memory caching, "Coming Soon" pages, and admin dashboard controls.
     -   **Admin Dashboards:** Real-time analytics, user/marketplace/content management, security, communications, support, and audit logging.
     -   **Operational Automation:** Critical cron jobs for coin expiration, fraud detection, treasury snapshots, balance reconciliation, error cleanup, coin health monitoring, and error growth monitoring.
