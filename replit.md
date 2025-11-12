@@ -100,7 +100,41 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
-### November 12, 2025 - Autoscale Deployment Fix (FINAL - Production Ready)
+### November 12, 2025 - Production Routing Loop Fix (CRITICAL)
+
+**Issue:** Only homepage loaded on yoforex.net after deployment - all other pages (like /marketplace) failed to load
+
+**Root Cause:**
+- EXPRESS_URL was set to `http://127.0.0.1:5000` (the proxy port) in production
+- This created circular routing: User → Express (5000) → Next.js (3000) → API call rewrites to EXPRESS_URL (5000) → Loop
+- Homepage worked because it doesn't make API calls during initial render
+
+**Fix Applied:**
+
+1. **Dual-Port Architecture** (`start-production.sh` + `server/index.ts`)
+   - Port 5000: Main proxy server (user-facing, Autoscale health checks, WebSocket)
+   - Port 3001: API-only server (internal, for Next.js rewrites)
+   - Set `EXPRESS_URL=http://127.0.0.1:3001` to point to internal API port
+   - Both ports use same Express app instance (no duplication)
+
+2. **Production Flow (Fixed):**
+   ```
+   User → yoforex.net
+     ↓
+   Express :5000 (proxy) → Next.js :3000
+     ↓
+   Page loads → Makes API call → Rewrites to EXPRESS_URL
+     ↓
+   http://127.0.0.1:3001 (API server) → Returns data ✅
+     ↓
+   Page renders successfully!
+   ```
+
+**Status:** Architect-approved, production-ready
+
+---
+
+### November 12, 2025 - Autoscale Deployment Fix (Entrypoint Detection)
 
 **Critical Issue:** Deployment failing with "Port 5000 not opening quickly enough for Autoscale health checks"
 
