@@ -305,6 +305,22 @@ async function startServer() {
           lightweightApp.use(fullApp);
           log('[STARTUP] Full application loaded and mounted');
           
+          // PRODUCTION FIX: Create second HTTP server on API_PORT for Next.js internal API calls
+          // This prevents Next.js rewrite loops where /api/* calls circle back through the proxy
+          const apiPort = parseInt(process.env.API_PORT || '3001', 10);
+          if (process.env.NODE_ENV === 'production' && apiPort !== port) {
+            const apiServer = createServer(fullApp);
+            apiServer.listen(apiPort, '127.0.0.1', () => {
+              log(`[STARTUP] API server listening on http://127.0.0.1:${apiPort} (for Next.js rewrites)`);
+            });
+            
+            // Close API server when main server closes
+            httpServer.on('close', () => {
+              log('[SHUTDOWN] Closing API server on port ' + apiPort);
+              apiServer.close();
+            });
+          }
+          
           // Wire WebSocket upgrade handler for Next.js dev tools/HMR
           const nextJsUpgradeTarget = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
           const nextJsUpgradeProxy = createProxyMiddleware({

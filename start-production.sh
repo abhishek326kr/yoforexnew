@@ -36,7 +36,10 @@ echo "✅ Production builds verified"
 # Set environment variables
 # CRITICAL: Force PORT to 5000 for Autoscale (overrides any Replit defaults)
 export PORT=5000
-export EXPRESS_URL=${EXPRESS_URL:-http://127.0.0.1:5000}
+# CRITICAL FIX: EXPRESS_URL must point to internal API port (3001), NOT the proxy port (5000)
+# This prevents Next.js rewrite loops where /api/* calls circle back through the proxy
+export EXPRESS_URL=http://127.0.0.1:3001
+export API_PORT=3001
 export NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://$REPL_SLUG.$REPL_OWNER.repl.co}
 export NODE_ENV=production
 export NEXTJS_PORT=3000
@@ -44,8 +47,9 @@ export NEXT_INTERNAL_URL=http://127.0.0.1:3000
 
 # Log environment for debugging
 echo "📋 Environment Configuration:"
-echo "   PORT=$PORT (FORCED for Autoscale - Express binds here)"
-echo "   EXPRESS_URL=$EXPRESS_URL (Express on port 5000)"
+echo "   PORT=$PORT (FORCED for Autoscale - Express proxy binds here)"
+echo "   API_PORT=$API_PORT (Internal API port for Next.js rewrites)"
+echo "   EXPRESS_URL=$EXPRESS_URL (Next.js calls APIs here - MUST be :3001 to avoid loops)"
 echo "   NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL"
 echo "   NODE_ENV=$NODE_ENV"
 echo "   NEXTJS_PORT=$NEXTJS_PORT (internal)"
