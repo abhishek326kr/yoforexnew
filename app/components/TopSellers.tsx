@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, Star, Coins, TrendingUp } from "lucide-react";
+import { Trophy, Star, Coins, TrendingUp, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import { RefreshButton } from "./RefreshButton";
 
@@ -45,28 +45,35 @@ function TopSellers() {
 
   const topSellers = data?.topSellers?.slice(0, 5) || [];
 
+  const getAnimationDelay = (index: number) => {
+    const delays = [0, 50, 100, 150, 200];
+    return delays[index] || 200;
+  };
+
   const getRankBadge = (index: number) => {
     const badges = [
-      { bg: "bg-amber-500", text: "text-white" },
-      { bg: "bg-slate-400", text: "text-white" },
-      { bg: "bg-orange-600", text: "text-white" },
-      { bg: "bg-blue-500", text: "text-white" },
-      { bg: "bg-indigo-500", text: "text-white" },
+      { bg: "bg-amber-500", text: "text-white", shadow: "shadow-md" },
+      { bg: "bg-slate-400", text: "text-white", shadow: "shadow-md" },
+      { bg: "bg-orange-600", text: "text-white", shadow: "shadow-md" },
+      { bg: "bg-blue-500", text: "text-white", shadow: "shadow-sm" },
+      { bg: "bg-indigo-500", text: "text-white", shadow: "shadow-sm" },
     ];
     const badge = badges[index] || badges[4];
     return (
-      <div className={`absolute -top-1 -left-1 w-4 h-4 rounded-full flex items-center justify-center ${badge.bg} ${badge.text} text-[10px] font-bold shadow-sm`}>
+      <div className={`absolute -top-1 -left-1 w-4 h-4 rounded-full flex items-center justify-center ${badge.bg} ${badge.text} ${badge.shadow} text-[10px] font-bold`}>
         {index + 1}
       </div>
     );
   };
 
   return (
-    <Card className="border-0 shadow-sm">
-      <CardHeader className="pb-3">
+    <Card className="card-depth-1 transition-smooth">
+      <CardHeader className="glass-subtle pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-500" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/10">
+              <Trophy className="w-4 h-4 text-amber-500" />
+            </div>
             Top Sellers
           </CardTitle>
           <div className="flex items-center gap-1">
@@ -87,7 +94,11 @@ function TopSellers() {
         {isLoading ? (
           // Loading skeleton
           Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="flex items-center gap-3 py-2 px-2.5">
+            <div 
+              key={index} 
+              className="flex items-center gap-3 py-2 px-2.5 glass-subtle animate-pulse rounded-lg"
+              style={{ animationDelay: `${getAnimationDelay(index)}ms` }}
+            >
               <Skeleton className="w-10 h-10 rounded-md" />
               <div className="flex-1 space-y-2">
                 <Skeleton className="h-4 w-3/4" />
@@ -101,14 +112,24 @@ function TopSellers() {
           ))
         ) : topSellers.length === 0 ? (
           // Empty state
-          <div className="text-center py-8 text-sm text-muted-foreground">
-            No content available yet
+          <div className="text-center py-12">
+            <div className="flex justify-center mb-3">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                <ShoppingBag className="w-6 h-6 text-muted-foreground" />
+              </div>
+            </div>
+            <p className="text-sm font-medium text-foreground">No sellers yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Check back soon for top content</p>
           </div>
         ) : (
           // Content items
           topSellers.map((item, index) => (
             <Link key={item.id} href={item.fullUrl || `/content/${item.slug}`} data-testid={`link-seller-${item.id}`}>
-              <div className="flex items-center gap-3 py-2 px-2.5 rounded-lg hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-seller-${item.id}`}>
+              <div 
+                className="flex items-center gap-3 py-2 px-2.5 rounded-lg transition-smooth hover-elevate hover-lift active-elevate-2 cursor-pointer animate-slide-up" 
+                data-testid={`card-seller-${item.id}`}
+                style={{ animationDelay: `${getAnimationDelay(index)}ms` }}
+              >
                 <div className="flex-shrink-0 relative">
                   <Avatar className="w-10 h-10 rounded-md">
                     <AvatarImage src={item.postLogoUrl || undefined} alt={item.title} />
@@ -139,7 +160,7 @@ function TopSellers() {
 
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   {item.isFree ? (
-                    <Badge variant="secondary" className="text-[11px] h-5 px-1.5 font-semibold text-green-600">
+                    <Badge variant="secondary" className="text-[11px] px-1.5 font-semibold text-green-600">
                       FREE
                     </Badge>
                   ) : (
@@ -148,7 +169,7 @@ function TopSellers() {
                       <span>{item.priceCoins}</span>
                     </div>
                   )}
-                  <Badge variant="secondary" className="text-[11px] h-5 px-1.5 font-normal">
+                  <Badge variant="secondary" className="text-[11px] px-1.5 font-normal">
                     <TrendingUp className="w-2.5 h-2.5 mr-0.5" />
                     {item.totalSales} sales
                   </Badge>
