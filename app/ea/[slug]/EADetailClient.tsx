@@ -30,7 +30,14 @@ import {
   AlertCircle,
   CheckCircle,
   ArrowLeft,
-  Package
+  Package,
+  TrendingUp,
+  Award,
+  Shield,
+  Zap,
+  ChevronRight,
+  BarChart3,
+  Clock
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -175,9 +182,111 @@ export default function EADetailClient({ ea, similarEAs }: EADetailClientProps) 
             </Button>
           </Link>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Sidebar - Discovery & Context */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Categories Navigation */}
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Browse Categories
+                  </h3>
+                  <div className="space-y-1">
+                    {[
+                      { name: "Trend Following", count: 45 },
+                      { name: "Scalping", count: 32 },
+                      { name: "Grid Trading", count: 28 },
+                      { name: "Martingale", count: 15 },
+                      { name: "News Trading", count: 12 }
+                    ].map((cat) => (
+                      <Link key={cat.name} href={`/marketplace?category=${encodeURIComponent(cat.name)}`}>
+                        <button className="w-full text-left px-3 py-2 text-sm rounded-md hover-elevate active-elevate-2 flex items-center justify-between group">
+                          <span className="flex items-center gap-2">
+                            <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            {cat.name}
+                          </span>
+                          <Badge variant="secondary" className="text-xs">{cat.count}</Badge>
+                        </button>
+                      </Link>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Trending EAs */}
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    Trending This Week
+                  </h3>
+                  <div className="space-y-3">
+                    {similarEAs.slice(0, 3).map((item) => (
+                      <Link key={item.id} href={`/ea/${item.slug}`}>
+                        <div className="flex gap-2 p-2 rounded-md hover-elevate active-elevate-2 cursor-pointer">
+                          <div className="w-12 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
+                            <img
+                              src={item.imageUrls?.[0] || "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=100&h=100&fit=crop"}
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium line-clamp-2 mb-1">{item.title}</p>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Coins className="h-3 w-3" />
+                              {item.priceCoins}
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  <Link href="/marketplace?sort=trending">
+                    <Button variant="ghost" size="sm" className="w-full mt-3">
+                      View All <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+
+              {/* Trust Indicators */}
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Why Buy Here?
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 text-xs">
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Verified Sellers</p>
+                        <p className="text-muted-foreground">All sellers are verified</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 text-xs">
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Secure Payments</p>
+                        <p className="text-muted-foreground">Safe coin transactions</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 text-xs">
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Instant Delivery</p>
+                        <p className="text-muted-foreground">Download immediately</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-7 space-y-6">
               {/* Header */}
               <Card>
                 <CardContent className="p-6 space-y-4">
