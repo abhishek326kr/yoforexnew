@@ -67,6 +67,31 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### November 12, 2025 - EA Auto-Approval & Deployment Architecture Fix
+
+**EA Marketplace Critical Fix:**
+- **Issue:** All published EAs had `status='pending'` instead of `'approved'`, causing empty marketplace
+- **Root Cause:** `ContentStorage.createContent()` wasn't passing `status` field to database INSERT
+- **Fix:** Added `status: insertContent.status || 'approved'` to line 65 in `server/storage/domains/content.ts`
+- **Result:** All 18 existing EAs updated to approved, marketplace now displays listings
+- **Files Modified:** `server/storage/domains/content.ts`
+
+**Deployment Architecture for Autoscale:**
+- **Issue:** Sequential startup delays (15+ seconds) caused Autoscale health check timeouts
+- **Solution:** Redesigned production architecture to bind port 5000 immediately
+  - Express now runs on port 5000 (external, user-facing)
+  - Next.js runs on port 3000 (internal only)
+  - Express proxies all non-API traffic to Next.js via `http-proxy-middleware`
+  - Added process monitor that exits both processes if either fails
+  - Removed all startup delays (sleep commands)
+- **Files Modified:**
+  - `start-production.sh` - New startup sequence with process monitoring
+  - `server/index.ts` - Added Next.js proxy configuration with WebSocket support
+- **Result:** Port 5000 opens in ~3 seconds instead of 15+, preventing Autoscale timeouts
+- **Next Steps:** Deploy to Autoscale and verify EA publishing end-to-end
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
