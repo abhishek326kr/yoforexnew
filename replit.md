@@ -100,6 +100,56 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
+### November 12, 2025 - Autoscale Build Failure Fix (CRITICAL - DEPLOYMENT BLOCKER)
+
+**Issue:** Nothing loaded on yoforex.net after clicking "Publish" - complete deployment failure
+
+**Root Cause:**
+- `next.config.js` threw an error during Autoscale build phase if `EXPRESS_URL` was not set
+- Autoscale build command (`npm run build`) doesn't have `EXPRESS_URL` available
+- `start-production.sh` only sets `EXPRESS_URL` at runtime (AFTER build completes)
+- Result: Build fails → No deployment → Blank site
+
+**Fix Applied:**
+
+1. **next.config.js - Replit-Specific Build Support**
+   - Added detection for Replit deployments: `process.env.REPLIT_DEPLOYMENT || process.env.REPL_ID`
+   - For Replit/Autoscale: Allow build with default `http://127.0.0.1:3001` (matches runtime config)
+   - For non-Replit production: Still throws error to prevent misconfiguration
+   - Includes clear warnings explaining default usage during build phase
+
+2. **start-production.sh - Runtime Environment Validation**
+   - Added validation step before starting services
+   - Verifies `EXPRESS_URL=http://127.0.0.1:3001` (warns if incorrect)
+   - Verifies `PORT=5000` (fails if incorrect)
+   - Ensures dual-port architecture is properly configured
+
+3. **app/ea/[slug]/EADetailClient.tsx - Text Overflow Fix**
+   - Added `truncate` and `max-w-[200px]` to category badges
+   - Added `break-words` to EA titles
+   - Fixed text overflow in Quick Info section
+
+**Production Deployment Flow (Fixed):**
+```
+Autoscale Build Phase:
+  npm run build
+    → next.config.js detects REPLIT_DEPLOYMENT ✅
+    → Uses default EXPRESS_URL (build succeeds) ✅
+    → Creates dist/index.js and .next/BUILD_ID ✅
+
+Autoscale Runtime Phase:
+  npm run start
+    → bash start-production.sh
+    → Validates environment (PORT=5000, EXPRESS_URL=3001) ✅
+    → Starts Express on port 5000 (health checks) ✅
+    → Starts Next.js on port 3000 (proxied) ✅
+    → Site loads correctly on yoforex.net ✅
+```
+
+**Status:** Architect-approved, production-ready
+
+---
+
 ### November 12, 2025 - Production Routing Loop Fix (CRITICAL)
 
 **Issue:** Only homepage loaded on yoforex.net after deployment - all other pages (like /marketplace) failed to load
