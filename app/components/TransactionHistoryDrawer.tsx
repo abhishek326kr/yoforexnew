@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Minus, Clock, Calendar, Filter } from "lucide-react";
+import { Plus, Minus, Clock, Calendar, Filter, Coins } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDistance } from "date-fns";
@@ -202,19 +202,27 @@ export default function TransactionHistoryDrawer({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3 py-4">
+                <div className="space-y-2 py-4">
                   {transactions.map((transaction) => (
                     <div
                       key={transaction.id}
-                      className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
+                      className="flex items-center gap-3 p-4 rounded-md hover-elevate border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50"
                       data-testid={`transaction-row-${transaction.id}`}
                     >
-                      <div className="flex-shrink-0 mt-1">
-                        {getTransactionIcon(transaction.type)}
+                      <div className="flex-shrink-0">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          transaction.type === 'earn' 
+                            ? 'bg-green-100 dark:bg-green-900/30'
+                            : transaction.type === 'spend'
+                            ? 'bg-red-100 dark:bg-red-900/30'
+                            : 'bg-orange-100 dark:bg-orange-900/30'
+                        }`}>
+                          {getTransactionIcon(transaction.type)}
+                        </div>
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-1">
                           {transaction.description}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -224,16 +232,24 @@ export default function TransactionHistoryDrawer({
                         </p>
                       </div>
 
-                      <div className="flex-shrink-0 text-right">
-                        <p
-                          className={`text-sm font-semibold ${getTransactionColor(
-                            transaction.type
-                          )}`}
-                        >
-                          {getAmountPrefix(transaction.type)}
-                          {Math.abs(transaction.amount).toLocaleString()}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">coins</p>
+                      <div className="flex-shrink-0">
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md ${
+                          transaction.type === 'earn'
+                            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                            : transaction.type === 'spend'
+                            ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                            : 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
+                        }`}>
+                          <Coins className={`h-4 w-4 ${getTransactionColor(transaction.type)}`} />
+                          <span
+                            className={`text-base font-bold ${getTransactionColor(
+                              transaction.type
+                            )}`}
+                          >
+                            {getAmountPrefix(transaction.type)}
+                            {Math.abs(transaction.amount).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
