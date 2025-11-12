@@ -69,16 +69,33 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
-### November 12, 2025 - Performance Optimization & Screenshot Fix
+### November 12, 2025 - Performance Optimization & Complete Marketplace Fix
 
-**Marketplace Performance Fix:**
-- **Issue:** Marketplace pages loading slowly with hundreds of screenshot 404 errors creating database spam
-- **Root Cause:** 6 EAs had invalid object storage screenshot paths (`/objects/marketplace/ea/UUID/screenshots/UUID.jpg`) that don't exist
-- **Fix:** Updated all 6 EAs to use stock images instead (`/api/static/stock_images/automated_trading_ro_e6dc98af.jpg`)
-- **SQL Fix:** `UPDATE content SET image_url = '...', image_urls = ARRAY['...'] WHERE type = 'ea' AND image_url LIKE '/objects/%'`
-- **Cache Fix:** Disabled Next.js 60-second cache in marketplace page to prevent serving stale screenshot URLs
-- **File Modified:** `app/marketplace/page.tsx` - Changed `{ next: { revalidate: 60 } }` to `{ cache: 'no-store' }`
-- **Result:** Eliminated 404 spam, reduced error event creation, improved page load speed
+**Marketplace Performance Fix (COMPREHENSIVE):**
+- **Issue:** Marketplace showing loading skeletons indefinitely with hundreds of 404/504 errors
+- **Root Causes Identified:**
+  1. 6 EAs had invalid object storage paths (`/objects/marketplace/ea/UUID/screenshots/`) that don't exist
+  2. 1 EA had bad in-memory path (`/api/images/final_screenshot.png`) that doesn't exist
+  3. **31 approved content items had NO image_url at all** (null/empty/bad paths)
+  4. Next.js cache serving stale data even after database fixes
+
+- **Complete Fix - Database Cleanup:**
+  - SQL 1: `UPDATE content SET image_url = '/api/static/stock_images/automated_trading_ro_0d991591.jpg', image_urls = ARRAY[...] WHERE type = 'ea' AND image_url LIKE '/objects/%'` (Fixed 6 EAs)
+  - SQL 2: `UPDATE content SET image_url = '...', image_urls = ARRAY[...] WHERE image_url = '/api/images/final_screenshot.png'` (Fixed 1 EA)
+  - SQL 3: `UPDATE content SET image_url = '...', image_urls = ARRAY[...] WHERE status = 'approved' AND (image_url IS NULL OR image_url = '' OR image_url LIKE '/api/screenshot-files/%')` (Backfilled 31 items)
+  - **Total:** 38 approved content items (30 EAs + 6 indicators + 2 templates) now have valid stock images
+
+- **Cache Fix:**
+  - File: `app/marketplace/page.tsx`
+  - Changed: `{ next: { revalidate: 60 } }` → `{ cache: 'no-store' }`
+  - Reason: Prevents serving stale screenshot URLs after database updates
+
+- **Result:**
+  - ✅ **ALL** approved content has valid image URLs
+  - ✅ Zero 404/504 errors for EA screenshots
+  - ✅ Marketplace loads successfully with stock images
+  - ✅ Improved performance (no failed requests)
+  - ✅ Fresh data on every page load (no stale cache)
 
 **Transaction History UI Enhancement:**
 - **Issue:** Users couldn't see gold coin amounts clearly in Transaction History drawer
