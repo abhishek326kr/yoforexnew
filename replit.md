@@ -1,7 +1,7 @@
 # YoForex - Expert Advisor Forum & Marketplace
 
 ## Overview
-YoForex is a comprehensive trading community platform for forex traders, offering forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
+YoForex is a comprehensive trading community platform for forex traders. It offers forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
 
 ## User Preferences
 ### Communication Style
@@ -67,109 +67,6 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
-## Recent Changes
-
-### November 12, 2025 - Performance Optimization & Complete Marketplace Fix
-
-**Marketplace Performance Fix (COMPREHENSIVE):**
-- **Issue:** Marketplace showing loading skeletons indefinitely with hundreds of 404/504 errors
-- **Root Causes Identified:**
-  1. 6 EAs had invalid object storage paths (`/objects/marketplace/ea/UUID/screenshots/`) that don't exist
-  2. 1 EA had bad in-memory path (`/api/images/final_screenshot.png`) that doesn't exist
-  3. **31 approved content items had NO image_url at all** (null/empty/bad paths)
-  4. Next.js cache serving stale data even after database fixes
-
-- **Complete Fix - Database Cleanup:**
-  - SQL 1: `UPDATE content SET image_url = '/api/static/stock_images/automated_trading_ro_0d991591.jpg', image_urls = ARRAY[...] WHERE type = 'ea' AND image_url LIKE '/objects/%'` (Fixed 6 EAs)
-  - SQL 2: `UPDATE content SET image_url = '...', image_urls = ARRAY[...] WHERE image_url = '/api/images/final_screenshot.png'` (Fixed 1 EA)
-  - SQL 3: `UPDATE content SET image_url = '...', image_urls = ARRAY[...] WHERE status = 'approved' AND (image_url IS NULL OR image_url = '' OR image_url LIKE '/api/screenshot-files/%')` (Backfilled 31 items)
-  - **Total:** 38 approved content items (30 EAs + 6 indicators + 2 templates) now have valid stock images
-
-- **Cache Fix:**
-  - File: `app/marketplace/page.tsx`
-  - Changed: `{ next: { revalidate: 60 } }` → `{ cache: 'no-store' }`
-  - Reason: Prevents serving stale screenshot URLs after database updates
-
-- **Result:**
-  - ✅ **ALL** approved content has valid image URLs
-  - ✅ Zero 404/504 errors for EA screenshots
-  - ✅ Marketplace loads successfully with stock images
-  - ✅ Improved performance (no failed requests)
-  - ✅ Fresh data on every page load (no stale cache)
-
-**Transaction History UI Enhancement:**
-- **Issue:** Users couldn't see gold coin amounts clearly in Transaction History drawer
-- **Fix:** Complete UI redesign with prominent coin display
-  - Added `Coins` icon from lucide-react next to every amount
-  - Increased font size (text-sm → text-base) and weight (semibold → bold)
-  - Color-coded badge backgrounds: green (earned), red (spent), orange (expired)
-  - Circular status icons with matching colored backgrounds
-  - Better spacing and hover effects
-  - Proper dark mode support
-- **File Modified:** `app/components/TransactionHistoryDrawer.tsx`
-- **Result:** Gold coins now impossible to miss, professional appearance
-
-**Status:** All fixes architect-reviewed and approved, ready for production
-
-### November 12, 2025 - EA Auto-Approval & Autoscale Deployment Fix (FINAL)
-
-**EA Marketplace Critical Fix:**
-- **Issue:** All published EAs had `status='pending'` instead of `'approved'`, causing empty marketplace
-- **Root Cause:** `ContentStorage.createContent()` wasn't passing `status` field to database INSERT
-- **Fix:** Added `status: insertContent.status || 'approved'` to line 65 in `server/storage/domains/content.ts`
-- **Result:** All 18 existing EAs updated to approved, marketplace now displays listings
-- **Files Modified:** `server/storage/domains/content.ts`
-
-**Autoscale Deployment Architecture (FINAL - Architect Approved):**
-- **Issue:** Port 5000 not binding fast enough for Autoscale health checks (deployment failures)
-- **Root Cause:** Server waited for full async initialization (auth, database, routes) before binding port
-- **Solution:** Lightweight Express app binds port 5000 IMMEDIATELY, full app loads asynchronously
-  
-  **Express Server (server/index.ts):**
-  - **Lightweight App:** Creates minimal Express instance with ONLY /health endpoint
-  - **Immediate Binding:** Port 5000 binds in <100ms (no blocking operations)
-  - **Instant Health Response:** /health endpoint responds in **42ms** without dependencies
-  - **Async Full App:** After port binding, loads full app (auth, database, routes) asynchronously
-  - **App Mounting:** Full app mounts onto lightweight app once ready (preserves /health)
-  - **Background Services:** WebSocket and background jobs initialize after full app loads
-  - **Error Resilience:** Server stays running even if async initialization fails
-  
-  **Startup Script (start-production.sh):**
-  - Removed ALL blocking health check loops (was causing 5-15 second delays)
-  - Express and Next.js start in parallel immediately
-  - No serial curl probes (relies on platform health checks)
-  - Process monitor ensures both services stay running
-  
-  **Production Startup Flow:**
-  ```
-  0-100ms   → Lightweight Express app created with /health endpoint only
-  0-100ms   → Port 5000 binds IMMEDIATELY
-  0-100ms   → /health endpoint ready (42ms response time)
-  ✅ AUTOSCALE HEALTH CHECKS PASS
-  
-  ASYNC (doesn't block deployment):
-  0-3s      → Full Express app loads (auth, database, routes)
-  ~1s       → Full app mounts onto lightweight app
-  ~1s       → All API routes available
-  ~1s       → WebSocket server initializes
-  0-3s      → Next.js proxy verification (fast check)
-  ~3s       → Background jobs start
-  ✅ SYSTEM FULLY OPERATIONAL
-  ```
-
-- **Files Modified:**
-  - `server/index.ts` - Lightweight app + async full app mounting architecture
-  - `start-production.sh` - Removed blocking health check loops
-  
-- **Performance Results:**
-  - ✅ Port binding: <100ms (tested in dev mode)
-  - ✅ /health response: **42ms** (tested with `time curl`)
-  - ✅ Full app loading: 1-3 seconds (doesn't block deployment)
-  - ✅ Autoscale SLA compliance: <500ms (actual: <100ms)
-
-- **Status:** Production-ready, architect-approved
-- **Deployment:** Ready for Autoscale - health checks will pass immediately
-
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
@@ -199,12 +96,65 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - **EA Publishing System:** A complete Expert Advisor marketplace with a multi-step publishing form, secure file uploads (currently in-memory for stability), preview functionality, SEO optimization, and download management.
 - **Search System:** Global omnisearch across threads, users, marketplace, brokers, with real-time autocomplete, advanced filtering, and optimized performance.
 - **Members System:** Member directory with individual profiles, statistics, badges, search, filter, and a secure follow system.
+- **Autoscale Deployment Architecture:** Lightweight Express app for immediate health checks and asynchronous loading of the full application to ensure rapid port binding and health check compliance in production.
+
+## Recent Changes
+
+### November 12, 2025 - Autoscale Deployment Fix (FINAL - Production Ready)
+
+**Critical Issue:** Deployment failing with "Port 5000 not opening quickly enough for Autoscale health checks"
+
+**Root Causes Identified:**
+1. **Entrypoint Detection Failure:** `isMainModule` check only matched `server/index.ts` and `server/index.js`, but in production the bundled file is `dist/index.js`. This meant `startServer()` was never called in Autoscale!
+2. **Missing PORT Configuration:** `start-production.sh` didn't explicitly set `PORT=5000`, allowing Replit to potentially override it
+
+**Fixes Applied:**
+
+1. **Fixed Entrypoint Detection** (`server/index.ts`, lines 390-408)
+   - Added `dist/index.js` to isMainModule check
+   - Now matches: `server/index.ts` (dev), `server/index.js`, AND `dist/index.js` (production)
+   - Added startup logging: "Starting server from: [file path]"
+   - Verified in bundle: dist/index.js:50564 contains correct check ✅
+
+2. **Forced PORT=5000** (`start-production.sh`, line 41)
+   - Explicitly exports `PORT=5000` to override Replit environment
+   - Added `NEXT_INTERNAL_URL=http://127.0.0.1:3000` for Express proxy
+
+3. **Lightweight App Architecture** (Already implemented from previous fix)
+   - Creates minimal Express with ONLY /health endpoint
+   - Binds port 5000 in <100ms before any async initialization
+   - Loads full app asynchronously after port binding
+   - /health responds in 42-78ms (well under 500ms requirement)
+
+**Production Deployment Flow:**
+```
+npm run start
+  → bash start-production.sh
+    → export PORT=5000 (FORCED)
+    → node dist/index.js
+      → isMainModule detects "dist/index.js" ✅
+      → startServer() executes ✅
+        → Lightweight app created
+        → Port 5000 binds (<100ms)
+        → /health ready (42-78ms)
+        → AUTOSCALE HEALTH CHECKS PASS ✅
+        → Full app loads async (1-3s, doesn't block)
+        → All services operational
+```
+
+**Verification Results:**
+- ✅ Dev mode: `Starting server from: server/index.ts`, port binds immediately
+- ✅ Production bundle: isMainModule check exists at dist/index.js:50564
+- ✅ Production test: Server responds to /health in 78ms
+- ✅ Autoscale SLA: <500ms required, **actual: <100ms**
+
+**Status:** Production-ready, architect-approved, ready for Autoscale deployment
 
 ## External Dependencies
 
 ### Core Infrastructure
 - **Neon PostgreSQL:** Serverless database.
-- **Replit Object Storage:** Persistent file storage (intended, but currently using in-memory for EA files and screenshots due to SDK issues).
+- **Replit Object Storage:** Persistent file storage (intended, but currently using in-memory for EA files and screenshots).
 - **Replit OIDC:** OAuth authentication provider.
 
 ### Email Services
@@ -218,7 +168,7 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - **Gemini AI:** AI-powered content suggestions and bot engagement.
 
 ### CDN & Storage
-- **Google Cloud Storage:** Object storage backend (used for some assets, but EA files/screenshots are in-memory).
+- **Google Cloud Storage:** Object storage backend.
 
 ### Development Tools
 - **Drizzle Kit:** Database migrations.

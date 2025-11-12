@@ -385,13 +385,21 @@ async function startServer() {
 }
 
 // Only start the server if this file is run directly (not imported by tests)
-// In ES modules, we check import.meta.url instead of require.main
-const isMainModule = process.argv[1]?.endsWith('server/index.ts') || 
-                     process.argv[1]?.endsWith('server/index.js');
+// PRODUCTION FIX: Check for both server/index.(ts|js) AND dist/index.js
+// - Development: tsx runs server/index.ts
+// - Production: node runs dist/index.js (esbuild bundle)
+// - Tests: import this file without running server
+const scriptPath = process.argv[1] || '';
+const isMainModule = scriptPath.endsWith('server/index.ts') || 
+                     scriptPath.endsWith('server/index.js') ||
+                     scriptPath.endsWith('dist/index.js');
 
 if (isMainModule) {
+  console.log(`[STARTUP] Starting server from: ${scriptPath}`);
   startServer().catch((error) => {
     console.error('Fatal server startup error:', error);
     process.exit(1);
   });
+} else {
+  console.log(`[STARTUP] Module imported from: ${scriptPath} (server not started)`);
 }
