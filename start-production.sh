@@ -45,8 +45,9 @@ echo "   NODE_ENV=$NODE_ENV"
 
 # Start Express API server on port 3001 in background
 # Unset PORT to prevent Replit's PORT=5000 from conflicting with API_PORT
+# Background jobs and WebSocket are automatically deferred in production (see server/index.ts)
 echo "📦 Starting Express API server (port 3001)..."
-env -u PORT API_PORT=3001 DEFER_BACKGROUND_JOBS=true node dist/index.js &
+env -u PORT API_PORT=3001 node dist/index.js &
 EXPRESS_PID=$!
 
 # Wait for Express to be ready (increased delay for health checks)

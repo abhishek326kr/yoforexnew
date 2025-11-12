@@ -231,39 +231,40 @@ async function startServer() {
     // Express server now only serves API endpoints
     log("Express server running API-only mode (React SPA archived)");
 
-    // Create HTTP server and initialize WebSocket
+    // Create HTTP server (WITHOUT initializing WebSocket yet)
     const httpServer = createServer(expressApp);
-    const io = initializeDashboardWebSocket(httpServer);
-    expressApp.set('io', io); // Make WebSocket available to routes
-    log("WebSocket server initialized on /ws/dashboard and /ws/admin");
 
     // Express API server with Vite frontend runs on port 5000 (required by Replit)
     // Use PORT env var first (Replit standard), then API_PORT, then default to 5000
     const port = parseInt(process.env.PORT || process.env.API_PORT || '5000', 10);
     
-    // Start the server only after all setup is complete
+    // CRITICAL: Start listening IMMEDIATELY to pass Autoscale health checks
+    // All expensive operations (WebSocket, background jobs) are deferred until AFTER listening
     httpServer.listen(port, "0.0.0.0", () => {
-      log(`serving on port ${port} with WebSocket support`);
+      log(`serving on port ${port}`);
       
-      // Defer background jobs if needed for health checks
-      if (process.env.DEFER_BACKGROUND_JOBS === 'true') {
-        log('Deferring background jobs for 5 seconds to allow health checks to pass...');
-        setTimeout(() => {
-          log('Starting background jobs after deferment period');
-          startBackgroundJobs(storage);
-          
-          // Initialize bot jobs
-          startBotEngagementJob();
-          startBotRefundJob();
-        }, 5000); // Start after 5 seconds
-      } else {
-        // Start background jobs immediately
+      // Defer ALL expensive startup operations for Autoscale deployments
+      // This ensures health checks pass quickly (within 30 seconds)
+      const defermentDelay = process.env.NODE_ENV === 'production' ? 3000 : 1000;
+      
+      log(`[STARTUP] Deferring WebSocket and background jobs for ${defermentDelay}ms to allow health checks to pass...`);
+      
+      setTimeout(() => {
+        // Initialize WebSocket AFTER port is open and health checks pass
+        const io = initializeDashboardWebSocket(httpServer);
+        expressApp.set('io', io); // Make WebSocket available to routes
+        log("[STARTUP] WebSocket server initialized on /ws/dashboard and /ws/admin");
+        
+        // Start background jobs AFTER port is open
+        log('[STARTUP] Starting background jobs after deferment period');
         startBackgroundJobs(storage);
         
         // Initialize bot jobs
         startBotEngagementJob();
         startBotRefundJob();
-      }
+        
+        log('[STARTUP] All background services initialized successfully');
+      }, defermentDelay);
     });
 
     return httpServer;
