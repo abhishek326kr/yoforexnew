@@ -77,9 +77,9 @@ function validateEnv() {
 validateEnv();
 
 /**
- * Get the API base URL for client-side requests
+ * Get the API base URL for fetch calls
  * 
- * @returns API base URL accessible from the browser
+ * @returns API base URL
  * 
  * Client-side behavior:
  * - Always returns empty string '' (uses relative URLs)
@@ -88,12 +88,17 @@ validateEnv();
  * 
  * Server-side behavior:
  * - Returns internal API URL (e.g., http://127.0.0.1:3001)
- * - Used for server-to-server communication
+ * - Used for server-to-server communication during SSR
  * 
- * Usage in client components:
+ * CRITICAL: Do NOT render this value into DOM or JSON props!
+ * - This would cause hydration mismatches (server vs client values differ)
+ * - Use getInternalApiUrl() directly for SSR-only data fetching
+ * - Keep this value in fetch() calls only, never in rendered output
+ * 
+ * Usage:
  * ```typescript
  * const apiUrl = getApiBaseUrl();
- * fetch(`${apiUrl}/api/stats`);  // Becomes: fetch('/api/stats')
+ * fetch(`${apiUrl}/api/stats`);  // Client: '/api/stats', Server: 'http://127.0.0.1:3001/api/stats'
  * ```
  */
 export function getApiBaseUrl(): string {
