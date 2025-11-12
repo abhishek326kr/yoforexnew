@@ -1,7 +1,7 @@
 # YoForex - Expert Advisor Forum & Marketplace
 
 ## Overview
-YoForex is a comprehensive trading community platform for forex traders. It offers forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
+YoForex is a comprehensive trading community platform for forex traders, offering forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
 
 ## User Preferences
 ### Communication Style
@@ -20,7 +20,6 @@ YoForex is a comprehensive trading community platform for forex traders. It offe
    - Verify no TypeScript errors, routing errors, API errors, database errors, or connection issues
    - Check ALL logs: frontend console logs, backend Express logs, Next.js build logs
    - Review error categories: Unsolved, Solved, To-Be-Solved
-   - Document all fixes in the task list
    - **This ensures system stability before adding new features or making changes**
    - **NEVER skip this step - ALL errors must be resolved first before starting new work**
 
@@ -67,204 +66,37 @@ YoForex is a comprehensive trading community platform for forex traders. It offe
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
-## Recent Changes
-
-### November 12, 2025 - Complete Server Component API URL Fix (PRODUCTION BLOCKER - CRITICAL)
-
-**Issue:** Production site at yoforex.net failed to render any pages - homepage, marketplace, login, leaderboard, messages, category pages all showed blank/broken
-
-**Root Cause:**
-- **7 server components** were using incorrect API URLs for server-side data fetching
-- Components used hardcoded or environment variable references instead of centralized `getInternalApiUrl()` helper
-- In production, SSR API calls failed → pages couldn't render → blank site
-- HTML loaded (HTTP 200) but content failed to render because server-side data fetching broke
-
-**All Files Fixed (7 total):**
-
-**Phase 1 - Critical Pages:**
-1. `app/withdrawals/history/page.tsx` - Withdrawal history (admin)
-2. `app/leaderboard/page.tsx` - Leaderboard page
-3. `app/user/[username]/threads/page.tsx` - User thread listings
-4. `app/brokers/[slug]/page.tsx` - Broker profiles (3 functions: metadata, feature flags, page)
-
-**Phase 2 - Additional Pages:**
-5. `app/messages/page.tsx` - Private messaging (2 instances)
-6. `app/dashboard/settings/page.tsx` - User settings
-7. `app/category/[slug]/page.tsx` - Category pages
-
-**Fix Applied:**
-- All files now import `getInternalApiUrl()` from `@/lib/api-config`
-- Replaced hardcoded/env API URLs with `const EXPRESS_URL = getInternalApiUrl()`
-- Ensures consistent, correct API calls in both dev and production
-
-**Design Pattern (MANDATORY for all server components):**
-- **Server Components:** MUST use `getInternalApiUrl()` for SSR API calls
-- **Client Components:** Use `getApiBaseUrl()` (returns empty string for relative URLs)
-- **Dev Environment:** Fetches from `http://127.0.0.1:3001` (internal Express API)
-- **Production Autoscale:** Fetches from `http://127.0.0.1:3001` (internal Express API)
-
-**Verification:**
-- ✅ Architect approved all 7 fixes as production-ready
-- ✅ Dev environment verified zero errors  
-- ✅ All API calls successful (200/304 responses)
-- ✅ LSP diagnostics clean - no TypeScript errors
-- ⏸ **PENDING:** Production rebuild (user must click "Publish" to deploy fixes)
-
-**Impact:** This fix resolves complete site failure on production. After rebuild, all pages will render correctly.
-
----
-
-### November 12, 2025 - SSR Hydration & Routing Fixes (CRITICAL)
-
-**Issues Fixed:**
-
-1. **API Config Hydration Mismatch:**
-   - Module-time evaluation of `apiConfig.baseUrl` and `apiConfig.siteUrl` caused server/client value inconsistency
-   - Server rendered with one URL, client hydrated with different URL → React hydration errors
-
-2. **Auth Context Infinite Loading:**
-   - Publish EA page showed infinite loading spinner instead of login prompt for unauthenticated users
-   - AuthProvider mounted state gate prevented proper SSR/client hydration
-   - Initial user data not passed from server to client
-
-3. **Marketplace Skeleton Boxes:**
-   - Marketplace page stuck showing skeleton loading boxes instead of EA cards
-   - Duplicate `router.push` effect caused repeated component remounts
-   - Missing URL guard in `router.replace` triggered unnecessary navigations
-
-**Solutions Implemented:**
-
-**1. API Config Lazy Getters** (`app/lib/api-config.ts`):
-```typescript
-// BEFORE: Module-time evaluation (causes hydration mismatch)
-export const apiConfig = {
-  baseUrl: getApiBaseUrl(),
-  siteUrl: getSiteUrl()
-};
-
-// AFTER: Lazy getters (preserves server/client context)
-export const apiConfig = {
-  get baseUrl() { return getApiBaseUrl(); },
-  get siteUrl() { return getSiteUrl(); }
-};
-```
-
-**2. Server-Side Auth Bootstrap**:
-- Created `AppProviders.tsx` (server component) - Fetches `/api/me` with forwarded cookies
-- Created `ClientProviders.tsx` (client component) - Wraps QueryClient, Theme, Tooltip
-- Updated `AuthProvider` to accept `initialUser` prop and use `initialData`/`placeholderData`
-- Removed mounted state gate that blocked proper hydration
-
-**Files Changed:**
-- `app/components/providers/AppProviders.tsx` - Server wrapper with auth fetch
-- `app/components/providers/ClientProviders.tsx` - Client-only providers (new)
-- `app/contexts/AuthContext.tsx` - Accept initialUser, use initialData/placeholderData
-
-**3. Marketplace Router Navigation Guard** (`app/marketplace/MarketplaceEnhanced.tsx`):
-- Deleted duplicate `router.push` effect (lines 302-313)
-- Added guard to `router.replace` to compare query strings before navigation:
-```typescript
-const queryString = params.toString();
-const currentQueryString = searchParams.toString();
-
-// Only update URL if it actually changed
-if (queryString !== currentQueryString) {
-  router.replace(newUrl, { scroll: false });
-}
-```
-
-**Verification:**
-- ✅ Architect approved all changes as production-ready
-- ✅ Publish EA: Shows "Login Required" prompt (no infinite loading)
-- ✅ Marketplace: Renders EA cards with images, titles, pricing, ratings
-- ✅ No hydration mismatch warnings in console
-- ✅ No LSP diagnostics errors
-- ✅ Zero TypeScript compilation errors
-
-**Design Patterns (MANDATORY):**
-
-**API URL Resolution:**
-- **Server Components:** Use `getInternalApiUrl()` for SSR API calls
-- **Client Components:** Use `getApiBaseUrl()` (returns empty string for relative URLs)
-- **Shared Config:** Use lazy getters `apiConfig.baseUrl` / `apiConfig.siteUrl`
-
-**Authentication Bootstrap:**
-- **Server Component (AppProviders):** Fetch auth with cookies → pass to ClientProviders
-- **Client Component (ClientProviders):** Wrap QueryClient, Theme, etc
-- **AuthContext:** Accept initialUser → use initialData/placeholderData in React Query
-
-**Router Navigation:**
-- Always add URL comparison guard before calling `router.replace()`
-- Compare computed query string with `useSearchParams().toString()`
-- Prevents unnecessary navigations and component remounts
-
-**Impact:** All hydration errors resolved. Authentication and marketplace rendering correctly on both server and client.
-
----
-
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
 
-### Hybrid Frontend Architecture
-- **Next.js:** Employs App Router, Server Components, and Incremental Static Regeneration (ISR).
-- **Express API:** Provides RESTful endpoints, Replit OIDC authentication, rate limiting, and input validation.
-- **UI/UX:** Modern design featuring vibrant gradients, glassmorphism, bright product cards with hover effects, color-coded category badges, gradient pricing badges, shimmer loading skeletons, star ratings, and smooth micro-animations.
-- **Authentication Pattern:** Client-side authentication checks with `isLoading`, `isAuthenticated`, and `useAuthPrompt()` for three-state rendering.
-
-### Database Design
-- **PostgreSQL with Drizzle ORM:** Features 25+ tables, critical indexes, connection pooling, SSL/TLS, and automatic retry logic.
-
-### System Design Choices
-- **SEO-Optimized URL Structure:** Supports hierarchical URLs with unlimited category nesting and dynamic catch-all routes, with JSON-LD structured data.
-- **State Management:** React Query (TanStack Query v5) for efficient server state management and SSR support.
-- **Authentication System:** Email/Password and Google OAuth with PostgreSQL session storage, email verification, welcome bonuses, referral tracking, and account linking. Includes OTP-based email verification and password management with secure storage and rate limiting.
-- **Coin Economy ("Sweets"):** Virtual currency system with transaction history, expiration management, fraud prevention, earning/spending mechanics, and an XP/Rank system.
-- **Retention & Monitoring:** Includes a Retention Dashboard with loyalty tiers, badges, AI nudges, abandonment emails, and an Error Tracking & Monitoring System with automated cleanup and health checks.
-- **AI Integration:** Gemini AI for SEO content suggestions and bot engagement.
-- **Messaging System:** Comprehensive private messaging with attachments, reactions, read receipts, typing indicators, full-text search, and moderation, with real-time updates via WebSocket.
-- **Notification System:** Comprehensive infrastructure with dual delivery (WebSocket + Email) and real-time updates.
-- **Feature Flag System:** Enterprise-grade feature flags for controlled rollouts, including tri-state status, in-memory caching, "Coming Soon" pages, and admin dashboard controls.
-- **Admin Dashboards:** Real-time analytics, user/marketplace/content management, security, communications, support, and audit logging.
-- **Operational Automation:** Critical cron jobs for coin expiration, fraud detection, treasury snapshots, balance reconciliation, error cleanup, coin health monitoring, and error growth monitoring.
-- **Rich Text Editor:** Enhanced TipTap editor with inline image insertion, drag & drop, and paste from clipboard.
-- **EA Publishing System:** A complete Expert Advisor marketplace with a multi-step publishing form, secure file uploads, preview functionality, SEO optimization, and download management.
-- **Search System:** Global omnisearch across threads, users, marketplace, brokers, with real-time autocomplete, advanced filtering, and optimized performance.
-- **Members System:** Member directory with individual profiles, statistics, badges, search, filter, and a secure follow system.
-- **Autoscale Deployment Architecture:** Lightweight Express app for immediate health checks and asynchronous loading of the full application to ensure rapid port binding and health check compliance in production.
+-   **Hybrid Frontend Architecture:** Next.js (App Router, Server Components, ISR) for the frontend, and Express.js for RESTful APIs, Replit OIDC authentication, rate limiting, and input validation.
+-   **UI/UX:** Modern design with vibrant gradients, glassmorphism, bright product cards, hover effects, color-coded badges, gradient pricing, shimmer loading skeletons, star ratings, and micro-animations.
+-   **Authentication Pattern:** Client-side authentication checks with `isLoading`, `isAuthenticated`, and `useAuthPrompt()` for three-state rendering.
+-   **Database Design:** PostgreSQL with Drizzle ORM, featuring 25+ tables, critical indexes, connection pooling, SSL/TLS, and automatic retry logic.
+-   **System Design Choices:**
+    -   **SEO-Optimized URL Structure:** Hierarchical URLs with unlimited category nesting, dynamic catch-all routes, and JSON-LD structured data.
+    -   **State Management:** React Query (TanStack Query v5) for efficient server state management and SSR support.
+    -   **Authentication System:** Email/Password and Google OAuth with PostgreSQL session storage, email verification, welcome bonuses, referral tracking, account linking, and OTP-based password management.
+    -   **Coin Economy ("Sweets"):** Virtual currency with transaction history, expiration management, fraud prevention, earning/spending mechanics, and an XP/Rank system.
+    -   **Retention & Monitoring:** Retention Dashboard with loyalty tiers, badges, AI nudges, abandonment emails, and an Error Tracking & Monitoring System.
+    -   **AI Integration:** Gemini AI for SEO content suggestions and bot engagement.
+    -   **Messaging System:** Comprehensive private messaging with attachments, reactions, read receipts, typing indicators, full-text search, moderation, and real-time WebSocket updates.
+    **Notification System:** Comprehensive infrastructure with dual delivery (WebSocket + Email) and real-time updates.
+    -   **Feature Flag System:** Enterprise-grade feature flags for controlled rollouts, including tri-state status, in-memory caching, "Coming Soon" pages, and admin dashboard controls.
+    -   **Admin Dashboards:** Real-time analytics, user/marketplace/content management, security, communications, support, and audit logging.
+    -   **Operational Automation:** Critical cron jobs for coin expiration, fraud detection, treasury snapshots, balance reconciliation, error cleanup, coin health monitoring, and error growth monitoring.
+    -   **Rich Text Editor:** Enhanced TipTap editor with inline image insertion, drag & drop, and paste from clipboard.
+    -   **EA Publishing System:** A complete Expert Advisor marketplace with a multi-step publishing form, secure file uploads, preview functionality, SEO optimization, and download management.
+    -   **Search System:** Global omnisearch across threads, users, marketplace, brokers, with real-time autocomplete, advanced filtering, and optimized performance.
+    -   **Members System:** Member directory with individual profiles, statistics, badges, search, filter, and a secure follow system.
+    -   **Autoscale Deployment Architecture:** Lightweight Express app for immediate health checks and asynchronous loading of the full application to ensure rapid port binding and health check compliance in production.
 
 ## External Dependencies
 
-### Core Infrastructure
-- **Neon PostgreSQL:** Serverless database.
-- **Replit Object Storage:** Persistent file storage.
-- **Replit OIDC:** OAuth authentication provider.
-
-### Email Services
-- **Hostinger SMTP:** Transactional email delivery.
-
-### Analytics & SEO
-- **Google Tag Manager:** Tag management.
-- **Google Analytics 4:** User tracking.
-- **Google Search Console, Bing Webmaster Tools, Yandex Webmaster:** SEO monitoring.
-- **Google PageSpeed Insights API:** Performance monitoring.
-- **Gemini AI:** AI-powered content suggestions and bot engagement.
-
-### CDN & Storage
-- **Google Cloud Storage:** Object storage backend.
-
-### Development Tools
-- **Drizzle Kit:** Database migrations.
-- **TypeScript:** Type safety.
-- **shadcn/ui:** Component library.
-- **TailwindCSS:** Utility-first CSS framework.
-- **Recharts:** Composable charting library for React.
-- **Zod:** Runtime schema validation.
-- **Vitest:** Testing framework.
-- **Supertest:** API integration testing.
-- **socket.io & socket.io-client:** WebSocket communication.
-
-### Build & Deployment
-- **Next.js 16:** React framework.
-- **esbuild:** Express API bundling.
-- **Docker:** Containerization.
+-   **Core Infrastructure:** Neon PostgreSQL (serverless database), Replit Object Storage (persistent file storage), Replit OIDC (OAuth authentication provider).
+-   **Email Services:** Hostinger SMTP (transactional email delivery).
+-   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
+-   **CDN & Storage:** Google Cloud Storage.
+-   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
+-   **Build & Deployment:** Next.js 16, esbuild, Docker.
