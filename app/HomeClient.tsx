@@ -134,17 +134,17 @@ export default function HomeClient({
       <StatsBar initialStats={initialStats} />
       
       {/* Hero Section */}
-      <section 
+      {/* <section 
         className="relative w-full min-h-[300px] md:min-h-[450px] flex items-center justify-center overflow-hidden bg-gradient-primary"
         data-testid="section-hero"
       >
-        {/* Dark wash overlay for text readability */}
+        
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60" />
         
         {/* Hero Content */}
-        <div className="relative z-10 container max-w-5xl mx-auto px-4 sm:px-6 py-12 md:py-16">
+        {/* <div className="relative z-10 container max-w-5xl mx-auto px-4 sm:px-6 py-12 md:py-16">
           <div className="text-center space-y-6 md:space-y-8">
-            {/* Headline */}
+            
             <h2 
               className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight animate-slide-up"
               data-testid="text-hero-headline"
@@ -152,7 +152,7 @@ export default function HomeClient({
               Join 10,000+ Forex Traders Building Profitable Trading Systems
             </h2>
             
-            {/* Subheading */}
+            
             <p 
               className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl mx-auto animate-slide-up animate-delay-100"
               data-testid="text-hero-subheading"
@@ -160,7 +160,7 @@ export default function HomeClient({
               Download free EAs, share strategies, earn coins, and connect with expert traders
             </p>
             
-            {/* CTA Buttons */}
+            
             <div 
               className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up animate-delay-200"
               data-testid="container-hero-ctas"
@@ -184,12 +184,12 @@ export default function HomeClient({
               </Link>
             </div>
             
-            {/* Animated Statistics */}
+            
             <div 
               className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mt-8 md:mt-12 max-w-4xl mx-auto animate-slide-up animate-delay-300"
               data-testid="container-hero-stats"
             >
-              {/* Active Traders Stat */}
+             
               <div 
                 className="glass-panel card-depth-1 p-6 rounded-md text-center transition-smooth"
                 data-testid="stat-active-traders"
@@ -203,7 +203,7 @@ export default function HomeClient({
                 </div>
               </div>
               
-              {/* Free EAs Stat */}
+              
               <div 
                 className="glass-panel card-depth-1 p-6 rounded-md text-center transition-smooth"
                 data-testid="stat-free-eas"
@@ -217,7 +217,7 @@ export default function HomeClient({
                 </div>
               </div>
               
-              {/* Discussions Stat */}
+             
               <div 
                 className="glass-panel card-depth-1 p-6 rounded-md text-center transition-smooth"
                 data-testid="stat-discussions"
@@ -232,8 +232,8 @@ export default function HomeClient({
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </div> 
+      </section> */}
       
       <main className="container max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         {/* SEO-friendly H1 (visually hidden but present for SEO) */}

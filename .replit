@@ -10,66 +10,6 @@ deploymentTarget = "cloudrun"
 build = ["npm", "run", "build"]
 run = ["npm", "run", "start"]
 
-[[ports]]
-localPort = 3000
-externalPort = 3003
-
-[[ports]]
-localPort = 3001
-externalPort = 5173
-
-[[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
-localPort = 34361
-externalPort = 8008
-
-[[ports]]
-localPort = 35035
-externalPort = 6000
-
-[[ports]]
-localPort = 38607
-externalPort = 6800
-
-[[ports]]
-localPort = 41811
-externalPort = 3002
-
-[[ports]]
-localPort = 41911
-externalPort = 9000
-
-[[ports]]
-localPort = 42557
-externalPort = 5000
-
-[[ports]]
-localPort = 42787
-externalPort = 3000
-
-[[ports]]
-localPort = 43543
-externalPort = 8080
-
-[[ports]]
-localPort = 43663
-externalPort = 3001
-
-[[ports]]
-localPort = 43905
-externalPort = 8000
-
-[[ports]]
-localPort = 44123
-externalPort = 4200
-
-[[ports]]
-localPort = 46317
-externalPort = 8081
-
 [env]
 
 [workflows]
@@ -102,3 +42,15 @@ expertMode = true
 
 [objectStorage]
 defaultBucketID = "replit-objstore-90c08619-91b8-4694-be75-9590cf2b82f8"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[[ports]]
+localPort = 5000
+externalPort = 5000
+
+[[ports]]
+localPort = 40943
+externalPort = 80
