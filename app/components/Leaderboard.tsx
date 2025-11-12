@@ -45,14 +45,14 @@ export default function Leaderboard({
 }: LeaderboardProps) {
   const getRankIcon = (rank: number) => {
     const badges = [
-      { icon: Trophy, color: "text-amber-500" },
-      { icon: Trophy, color: "text-slate-400" },
-      { icon: Trophy, color: "text-orange-600" },
+      { icon: Trophy, color: "text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]" },
+      { icon: Trophy, color: "text-slate-400 drop-shadow-[0_0_6px_rgba(148,163,184,0.3)]" },
+      { icon: Trophy, color: "text-orange-600 drop-shadow-[0_0_6px_rgba(234,88,12,0.3)]" },
     ];
     
     if (rank <= 3) {
       const { icon: Icon, color } = badges[rank - 1];
-      return <Icon className={`h-3.5 w-3.5 ${color}`} />;
+      return <Icon className={`h-4 w-4 ${color}`} />;
     }
     return <span className="text-[10px] font-semibold text-muted-foreground">#{rank}</span>;
   };
@@ -65,8 +65,9 @@ export default function Leaderboard({
 
   const renderLeaderboardList = (users: LeaderboardUser[], metricLabel: string) => (
     <div className="space-y-1">
-      {users.map((user) => {
+      {users.map((user, index) => {
         const userUrl = user.username ? `/user/${user.username}` : (user.userId ? `/user/${user.userId}` : '#');
+        const animationDelay = `${index * 50}ms`;
         
         return (
           <Link 
@@ -75,7 +76,8 @@ export default function Leaderboard({
             data-testid={`link-leaderboard-user-${user.rank}`}
           >
             <div 
-              className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover-elevate active-elevate-2" 
+              className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover-elevate active-elevate-2 transition-smooth animate-fade-in" 
+              style={{ animationDelay }}
               data-testid={`leaderboard-user-${user.rank}`}
             >
               <div className="w-4 flex items-center justify-center shrink-0">
@@ -109,20 +111,20 @@ export default function Leaderboard({
   );
 
   return (
-    <Card className="border-0 shadow-sm" data-testid="card-leaderboard">
-      <CardHeader className="pb-2.5">
+    <Card className="card-depth-1 transition-smooth" data-testid="card-leaderboard">
+      <CardHeader className="pb-3 glass-subtle">
         <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-          <Trophy className="h-3.5 w-3.5 text-primary" />
+          <Trophy className="h-4 w-4 text-primary" />
           Leaderboard
         </CardTitle>
       </CardHeader>
       <CardContent className="px-3">
         <Tabs defaultValue="contributors" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 h-7 bg-muted/50">
-            <TabsTrigger value="contributors" className="text-[11px] data-[state=active]:bg-background" data-testid="tab-contributors">
+          <TabsList className="grid w-full grid-cols-2 h-7 glass-panel">
+            <TabsTrigger value="contributors" className="text-[11px] data-[state=active]:bg-background transition-smooth" data-testid="tab-contributors">
               Helpful
             </TabsTrigger>
-            <TabsTrigger value="uploaders" className="text-[11px] data-[state=active]:bg-background" data-testid="tab-uploaders">
+            <TabsTrigger value="uploaders" className="text-[11px] data-[state=active]:bg-background transition-smooth" data-testid="tab-uploaders">
               Uploads
             </TabsTrigger>
           </TabsList>

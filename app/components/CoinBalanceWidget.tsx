@@ -44,7 +44,7 @@ export default function CoinBalanceWidget() {
   if (isLoading) {
     return (
       <div className="flex items-center gap-2" data-testid="widget-coin-balance-loading">
-        <Skeleton className="h-9 w-24 rounded-full dark:bg-gray-800" />
+        <Skeleton className="h-9 w-24 rounded-full glass-subtle animate-pulse" />
       </div>
     );
   }
@@ -58,7 +58,7 @@ export default function CoinBalanceWidget() {
         <TooltipTrigger asChild>
           <button
             onClick={() => setDrawerOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 transition-all hover:shadow-lg dark:from-yellow-600 dark:to-yellow-700 dark:hover:from-yellow-700 dark:hover:to-yellow-800 group"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-500 dark:from-yellow-600 dark:to-yellow-700 transition-smooth hover-elevate group"
             data-testid="widget-coin-balance"
           >
             <Coins className="h-4 w-4 text-yellow-900 dark:text-yellow-100 group-hover:rotate-12 transition-transform" />
@@ -71,7 +71,7 @@ export default function CoinBalanceWidget() {
             {weeklyEarned > 0 && (
               <Badge
                 variant="secondary"
-                className="h-5 px-1.5 text-[10px] bg-yellow-600 text-yellow-100 border-0 hidden md:flex dark:bg-yellow-800 dark:text-yellow-200"
+                className="bg-yellow-600 text-yellow-100 border-0 hidden md:flex dark:bg-yellow-800 dark:text-yellow-200"
               >
                 <TrendingUp className="h-3 w-3 mr-0.5" />
                 +{weeklyEarned}
