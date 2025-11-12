@@ -17,25 +17,6 @@ export function setupSecurityHeaders(app: Express) {
     },
   }));
   
-  // Apply strict CSP only to API routes (not Next.js pages)
-  app.use('/api/', (req, res, next) => {
-    // Strict CSP for API endpoints only
-    res.setHeader('Content-Security-Policy', 
-      "default-src 'self'; " +
-      "script-src 'self'; " +
-      "style-src 'self'; " +
-      "img-src 'self' data: https: http:; " +
-      "font-src 'self' data:; " +
-      "connect-src 'self'; " +
-      "frame-src 'none'; " +
-      "object-src 'none'; " +
-      "base-uri 'self'; " +
-      "form-action 'self'; " +
-      "frame-ancestors 'none';"
-    );
-    next();
-  });
-  
   // Additional security headers for all routes
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
