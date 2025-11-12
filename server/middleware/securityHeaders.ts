@@ -2,12 +2,63 @@ import helmet from 'helmet';
 import type { Express } from 'express';
 
 export function setupSecurityHeaders(app: Express) {
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  
+  // Next.js-compatible CSP for all routes (except API which has stricter policy)
+  // This allows Next.js to function while maintaining strong security
+  const nextJsCSP = [
+    "default-src 'self'",
+    // Allow inline scripts and eval for Next.js (required for hydration and HMR)
+    isDevelopment 
+      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" 
+      : "script-src 'self' 'unsafe-inline'",
+    // Allow inline styles for Next.js styled-jsx and CSS modules
+    "style-src 'self' 'unsafe-inline'",
+    // Allow images from any HTTPS source (for user-generated content, CDNs, etc)
+    "img-src 'self' data: https: http: blob:",
+    // Allow fonts from self and data URIs
+    "font-src 'self' data:",
+    // Allow connections to self and WebSocket for Next.js HMR
+    isDevelopment
+      ? "connect-src 'self' ws: wss:"
+      : "connect-src 'self'",
+    // Prevent iframes
+    "frame-src 'none'",
+    // Prevent object/embed tags
+    "object-src 'none'",
+    // Prevent base tag hijacking
+    "base-uri 'self'",
+    // Only allow form submissions to self
+    "form-action 'self'",
+    // Prevent embedding in iframes
+    "frame-ancestors 'none'",
+    // Upgrade insecure requests in production
+    !isDevelopment ? "upgrade-insecure-requests" : "",
+  ].filter(Boolean).join('; ');
+
   // Use helmet for comprehensive security headers
-  // CRITICAL: Disable CSP for Next.js pages - Next.js sets its own CSP
-  // Only apply strict CSP to API routes via middleware below
   app.use(helmet({
-    contentSecurityPolicy: false, // Disabled - Next.js handles CSP for pages
-    crossOriginEmbedderPolicy: false, // Allow embedding
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: isDevelopment 
+          ? ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+          : ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:", "http:", "blob:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: isDevelopment
+          ? ["'self'", "ws:", "wss:"]
+          : ["'self'"],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: isDevelopment ? [] : [],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Allow embedding resources
     crossOriginResourcePolicy: { policy: "cross-origin" },
     xFrameOptions: { action: 'deny' }, // Prevent clickjacking
     hsts: {
@@ -17,9 +68,9 @@ export function setupSecurityHeaders(app: Express) {
     },
   }));
   
-  // Apply strict CSP only to API routes (not Next.js pages)
+  // Override with even stricter CSP only for API routes
   app.use('/api/', (req, res, next) => {
-    // Strict CSP for API endpoints only
+    // Strict CSP for API endpoints - no inline scripts/styles needed
     res.setHeader('Content-Security-Policy', 
       "default-src 'self'; " +
       "script-src 'self'; " +
@@ -41,6 +92,9 @@ export function setupSecurityHeaders(app: Express) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 
+      'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()'
+    );
     next();
   });
 }
