@@ -27,35 +27,49 @@ const nextConfig = {
   },
 
   // Proxy API requests to Express server
-  // In VPS: NGINX handles routing, so this is for local dev only
-  // In production: NGINX routes /api/* → Express:3001 externally
+  // Autoscale deployment: build phase may not have EXPRESS_URL, use safe default
+  // Runtime: start-production.sh sets EXPRESS_URL=http://127.0.0.1:3001
   async rewrites() {
     const expressUrl = process.env.EXPRESS_URL;
     const isProduction = process.env.NODE_ENV === 'production';
+    const isReplitDeployment = process.env.REPLIT_DEPLOYMENT || process.env.REPL_ID;
     
+    // If EXPRESS_URL is missing in production
     if (!expressUrl) {
-      if (isProduction) {
+      if (isProduction && !isReplitDeployment) {
+        // Non-Replit production: Hard fail to prevent misconfig
         throw new Error(
           '🚨 CRITICAL: EXPRESS_URL environment variable is required for production deployment.\n' +
-          'Set it in your .env.production file.\n' +
-          'Example: EXPRESS_URL=http://127.0.0.1:3001\n' +
-          'For VPS deployment, see: VPS_DEPLOYMENT_GUIDE.md'
+          'Set it in your deployment configuration.\n' +
+          'Example: EXPRESS_URL=http://127.0.0.1:3001'
         );
       }
-      // Development fallback only (matches api-config.ts)
-      console.warn('⚠️  EXPRESS_URL not set, using development fallback: http://127.0.0.1:3001');
+      
+      // Replit/Autoscale: Allow build with default (start-production.sh sets it at runtime)
+      const defaultUrl = 'http://127.0.0.1:3001';
+      if (isReplitDeployment && isProduction) {
+        console.warn(
+          '⚠️  EXPRESS_URL not set during build phase (expected for Replit Autoscale).\n' +
+          `   Using default: ${defaultUrl}\n` +
+          '   start-production.sh will set the correct value at runtime.'
+        );
+      } else {
+        console.warn(`⚠️  EXPRESS_URL not set - using development default: ${defaultUrl}`);
+      }
+      
       return [
         {
           source: '/api/:path*',
-          destination: 'http://127.0.0.1:3001/api/:path*',
+          destination: `${defaultUrl}/api/:path*`,
         },
         {
           source: '/objects/:path*',
-          destination: 'http://127.0.0.1:3001/objects/:path*',
+          destination: `${defaultUrl}/objects/:path*`,
         },
       ];
     }
     
+    // EXPRESS_URL is set - use it
     return [
       {
         source: '/api/:path*',

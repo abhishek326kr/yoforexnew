@@ -45,6 +45,19 @@ export NODE_ENV=production
 export NEXTJS_PORT=3000
 export NEXT_INTERNAL_URL=http://127.0.0.1:3000
 
+# Validate critical environment variables
+echo "🔍 Validating environment configuration..."
+if [ "$EXPRESS_URL" != "http://127.0.0.1:3001" ]; then
+  echo "⚠️  WARNING: EXPRESS_URL is set to $EXPRESS_URL"
+  echo "   Expected: http://127.0.0.1:3001 for Autoscale dual-port architecture"
+  echo "   This may cause routing loops!"
+fi
+if [ "$PORT" != "5000" ]; then
+  echo "❌ ERROR: PORT must be 5000 for Autoscale (currently: $PORT)"
+  exit 1
+fi
+echo "✅ Environment validation passed"
+
 # Log environment for debugging
 echo "📋 Environment Configuration:"
 echo "   PORT=$PORT (FORCED for Autoscale - Express proxy binds here)"
