@@ -67,6 +67,53 @@ YoForex is a comprehensive trading community platform for forex traders. It offe
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### November 12, 2025 - Complete Server Component API URL Fix (PRODUCTION BLOCKER - CRITICAL)
+
+**Issue:** Production site at yoforex.net failed to render any pages - homepage, marketplace, login, leaderboard, messages, category pages all showed blank/broken
+
+**Root Cause:**
+- **7 server components** were using incorrect API URLs for server-side data fetching
+- Components used hardcoded or environment variable references instead of centralized `getInternalApiUrl()` helper
+- In production, SSR API calls failed → pages couldn't render → blank site
+- HTML loaded (HTTP 200) but content failed to render because server-side data fetching broke
+
+**All Files Fixed (7 total):**
+
+**Phase 1 - Critical Pages:**
+1. `app/withdrawals/history/page.tsx` - Withdrawal history (admin)
+2. `app/leaderboard/page.tsx` - Leaderboard page
+3. `app/user/[username]/threads/page.tsx` - User thread listings
+4. `app/brokers/[slug]/page.tsx` - Broker profiles (3 functions: metadata, feature flags, page)
+
+**Phase 2 - Additional Pages:**
+5. `app/messages/page.tsx` - Private messaging (2 instances)
+6. `app/dashboard/settings/page.tsx` - User settings
+7. `app/category/[slug]/page.tsx` - Category pages
+
+**Fix Applied:**
+- All files now import `getInternalApiUrl()` from `@/lib/api-config`
+- Replaced hardcoded/env API URLs with `const EXPRESS_URL = getInternalApiUrl()`
+- Ensures consistent, correct API calls in both dev and production
+
+**Design Pattern (MANDATORY for all server components):**
+- **Server Components:** MUST use `getInternalApiUrl()` for SSR API calls
+- **Client Components:** Use `getApiBaseUrl()` (returns empty string for relative URLs)
+- **Dev Environment:** Fetches from `http://127.0.0.1:3001` (internal Express API)
+- **Production Autoscale:** Fetches from `http://127.0.0.1:3001` (internal Express API)
+
+**Verification:**
+- ✅ Architect approved all 7 fixes as production-ready
+- ✅ Dev environment verified zero errors  
+- ✅ All API calls successful (200/304 responses)
+- ✅ LSP diagnostics clean - no TypeScript errors
+- ⏸ **PENDING:** Production rebuild (user must click "Publish" to deploy fixes)
+
+**Impact:** This fix resolves complete site failure on production. After rebuild, all pages will render correctly.
+
+---
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.

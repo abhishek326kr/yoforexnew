@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import MessagesClient from "./MessagesClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { getInternalApiUrl } from "@/lib/api-config";
 
 export const metadata: Metadata = {
   title: "Messages | YoForex",
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 async function getUser() {
-  const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
+  const EXPRESS_URL = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map(cookie => `${cookie.name}=${cookie.value}`)
@@ -58,7 +59,7 @@ async function getUser() {
 }
 
 async function getConversations(cookieHeader: string) {
-  const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
+  const EXPRESS_URL = getInternalApiUrl();
   
   try {
     const res = await fetch(`${EXPRESS_URL}/api/conversations`, {

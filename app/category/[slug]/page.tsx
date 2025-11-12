@@ -2,9 +2,10 @@ import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import CategoryDiscussionClient from './CategoryDiscussionClient';
 import type { ForumCategory, ForumThread } from '@shared/schema';
+import { getInternalApiUrl } from '@/lib/api-config';
 
 // Express API base URL - use internal API URL for SSR
-const EXPRESS_URL = process.env.EXPRESS_URL || 'http://127.0.0.1:3001';
+const EXPRESS_URL = getInternalApiUrl();
 
 // Enable ISR with 60-second revalidation
 export const revalidate = 60;

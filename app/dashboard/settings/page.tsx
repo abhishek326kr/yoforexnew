@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardSettingsClient from "./DashboardSettingsClient";
+import { getInternalApiUrl } from "@/lib/api-config";
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ async function getDashboardPreferences() {
 
   try {
     // Use internal Express API URL for server-side fetches
-    const baseUrl = process.env.EXPRESS_URL || "http://127.0.0.1:3001";
+    const baseUrl = getInternalApiUrl();
     const response = await fetch(`${baseUrl}/api/dashboard/preferences`, {
       headers: {
         Cookie: `connect.sid=${sessionCookie.value}`,
