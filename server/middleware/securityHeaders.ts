@@ -3,10 +3,8 @@ import type { Express } from 'express';
 
 export function setupSecurityHeaders(app: Express) {
   // Use helmet for comprehensive security headers
-  // CRITICAL: Disable CSP for Next.js pages - Next.js sets its own CSP
-  // Only apply strict CSP to API routes via middleware below
   app.use(helmet({
-    contentSecurityPolicy: false, // Disabled - Next.js handles CSP for pages
+    contentSecurityPolicy: false, // CSP disabled per user request
     crossOriginEmbedderPolicy: false, // Allow embedding
     crossOriginResourcePolicy: { policy: "cross-origin" },
     xFrameOptions: { action: 'deny' }, // Prevent clickjacking
