@@ -46,44 +46,56 @@ echo "   NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL"
 echo "   NODE_ENV=$NODE_ENV"
 echo "   NEXTJS_PORT=$NEXTJS_PORT (internal)"
 
-# Start Next.js on internal port 3000 first (no health check delays)
-echo "⚡ Starting Next.js frontend (internal port 3000)..."
-npx next start -p 3000 -H 127.0.0.1 &
-NEXTJS_PID=$!
-
-# Give Next.js a brief moment to start binding to port
-sleep 2
-
-# Verify Next.js process is still running after initial startup
-if ! kill -0 $NEXTJS_PID 2>/dev/null; then
-  echo "❌ Next.js failed to start - check build logs"
-  exit 1
-fi
-echo "✅ Next.js process started (PID: $NEXTJS_PID)"
-
-# Start Express API server on port 5000 IMMEDIATELY (bind to 0.0.0.0 for Autoscale)
-# This ensures port 5000 opens within seconds for Autoscale health checks
-# Express will proxy Next.js requests to port 3000
-echo "📦 Starting Express API server (port 5000)..."
-echo "   Binding to 0.0.0.0:5000 for external access"
-echo "   Express will proxy Next.js from port 3000"
+# CRITICAL FOR AUTOSCALE: Start Express FIRST to bind port 5000 immediately
+# NO delays before startup - Autoscale health checks need fast response
+echo "📦 Starting Express API server on port 5000 (PRIORITY)..."
+echo "   Binding to 0.0.0.0:5000 for Autoscale health checks"
 node dist/index.js &
 EXPRESS_PID=$!
 
-# Give Express a moment to start
-sleep 1
+# Start Next.js in parallel immediately (no waiting for Express)
+echo "⚡ Starting Next.js frontend (internal port 3000)..."
+echo "   Express will proxy page requests to Next.js"
+npx next start -p 3000 -H 127.0.0.1 &
+NEXTJS_PID=$!
 
-# Verify Express is running
-if ! kill -0 $EXPRESS_PID 2>/dev/null; then
-  echo "❌ Express failed to start"
-  kill $NEXTJS_PID 2>/dev/null
-  exit 1
-fi
-echo "✅ Express process started (PID: $EXPRESS_PID)"
+# Verify both processes with HTTP probes (after port 5000 is already open)
+echo "🔍 Verifying services are responding to requests..."
 
-echo "✅ Production servers started:"
-echo "   - Express API: http://0.0.0.0:5000 (user-facing, proxies Next.js)"
-echo "   - Next.js App: http://127.0.0.1:3000 (internal only)"
+# Check Express is responding (port 5000 should already be open)
+for i in {1..5}; do
+  if curl -f -s -o /dev/null --max-time 2 http://127.0.0.1:5000/health 2>/dev/null; then
+    echo "✅ Express responding on port 5000"
+    break
+  fi
+  if [ $i -eq 5 ]; then
+    echo "❌ Express not responding after 5 attempts - check logs"
+    kill $EXPRESS_PID $NEXTJS_PID 2>/dev/null
+    exit 1
+  fi
+  sleep 1
+done
+
+# Check Next.js is responding (internal port 3000)
+# Use root path / which is always available in Next.js
+for i in {1..15}; do
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+  # Accept any non-500 response (200, 301, 304, etc.) as healthy
+  if [ "$HTTP_CODE" != "000" ] && [ "$HTTP_CODE" -lt "500" ]; then
+    echo "✅ Next.js responding on port 3000 (HTTP $HTTP_CODE)"
+    break
+  fi
+  if [ $i -eq 15 ]; then
+    echo "❌ Next.js not responding after 15 attempts - shutting down to prevent serving 503s"
+    kill $EXPRESS_PID $NEXTJS_PID 2>/dev/null
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "✅ Both services verified and responding:"
+echo "   - Express (PID: $EXPRESS_PID) on port 5000"
+echo "   - Next.js (PID: $NEXTJS_PID) on port 3000"
 echo ""
 
 # Process monitor: If either process dies, kill the other and exit
