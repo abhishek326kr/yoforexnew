@@ -17,17 +17,31 @@ export async function AppProviders({ children }: { children: ReactNode }) {
     const cookie = headersList.get("cookie");
     
     const apiUrl = getInternalApiUrl();
+    
+    // Add timeout to prevent hanging in production
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+    
     const res = await fetch(`${apiUrl}/api/me`, {
       headers: cookie ? { cookie } : {},
       cache: "no-store",
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
     
     if (res.ok) {
       initialUser = await res.json();
+      console.log("[AppProviders] Auth fetch successful");
+    } else {
+      console.log("[AppProviders] Auth fetch returned:", res.status);
     }
-    // If 401 or other error, initialUser stays null (unauthenticated)
   } catch (error) {
-    console.error("[AppProviders] Failed to fetch initial auth state:", error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error("[AppProviders] Auth fetch timed out - continuing without initial user");
+    } else {
+      console.error("[AppProviders] Failed to fetch initial auth state:", error);
+    }
     // Fail gracefully - initialUser stays null
   }
 
