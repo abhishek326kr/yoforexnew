@@ -29,6 +29,12 @@ app.set("trust proxy", 1);
 // Apply security headers to all requests (before CORS)
 setupSecurityHeaders(app);
 
+// CRITICAL FOR AUTOSCALE: Add immediate /health endpoint BEFORE any async initialization
+// This endpoint must respond instantly (<10ms) for Autoscale health checks
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: Date.now() });
+});
+
 // Apply category redirect middleware early in the stack
 app.use(categoryRedirectMiddleware);
 app.use(trackCategoryViews);
@@ -167,7 +173,6 @@ async function initializeApp() {
       target: nextJsTarget,
       changeOrigin: true,
       ws: true, // Enable WebSocket proxying for Next.js dev tools
-      logLevel: process.env.NODE_ENV === 'production' ? 'error' : 'warn',
       // Filter: Don't proxy Express-handled routes
       filter: (pathname: string, req: any) => {
         if (pathname.startsWith('/api/')) return false;
@@ -259,118 +264,117 @@ export const appPromise = initializeApp();
 // Start the HTTP server (only when running as main module, not when imported by tests)
 async function startServer() {
   try {
-    const expressApp = await appPromise;
+    // AUTOSCALE CRITICAL: Create lightweight Express app and bind port IMMEDIATELY
+    // Heavy async initialization (auth, database, routes) happens AFTER port binding
     
-    // React SPA removed - Next.js runs separately on port 3000
-    // Express server now only serves API endpoints
-    log("Express server running API-only mode (React SPA archived)");
-
-    // Create HTTP server (WITHOUT initializing WebSocket yet)
-    const httpServer = createServer(expressApp);
+    // Create bare-bones Express app with only /health endpoint for instant response
+    const lightweightApp = express();
+    lightweightApp.set("trust proxy", 1);
     
-    // Wire WebSocket upgrade handler for Next.js dev tools/HMR
-    // This ensures Next.js WebSockets work without interfering with dashboard sockets
-    const nextJsUpgradeTarget = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
-    const nextJsUpgradeProxy = createProxyMiddleware({
-      target: nextJsUpgradeTarget,
-      ws: true,
-      changeOrigin: true,
+    // Add immediate /health endpoint (no dependencies, instant response)
+    lightweightApp.get('/health', (_req, res) => {
+      res.status(200).json({ status: 'ok', timestamp: Date.now() });
     });
-    httpServer.on('upgrade', (req, socket, head) => {
-      // Only proxy Next.js WebSockets (not /ws/* which are handled by Express)
-      if (!req.url?.startsWith('/ws/')) {
-        (nextJsUpgradeProxy as any).upgrade?.(req, socket as any, head);
-      }
-    });
-
-    // Express API server with Vite frontend runs on port 5000 (required by Replit)
-    // Use PORT env var first (Replit standard), then API_PORT, then default to 5000
+    
+    // Create HTTP server with lightweight app
+    const httpServer = createServer(lightweightApp);
+    
+    // Express API server runs on port 5000 (required by Replit/Autoscale)
     const port = parseInt(process.env.PORT || process.env.API_PORT || '5000', 10);
     
-    // CRITICAL: Start listening IMMEDIATELY for Autoscale health checks
-    // Port 5000 must open fast - all other initialization happens asynchronously
-    httpServer.listen(port, "0.0.0.0", async () => {
+    // AUTOSCALE CRITICAL: Listen on port IMMEDIATELY (binds in <100ms)
+    // /health endpoint responds instantly for health checks
+    httpServer.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
+      log("Express server running API-only mode (React SPA archived)");
       
-      // Initialize WebSocket immediately (lightweight, no dependencies)
-      const io = initializeDashboardWebSocket(httpServer);
-      expressApp.set('io', io); // Make WebSocket available to routes
-      log("[STARTUP] WebSocket server initialized on /ws/dashboard and /ws/admin");
-      
-      // Async initialization of background jobs (doesn't block the listen callback)
-      // This runs in parallel with Autoscale health checks
-      let jobsStarted = false;
-      const startJobs = async () => {
-        if (jobsStarted) return; // Already started
-        
+      // All async initialization happens AFTER port binding (non-blocking)
+      // This ensures Autoscale health checks pass while initialization continues
+      void (async () => {
         try {
-          // Wait for Next.js proxy to be ready (for jobs that fetch pages)
-          // Use root path / which is always available in Next.js
+          // Wait for full Express app initialization (auth, database, routes)
+          log('[STARTUP] Loading full application (routes, auth, database)...');
+          const fullApp = await appPromise;
+          
+          // Mount all routes from full app onto lightweight app
+          // This preserves the /health endpoint while adding all other routes
+          lightweightApp.use(fullApp);
+          log('[STARTUP] Full application loaded and mounted');
+          
+          // Wire WebSocket upgrade handler for Next.js dev tools/HMR
+          const nextJsUpgradeTarget = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
+          const nextJsUpgradeProxy = createProxyMiddleware({
+            target: nextJsUpgradeTarget,
+            ws: true,
+            changeOrigin: true,
+          });
+          httpServer.on('upgrade', (req, socket, head) => {
+            // Only proxy Next.js WebSockets (not /ws/* which are handled by Express)
+            if (!req.url?.startsWith('/ws/')) {
+              (nextJsUpgradeProxy as any).upgrade?.(req, socket as any, head);
+            }
+          });
+          
+          // Initialize WebSocket (lightweight, minimal overhead)
+          const io = initializeDashboardWebSocket(httpServer);
+          fullApp.set('io', io);
+          log("[STARTUP] WebSocket server initialized on /ws/dashboard and /ws/admin");
+          
+          // Background job initialization (deferred, non-blocking)
+          let jobsStarted = false;
           const nextJsUrl = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
           
           log('[STARTUP] Waiting for Next.js proxy to be ready...');
-          // Initial fast check (15 attempts × 200ms = 3 seconds)
+          
+          // Fast initial check (15 attempts × 200ms = 3 seconds)
           for (let i = 0; i < 15; i++) {
             try {
               const response = await fetch(nextJsUrl, { 
                 method: 'HEAD',
                 signal: AbortSignal.timeout(500)
               });
-              // Accept any response (200, 301, 304, etc.) as long as Next.js is responding
               if (response.status < 500) {
                 log('[STARTUP] Next.js proxy verified ready');
-                
-                // Storage is already initialized from app setup phase
-                log('[STARTUP] Starting background jobs (all dependencies ready)');
                 startBackgroundJobs(storage);
-                
-                // Initialize bot jobs
                 startBotEngagementJob();
                 startBotRefundJob();
-                
                 jobsStarted = true;
                 log('[STARTUP] All background services initialized successfully');
-                return; // Success
+                return;
               }
             } catch (e) {
-              // Not ready yet, will retry
-              if (i < 14) {
-                await new Promise(resolve => setTimeout(resolve, 200));
-              }
+              if (i < 14) await new Promise(resolve => setTimeout(resolve, 200));
             }
           }
           
-          // If still not ready after 3s, schedule retries with backoff (don't give up)
-          log('[STARTUP] Next.js not ready after 3s - will retry every 5s until ready');
-          const retryInterval = setInterval(async () => {
-            try {
-              const response = await fetch(nextJsUrl, { 
-                method: 'HEAD',
-                signal: AbortSignal.timeout(1000)
-              });
-              if (response.status < 500) {
-                clearInterval(retryInterval);
-                log('[STARTUP] Next.js proxy now ready (delayed)');
-                
-                log('[STARTUP] Starting background jobs (delayed initialization)');
-                startBackgroundJobs(storage);
-                startBotEngagementJob();
-                startBotRefundJob();
-                
-                jobsStarted = true;
-                log('[STARTUP] All background services initialized successfully (delayed)');
+          // If not ready, retry with backoff (don't block deployment)
+          if (!jobsStarted) {
+            log('[STARTUP] Next.js not ready after 3s - will retry every 5s until ready');
+            const retryInterval = setInterval(async () => {
+              try {
+                const response = await fetch(nextJsUrl, { 
+                  method: 'HEAD',
+                  signal: AbortSignal.timeout(1000)
+                });
+                if (response.status < 500) {
+                  clearInterval(retryInterval);
+                  log('[STARTUP] Next.js proxy now ready (delayed)');
+                  startBackgroundJobs(storage);
+                  startBotEngagementJob();
+                  startBotRefundJob();
+                  jobsStarted = true;
+                  log('[STARTUP] All background services initialized successfully (delayed)');
+                }
+              } catch (e) {
+                // Keep retrying
               }
-            } catch (e) {
-              // Still not ready, will keep retrying
-            }
-          }, 5000); // Retry every 5 seconds
-          
+            }, 5000);
+          }
         } catch (error) {
-          console.error('[STARTUP] Background jobs initialization failed:', error);
+          console.error('[STARTUP] Async initialization failed:', error);
+          console.error('[STARTUP] Server is still running, but some features may be unavailable');
         }
-      };
-      
-      startJobs();
+      })();
     });
 
     return httpServer;

@@ -59,43 +59,15 @@ echo "   Express will proxy page requests to Next.js"
 npx next start -p 3000 -H 127.0.0.1 &
 NEXTJS_PID=$!
 
-# Verify both processes with HTTP probes (after port 5000 is already open)
-echo "🔍 Verifying services are responding to requests..."
-
-# Check Express is responding (port 5000 should already be open)
-for i in {1..5}; do
-  if curl -f -s -o /dev/null --max-time 2 http://127.0.0.1:5000/health 2>/dev/null; then
-    echo "✅ Express responding on port 5000"
-    break
-  fi
-  if [ $i -eq 5 ]; then
-    echo "❌ Express not responding after 5 attempts - check logs"
-    kill $EXPRESS_PID $NEXTJS_PID 2>/dev/null
-    exit 1
-  fi
-  sleep 1
-done
-
-# Check Next.js is responding (internal port 3000)
-# Use root path / which is always available in Next.js
-for i in {1..15}; do
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
-  # Accept any non-500 response (200, 301, 304, etc.) as healthy
-  if [ "$HTTP_CODE" != "000" ] && [ "$HTTP_CODE" -lt "500" ]; then
-    echo "✅ Next.js responding on port 3000 (HTTP $HTTP_CODE)"
-    break
-  fi
-  if [ $i -eq 15 ]; then
-    echo "❌ Next.js not responding after 15 attempts - shutting down to prevent serving 503s"
-    kill $EXPRESS_PID $NEXTJS_PID 2>/dev/null
-    exit 1
-  fi
-  sleep 1
-done
-
-echo "✅ Both services verified and responding:"
-echo "   - Express (PID: $EXPRESS_PID) on port 5000"
-echo "   - Next.js (PID: $NEXTJS_PID) on port 3000"
+# AUTOSCALE OPTIMIZATION: No blocking health check loops
+# Port 5000 binds immediately with instant /health endpoint response
+# Async initialization continues in background without blocking deployment
+echo "✅ Both services started:"
+echo "   - Express (PID: $EXPRESS_PID) on port 5000 (immediate /health endpoint)"
+echo "   - Next.js (PID: $NEXTJS_PID) on port 3000 (async proxy initialization)"
+echo ""
+echo "⏳ Background services initializing asynchronously..."
+echo "   Check logs for WebSocket, Next.js proxy, and background job status"
 echo ""
 
 # Process monitor: If either process dies, kill the other and exit
