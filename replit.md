@@ -1,130 +1,5 @@
 # YoForex - Expert Advisor Forum & Marketplace
 
-## Recent Changes
-
-### Comprehensive SEO Audit Completed (November 11, 2025 - 3:30 PM)
-**Objective:**
-Audit entire SEO infrastructure to achieve #1 Google rankings for forex EA marketplace keywords
-
-**Key Findings:**
-1. **Target Keywords Identified:**
-   - "best forex expert advisors 2025" (10K monthly searches)
-   - "forex EA marketplace" (1K searches)
-   - "publish expert advisor" (500 searches - UNTAPPED NICHE)
-   - "metatrader 4 expert advisors" (10K searches)
-
-2. **Current Strengths:**
-   - Schema markup components built (Product, Review, FAQ, Breadcrumb)
-   - SEO utilities (slug generation, meta descriptions)
-   - Next.js App Router with ISR
-
-3. **Critical Gaps:**
-   - Generic marketplace metadata not targeting high-intent keywords
-   - No programmatic category pages (/ea/scalping/, /ea/grid-trading/)
-   - Schema markup exists but not enforced on ALL EA pages
-   - Missing educational content (comparison guides, tutorials)
-   - No E-E-A-T signals (verified results, expert bios)
-   - No Core Web Vitals monitoring
-
-**Strategic Recommendations:**
-Three-phase roadmap:
-- **Phase 1 (Week 1-2):** Quick wins - keyword-optimized metadata, mandatory schema, 5 strategy hub pages, comparison content, Core Web Vitals
-- **Phase 2 (Week 3-4):** Programmatic taxonomy - 50+ auto-generated landing pages by strategy/platform/risk
-- **Phase 3 (Ongoing):** SEO operations - quarterly refreshes, schema validation, link building, E-E-A-T reinforcement
-
-**Competitive Advantage:**
-Own the "publish EA" niche that competitors ignore. Most marketplaces focus on selling EAs; YoForex can dominate the creator/developer side.
-
-**Timeline:** 3-6 months to top 3 rankings with consistent implementation
-
-**Documentation:** Complete audit in `SEO_AUDIT_COMPREHENSIVE_2025.md`
-
-## Recent Changes
-
-### EA Marketplace Auto-Approval Fix (November 11, 2025 - 3:22 PM)
-**Issue:**
-- Published EAs were defaulting to "pending" status and not appearing in marketplace
-- Marketplace query filters for `status = 'approved'` only
-- Users couldn't see their published content immediately
-- Database inspection showed all recent EAs had status='pending'
-
-**Root Cause:**
-- `insertContentSchema` in `shared/schema.ts` was **omitting** the `status` field
-- Even though publish endpoints set `status: 'approved'`, the schema validation stripped it out
-- `DrizzleStorage.createContent` then defaulted to `status: 'pending'`
-
-**Solution:**
-1. Removed `status` from omit list in `insertContentSchema` (line 2328)
-2. Added `status` as optional field: `status: z.enum(["pending", "approved", "rejected", "suspended"]).optional()`
-3. Updated `/api/publish` endpoint to set `status: 'approved'` (line 4198)
-4. Updated `/api/content` endpoint to set `status: 'approved'` (line 4258)
-5. `/api/marketplace/publish-ea` already sets `status: 'approved'` (line 17176)
-
-**Key Files Changed:**
-- `shared/schema.ts` - Added status field to insertContentSchema
-- `server/routes.ts` - Ensured all publish endpoints set status='approved'
-
-**Design Decision:**
-- Auto-approval simplifies user experience (no manual admin approval needed)
-- Admin moderation system still exists for post-publication content management
-- Can be adjusted later if stricter pre-publication review is needed
-
-### EA & Screenshot Upload - IN-MEMORY STORAGE SOLUTION (November 11, 2025 - 3:04 PM)
-**Root Cause:**
-- Replit Object Storage SDK `uploadFromBytes()` is fundamentally broken
-- Returns `{ ok: true, value: null }` but files **never actually appear** in storage
-- GCS direct upload fails because bucket `e119-91b8-4694-be75-9590cf2b82f8` doesn't exist
-- Profile pictures work because they never used object storage - they're stored **in memory**
-
-**The Solution:**
-- Switched EA files and screenshots to **in-memory storage** (global Maps)
-- Uses same pattern as profile pictures (which always worked)
-- Files stored in: `global.uploadedEAFiles` and `global.uploadedScreenshots`
-
-**Implementation:**
-```typescript
-// EA uploads - server/routes.ts (line 17014-17033)
-if (!global.uploadedEAFiles) {
-  global.uploadedEAFiles = new Map();
-}
-global.uploadedEAFiles.set(filename, {
-  buffer: file.buffer,
-  mimeType: file.mimetype,
-  originalName: file.originalname,
-  uploadedAt: new Date(),
-  contentId: eaId,
-});
-
-// Screenshots - server/routes.ts (line 17066-17078)
-if (!global.uploadedScreenshots) {
-  global.uploadedScreenshots = new Map();
-}
-global.uploadedScreenshots.set(filename, {...});
-```
-
-**New Endpoints:**
-- `/api/ea-files/:filename` - Serves EA file downloads
-- `/api/screenshot-files/:filename` - Serves screenshot images
-
-**Trade-offs:**
-- ✅ **WORKS IMMEDIATELY** - No more silent failures
-- ✅ **SIMPLE** - Same proven pattern as profile pictures
-- ✅ **FAST** - Memory access is instant
-- ⚠️ **Files lost on server restart** - Acceptable for small EA files during development
-- ⚠️ **Memory usage** - Limited to small files (EA < 10MB, screenshots < 5MB each)
-
-**What's Working:**
-- ✅ EA file uploads
-- ✅ Screenshot uploads  
-- ✅ Coin awards (30 Sweets per EA published)
-- ✅ Transaction idempotency
-
-**Future Enhancement Options:**
-1. Store file metadata in database (paths, sizes, upload dates)
-2. Migrate to a different cloud storage provider (AWS S3, Cloudflare R2)
-3. Implement persistence layer that saves Map to disk periodically
-4. Wait for Replit to fix their Object Storage SDK
-
 ## Overview
 YoForex is a comprehensive trading community platform for forex traders, offering forums, an Expert Advisor (EA) marketplace, broker reviews, and a virtual coin economy ("Sweets"). The platform aims to create a self-sustaining ecosystem by rewarding user contributions, providing valuable trading tools, and becoming a leading hub for forex traders, empowering them with community support and essential market navigation resources. The business vision is to establish a self-sustaining platform with significant market potential by fostering community, providing valuable resources, and enhancing trading experiences for forex enthusiasts.
 
@@ -218,7 +93,7 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - **Admin Dashboards:** Real-time analytics, user/marketplace/content management, security, communications, support, and audit logging.
 - **Operational Automation:** Critical cron jobs for coin expiration, fraud detection, treasury snapshots, balance reconciliation, error cleanup, coin health monitoring, and error growth monitoring.
 - **Rich Text Editor:** Enhanced TipTap editor with inline image insertion, drag & drop, and paste from clipboard.
-- **EA Publishing System:** A complete Expert Advisor marketplace with a multi-step publishing form, secure file uploads, secure Object Storage, preview functionality, SEO optimization, and download management.
+- **EA Publishing System:** A complete Expert Advisor marketplace with a multi-step publishing form, secure file uploads (currently in-memory for stability), preview functionality, SEO optimization, and download management.
 - **Search System:** Global omnisearch across threads, users, marketplace, brokers, with real-time autocomplete, advanced filtering, and optimized performance.
 - **Members System:** Member directory with individual profiles, statistics, badges, search, filter, and a secure follow system.
 
@@ -226,7 +101,7 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ### Core Infrastructure
 - **Neon PostgreSQL:** Serverless database.
-- **Replit Object Storage:** Persistent file storage.
+- **Replit Object Storage:** Persistent file storage (intended, but currently using in-memory for EA files and screenshots due to SDK issues).
 - **Replit OIDC:** OAuth authentication provider.
 
 ### Email Services
@@ -240,7 +115,7 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - **Gemini AI:** AI-powered content suggestions and bot engagement.
 
 ### CDN & Storage
-- **Google Cloud Storage:** Object storage backend.
+- **Google Cloud Storage:** Object storage backend (used for some assets, but EA files/screenshots are in-memory).
 
 ### Development Tools
 - **Drizzle Kit:** Database migrations.
