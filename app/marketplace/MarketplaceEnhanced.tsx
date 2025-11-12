@@ -176,6 +176,7 @@ const getCategoryImage = (category: string, type: string): string => {
 
 export default function MarketplaceEnhanced({ initialContent, initialFilters = {} }: MarketplaceEnhancedProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   
   // State management - Initialize from server-provided filters
@@ -211,10 +212,14 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
     if (platformFilter !== 'all') params.set('platform', platformFilter);
     
     const queryString = params.toString();
-    const newUrl = queryString ? `?${queryString}` : '/marketplace';
+    const currentQueryString = searchParams.toString();
     
-    router.replace(newUrl, { scroll: false });
-  }, [searchTerm, selectedCategory, selectedType, sortBy, priceFilter, platformFilter, router]);
+    // Only update URL if it actually changed
+    if (queryString !== currentQueryString) {
+      const newUrl = queryString ? `?${queryString}` : '/marketplace';
+      router.replace(newUrl, { scroll: false });
+    }
+  }, [searchTerm, selectedCategory, selectedType, sortBy, priceFilter, platformFilter, router, searchParams]);
   
   // Fetch content with filters
   const { data: content = initialContent, isLoading, refetch } = useQuery<Content[]>({
@@ -297,20 +302,6 @@ export default function MarketplaceEnhanced({ initialContent, initialFilters = {
     
     return filtered;
   }, [content, searchTerm, selectedCategory, selectedType, sortBy, priceFilter, platformFilter]);
-  
-  // Update URL params when filters change
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (searchTerm) params.set("search", searchTerm);
-    if (selectedCategory !== "all") params.set("category", selectedCategory);
-    if (selectedType !== "all") params.set("type", selectedType);
-    if (sortBy !== "newest") params.set("sort", sortBy);
-    if (priceFilter !== "all") params.set("price", priceFilter);
-    if (platformFilter !== "all") params.set("platform", platformFilter);
-    
-    const queryString = params.toString();
-    router.push(`/marketplace${queryString ? `?${queryString}` : ''}`, { scroll: false });
-  }, [searchTerm, selectedCategory, selectedType, sortBy, priceFilter, platformFilter, router]);
   
   const toggleFavorite = (id: string) => {
     setFavorites(prev => {
