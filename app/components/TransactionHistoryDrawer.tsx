@@ -57,6 +57,27 @@ export default function TransactionHistoryDrawer({
     total: number;
   }>({
     queryKey: ["/api/sweets/transactions/me", activeTab, dateRange],
+    queryFn: async () => {
+      // Build URL with query parameters
+      const params = new URLSearchParams();
+      if (activeTab && activeTab !== 'all') {
+        params.set('type', activeTab);
+      }
+      if (dateRange) {
+        params.set('dateRange', dateRange);
+      }
+      
+      const url = `/api/sweets/transactions/me?${params.toString()}`;
+      const res = await fetch(url, {
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${await res.text()}`);
+      }
+      
+      return await res.json();
+    },
     enabled: !!user && open,
   });
 

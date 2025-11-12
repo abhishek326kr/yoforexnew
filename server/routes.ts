@@ -20583,15 +20583,46 @@ export async function registerRoutes(app: Express): Promise<Express> {
   app.get("/api/sweets/transactions/me", sweetsAuthMiddleware, async (req, res) => {
     try {
       const user = req.user as User;
-      const { limit = '50', offset = '0' } = req.query;
+      const { limit = '50', offset = '0', type, dateRange = '30d' } = req.query;
       
-      const transactions = await storage.getUserTransactions(
+      // Get all transactions for the user (we'll filter in memory for now)
+      let allTransactions = await storage.getUserTransactions(
         user.id,
-        parseInt(limit as string),
-        parseInt(offset as string)
+        1000 // Get a large number to filter from
       );
       
-      res.json(transactions);
+      // Filter by type (all/earn/spend/expired)
+      if (type && type !== 'all') {
+        allTransactions = allTransactions.filter(t => t.type === type);
+      }
+      
+      // Filter by date range
+      if (dateRange !== 'all') {
+        const now = new Date();
+        let cutoffDate: Date;
+        
+        if (dateRange === '7d') {
+          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else if (dateRange === '30d') {
+          cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        } else {
+          cutoffDate = new Date(0); // All time
+        }
+        
+        allTransactions = allTransactions.filter(t => 
+          new Date(t.createdAt) >= cutoffDate
+        );
+      }
+      
+      // Apply pagination
+      const limitNum = parseInt(limit as string);
+      const offsetNum = parseInt(offset as string);
+      const paginatedTransactions = allTransactions.slice(offsetNum, offsetNum + limitNum);
+      
+      res.json({
+        transactions: paginatedTransactions,
+        total: allTransactions.length
+      });
     } catch (error) {
       console.error('[Sweets Transactions] Error fetching transactions:', error);
       res.status(500).json({ error: 'Failed to fetch transactions' });
