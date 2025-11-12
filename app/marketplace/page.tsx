@@ -38,7 +38,7 @@ async function getMarketplaceContent() {
     // Use centralized API config for SSR
     const apiUrl = getInternalApiUrl();
     const res = await fetch(`${apiUrl}/api/content?status=approved`, {
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
     
     if (!res.ok) {

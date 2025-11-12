@@ -69,6 +69,31 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
+### November 12, 2025 - Performance Optimization & Screenshot Fix
+
+**Marketplace Performance Fix:**
+- **Issue:** Marketplace pages loading slowly with hundreds of screenshot 404 errors creating database spam
+- **Root Cause:** 6 EAs had invalid object storage screenshot paths (`/objects/marketplace/ea/UUID/screenshots/UUID.jpg`) that don't exist
+- **Fix:** Updated all 6 EAs to use stock images instead (`/api/static/stock_images/automated_trading_ro_e6dc98af.jpg`)
+- **SQL Fix:** `UPDATE content SET image_url = '...', image_urls = ARRAY['...'] WHERE type = 'ea' AND image_url LIKE '/objects/%'`
+- **Cache Fix:** Disabled Next.js 60-second cache in marketplace page to prevent serving stale screenshot URLs
+- **File Modified:** `app/marketplace/page.tsx` - Changed `{ next: { revalidate: 60 } }` to `{ cache: 'no-store' }`
+- **Result:** Eliminated 404 spam, reduced error event creation, improved page load speed
+
+**Transaction History UI Enhancement:**
+- **Issue:** Users couldn't see gold coin amounts clearly in Transaction History drawer
+- **Fix:** Complete UI redesign with prominent coin display
+  - Added `Coins` icon from lucide-react next to every amount
+  - Increased font size (text-sm → text-base) and weight (semibold → bold)
+  - Color-coded badge backgrounds: green (earned), red (spent), orange (expired)
+  - Circular status icons with matching colored backgrounds
+  - Better spacing and hover effects
+  - Proper dark mode support
+- **File Modified:** `app/components/TransactionHistoryDrawer.tsx`
+- **Result:** Gold coins now impossible to miss, professional appearance
+
+**Status:** All fixes architect-reviewed and approved, ready for production
+
 ### November 12, 2025 - EA Auto-Approval & Autoscale Deployment Fix (FINAL)
 
 **EA Marketplace Critical Fix:**
