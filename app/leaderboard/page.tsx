@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import Header from '@/components/Header';
 import EnhancedFooter from '@/components/EnhancedFooter';
 import LeaderboardClient from './LeaderboardClient';
+import { getInternalApiUrl } from '@/lib/api-config';
 
 export const metadata: Metadata = {
   title: 'Leaderboard | YoForex',
@@ -47,7 +48,7 @@ type SellerLeader = {
 };
 
 async function getLeaderboardData() {
-  const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:5000';
+  const EXPRESS_URL = getInternalApiUrl();
   
   try {
     // Fetch all three leaderboards in parallel

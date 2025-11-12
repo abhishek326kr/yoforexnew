@@ -1,9 +1,7 @@
 import { Metadata } from 'next';
 import BrokerProfileClient from './BrokerProfileClient';
 import { ComingSoon } from '@/components/ComingSoon';
-
-// Express API base URL
-const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:5000';
+import { getInternalApiUrl } from '@/lib/api-config';
 
 // Type definitions
 type Broker = {
@@ -44,6 +42,7 @@ type FeatureFlag = {
 
 // Fetch feature flag from server
 async function getFeatureFlag(slug: string): Promise<FeatureFlag | null> {
+  const EXPRESS_URL = getInternalApiUrl();
   try {
     const response = await fetch(`${EXPRESS_URL}/api/feature-flags?slug=${slug}`, {
       cache: 'no-store',
@@ -59,6 +58,7 @@ async function getFeatureFlag(slug: string): Promise<FeatureFlag | null> {
 // Generate metadata for SEO
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  const EXPRESS_URL = getInternalApiUrl();
   
   // Check feature flag
   const flag = await getFeatureFlag('broker-profile');
@@ -127,6 +127,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 // Main page component (Server Component)
 export default async function BrokerProfilePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const EXPRESS_URL = getInternalApiUrl();
   
   // Check feature flag
   const flag = await getFeatureFlag('broker-profile');

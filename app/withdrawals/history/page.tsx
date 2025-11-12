@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import WithdrawalHistoryClient from "./WithdrawalHistoryClient";
+import { getInternalApiUrl } from "@/lib/api-config";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 async function getUser() {
-  const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:5000';
+  const EXPRESS_URL = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map(cookie => `${cookie.name}=${cookie.value}`)
@@ -54,7 +55,7 @@ async function getUser() {
 }
 
 async function getWithdrawals() {
-  const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:5000';
+  const EXPRESS_URL = getInternalApiUrl();
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.getAll()
     .map(cookie => `${cookie.name}=${cookie.value}`)

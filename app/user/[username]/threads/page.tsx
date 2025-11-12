@@ -7,9 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, MessageSquare, Eye, ThumbsUp, Calendar } from 'lucide-react';
 import Header from '@/components/Header';
 import EnhancedFooter from '@/components/EnhancedFooter';
-
-// Express API base URL
-const EXPRESS_URL = process.env.NEXT_PUBLIC_EXPRESS_URL || 'http://localhost:3001';
+import { getInternalApiUrl } from '@/lib/api-config';
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
   const { username } = await params;
@@ -22,6 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
 
 export default async function UserThreadsPage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
+  const EXPRESS_URL = getInternalApiUrl();
   
   // First get user info to get userId
   let user = null;
