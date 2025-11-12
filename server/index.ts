@@ -169,18 +169,22 @@ async function initializeApp() {
     // Proxy all non-Express requests to Next.js (running on internal port 3000)
     // This allows Express to handle API routes while Next.js handles pages
     const nextJsTarget = process.env.NEXT_INTERNAL_URL || 'http://127.0.0.1:3000';
+    
+    // Create filter function for routes that should be proxied to Next.js
+    const shouldProxyToNextJs = (pathname: string, req: any) => {
+      // Don't proxy Express-handled routes
+      if (pathname.startsWith('/api/')) return false;
+      if (pathname.startsWith('/ws/')) return false;
+      if (pathname === '/health') return false;
+      if (pathname.startsWith('/static/')) return false;
+      return true; // Proxy everything else to Next.js
+    };
+    
     const nextJsProxy = createProxyMiddleware({
       target: nextJsTarget,
       changeOrigin: true,
       ws: true, // Enable WebSocket proxying for Next.js dev tools
-      // Filter: Don't proxy Express-handled routes
-      filter: (pathname: string, req: any) => {
-        if (pathname.startsWith('/api/')) return false;
-        if (pathname.startsWith('/ws/')) return false;
-        if (pathname === '/health') return false;
-        if (pathname.startsWith('/static/')) return false;
-        return true; // Proxy everything else to Next.js
-      },
+      pathFilter: shouldProxyToNextJs, // Correct property name for v3.x
       onProxyReq: (proxyReq: any, req: any, res: any) => {
         // Forward original protocol/host for Next.js to generate correct URLs
         proxyReq.setHeader('X-Forwarded-Host', req.headers.host || '');
@@ -193,7 +197,7 @@ async function initializeApp() {
           res.status(503).send('Next.js is starting up, please wait...');
         }
       }
-    });
+    } as any);
     
     expressApp.use(nextJsProxy);
     log(`[PROXY] Configured Next.js proxy to ${nextJsTarget} (filters: /api/*, /ws/*, /health, /static/*)`);
