@@ -24,21 +24,29 @@ export function useAuth() {
 
 interface AuthProviderProps {
   children: ReactNode;
+  initialUser: User | null;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
-  // Use relative URLs for API calls (Next.js will rewrite to Express)
-  const { data: user, isLoading } = useQuery<User | null>({
+export function AuthProvider({ children, initialUser }: AuthProviderProps) {
+  // Use React Query for auth state with server-fetched initial data
+  // This prevents hydration mismatches by ensuring consistent auth state
+  const query = useQuery<User | null>({
     queryKey: ["/api/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false,
     refetchOnWindowFocus: true,
     staleTime: 5 * 60 * 1000,
+    initialData: initialUser ?? null,
+    placeholderData: () => initialUser ?? null,
   });
+
+  // Derive loading state from query status (never pending if initialData provided)
+  const isLoading = query.status === "pending";
+  const user = query.data;
+  const isAuthenticated = user !== null && user !== undefined;
 
   const logout = async () => {
     try {
-      // Use new auth logout endpoint
       await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
@@ -46,7 +54,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.location.href = "/";
     } catch (error) {
       console.error("Logout failed:", error);
-      // Fallback to old endpoint if new one fails
       try {
         await fetch("/api/logout", {
           method: "POST",
@@ -58,8 +65,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.location.href = "/";
     }
   };
-
-  const isAuthenticated = user !== null && user !== undefined;
 
   return (
     <AuthContext.Provider

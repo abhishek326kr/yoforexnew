@@ -1,54 +1,39 @@
-"use client";
+import { ReactNode } from "react";
+import { headers } from "next/headers";
+import { getInternalApiUrl } from "@/lib/api-config";
+import ClientProviders from "./ClientProviders";
+import type { User } from "../../../shared/schema";
 
-import { useEffect } from "react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
-import { ThemeProvider } from "@/contexts/ThemeContext";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/toaster";
-import { ActivityTracker } from "@/components/ActivityTracker";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import ErrorTracker from "@/lib/errorTracking";
-
-// Client-side error tracker initialization component
-function ErrorTrackerBootstrap({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    // Initialize ErrorTracker to register all browser event handlers
-    // This ensures window.onerror, unhandledrejection, and console.error 
-    // interception are active from app startup
-    const tracker = ErrorTracker.getInstance();
-    
-    // Log initialization in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[ErrorTracker] Initialized - global error handlers registered');
-    }
-    
-    // Cleanup is handled internally by ErrorTracker
-    return () => {
-      // No cleanup needed - ErrorTracker persists for app lifetime
-    };
-  }, []);
+/**
+ * Server component that fetches initial auth state and provides it to client components
+ * This prevents hydration mismatches by ensuring consistent auth state between server and client
+ */
+export async function AppProviders({ children }: { children: ReactNode }) {
+  // Fetch auth state on server with forwarded cookies
+  let initialUser: User | null = null;
   
-  return <>{children}</>;
-}
+  try {
+    const headersList = await headers();
+    const cookie = headersList.get("cookie");
+    
+    const apiUrl = getInternalApiUrl();
+    const res = await fetch(`${apiUrl}/api/me`, {
+      headers: cookie ? { cookie } : {},
+      cache: "no-store",
+    });
+    
+    if (res.ok) {
+      initialUser = await res.json();
+    }
+    // If 401 or other error, initialUser stays null (unauthenticated)
+  } catch (error) {
+    console.error("[AppProviders] Failed to fetch initial auth state:", error);
+    // Fail gracefully - initialUser stays null
+  }
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <TooltipProvider>
-            <AuthProvider>
-              <ErrorTrackerBootstrap>
-                <ActivityTracker />
-                {children}
-                <Toaster />
-              </ErrorTrackerBootstrap>
-            </AuthProvider>
-          </TooltipProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <ClientProviders initialUser={initialUser}>
+      {children}
+    </ClientProviders>
   );
 }
