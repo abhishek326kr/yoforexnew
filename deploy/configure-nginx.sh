@@ -104,13 +104,7 @@ server {
     resolver 8.8.8.8 8.8.4.4 valid=300s;
     resolver_timeout 5s;
     
-    # Security Headers
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
+    # Security Headers removed per user request
     
     # Remove server header
     more_clear_headers Server;
