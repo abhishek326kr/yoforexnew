@@ -132,7 +132,7 @@ export function RichTextEditorClient({
         emptyEditorClass: 'is-editor-empty',
       }),
     ],
-    content: initialContent,
+    content: '', // Static empty content - initialContent will be set via setContent in useEffect
     editorProps: {
       attributes: {
         class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4',
@@ -202,6 +202,17 @@ export function RichTextEditorClient({
       },
     },
   }, []); // Empty dependency array to prevent editor from being recreated on every render
+
+  // Set initial content when editor is ready (avoids closure issues)
+  useEffect(() => {
+    if (editor && initialContent && !editor.isDestroyed) {
+      // Only set if content is different to avoid unnecessary updates
+      const currentContent = editor.getHTML();
+      if (currentContent !== initialContent) {
+        editor.commands.setContent(initialContent);
+      }
+    }
+  }, [editor, initialContent]);
 
   // Update parent when editor content changes
   // Use ref to avoid infinite loops caused by onUpdate changing on every render
