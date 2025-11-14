@@ -799,6 +799,13 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
   // Extract setValue as a stable reference for RichTextEditorClient
   const { setValue } = form;
 
+  // Wrap onUpdate in useCallback to prevent infinite loop in RichTextEditorClient
+  // setValue from react-hook-form is stable and doesn't change between renders
+  const handleEditorUpdate = useCallback((html: string, text: string) => {
+    setValue("contentHtml", html);
+    setValue("body", text);
+  }, [setValue]);
+
   // Hashtag management
   const addHashtag = () => {
     const tag = hashtagInput.trim().replace(/^#/, '');
@@ -1038,10 +1045,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                             </Label>
                             <RichTextEditorClient
                               initialContent={contentHtmlValue}
-                              onUpdate={(html, text) => {
-                                setValue("contentHtml", html);
-                                setValue("body", text);
-                              }}
+                              onUpdate={handleEditorUpdate}
                               isDragging={isDragging}
                               onDragStateChange={setIsDragging}
                             />

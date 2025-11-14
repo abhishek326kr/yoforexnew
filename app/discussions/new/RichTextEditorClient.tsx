@@ -197,6 +197,7 @@ export function RichTextEditorClient({
   });
 
   // Update parent when editor content changes
+  // onUpdate is now stable thanks to useCallback in parent component
   useEffect(() => {
     if (editor) {
       const updateContent = () => {
@@ -207,7 +208,7 @@ export function RichTextEditorClient({
         editor.off('update', updateContent);
       };
     }
-  }, [editor, onUpdate]);
+  }, [editor, onUpdate]); // Restored onUpdate now that parent uses useCallback
 
   // Trigger image upload from file input
   const triggerImageUpload = () => {

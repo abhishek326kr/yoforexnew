@@ -789,36 +789,50 @@ export class ObjectStorageService {
    * @returns Normalized path in /objects/... format
    */
   private normalizeToObjectsPath(rawPath: string): string {
+    console.log('[normalizeToObjectsPath] ========== START ==========');
+    console.log('[normalizeToObjectsPath] Input rawPath:', rawPath);
+    
     let pathToNormalize = rawPath;
     
     // If it's a GCS URL, extract the pathname
     if (rawPath.startsWith("https://storage.googleapis.com/")) {
       const url = new URL(rawPath);
       pathToNormalize = url.pathname;
+      console.log('[normalizeToObjectsPath] Extracted pathname from GCS URL:', pathToNormalize);
     }
     
     // Get the private object directory (e.g., /e119.../content)
     let objectEntityDir = this.getPrivateObjectDir();
+    console.log('[normalizeToObjectsPath] Private object dir (before slash):', objectEntityDir);
+    
     if (!objectEntityDir.endsWith("/")) {
       objectEntityDir = `${objectEntityDir}/`;
     }
+    console.log('[normalizeToObjectsPath] Private object dir (after slash):', objectEntityDir);
     
     // Check if the path starts with the private object directory
     if (!pathToNormalize.startsWith(objectEntityDir)) {
       // Path doesn't match expected format, return as-is
       console.warn(
-        `[normalizeToObjectsPath] Path doesn't start with private object dir.\n` +
+        `[normalizeToObjectsPath] ERROR: Path doesn't start with private object dir.\n` +
         `  Expected prefix: ${objectEntityDir}\n` +
-        `  Actual path: ${pathToNormalize}`
+        `  Actual path: ${pathToNormalize}\n` +
+        `  This indicates the upload path was not constructed correctly!`
       );
+      console.log('[normalizeToObjectsPath] ========== END (ERROR) ==========');
       return pathToNormalize;
     }
     
     // Extract the entity ID (everything after the private directory)
     const entityId = pathToNormalize.slice(objectEntityDir.length);
+    console.log('[normalizeToObjectsPath] Extracted entityId:', entityId);
     
     // Return normalized path
-    return `/objects/${entityId}`;
+    const normalized = `/objects/${entityId}`;
+    console.log('[normalizeToObjectsPath] Normalized path:', normalized);
+    console.log('[normalizeToObjectsPath] ========== END (SUCCESS) ==========');
+    
+    return normalized;
   }
 
   async trySetObjectEntityAclPolicy(
@@ -926,12 +940,14 @@ export class ObjectStorageService {
     
     if (mode === 'r2') {
       // R2 implementation - NO parseObjectPath usage, use S3Client directly
-      console.log('[uploadFromBuffer] Using R2 S3 SDK for upload...');
+      console.log('[uploadFromBuffer] ========== R2 MODE UPLOAD ==========');
+      console.log('[uploadFromBuffer] Input objectPath:', objectPath);
       
       const bucketName = process.env.R2_BUCKET_NAME;
       if (!bucketName) {
         throw new Error('R2_BUCKET_NAME environment variable not set');
       }
+      console.log('[uploadFromBuffer] R2 bucket name:', bucketName);
       
       try {
         // Use the shared R2 client from getR2Client()
@@ -940,16 +956,20 @@ export class ObjectStorageService {
         // Extract R2 key from objectPath without using parseObjectPath
         // Remove leading slash and any bucket prefix
         let objectKey = objectPath.replace(/^\//, '');
+        console.log('[uploadFromBuffer] Object key (after removing leading slash):', objectKey);
         
         // If path starts with bucket name, remove it
         if (objectKey.startsWith(bucketName + '/')) {
+          const beforeStrip = objectKey;
           objectKey = objectKey.slice(bucketName.length + 1);
+          console.log('[uploadFromBuffer] Stripped bucket prefix:', beforeStrip, '->', objectKey);
         }
         
         console.log('[uploadFromBuffer] Uploading to R2...');
-        console.log('[uploadFromBuffer] Bucket:', bucketName);
-        console.log('[uploadFromBuffer] Key:', objectKey);
-        console.log('[uploadFromBuffer] Content-Type:', contentType);
+        console.log('[uploadFromBuffer]   Bucket:', bucketName);
+        console.log('[uploadFromBuffer]   Key:', objectKey);
+        console.log('[uploadFromBuffer]   Content-Type:', contentType);
+        console.log('[uploadFromBuffer]   Buffer size:', buffer.length);
         
         const command = new PutObjectCommand({
           Bucket: bucketName,
@@ -959,15 +979,20 @@ export class ObjectStorageService {
         });
         
         await s3Client.send(command);
-        console.log('[uploadFromBuffer] R2 upload successful!');
+        console.log('[uploadFromBuffer] R2 upload successful to key:', objectKey);
         
-        // Use objectPath for normalization (will be converted to /objects/... format)
+        // CRITICAL: Preserve the original objectPath for normalization
+        // This must be the FULL path with private dir prefix so normalization can work
+        // Example: /e119.../content/uploads/filename.jpg
         uploadedPath = objectPath;
+        console.log('[uploadFromBuffer] Set uploadedPath for normalization:', uploadedPath);
       } catch (error: any) {
-        console.error('[uploadFromBuffer] ERROR in R2 mode:');
+        console.error('[uploadFromBuffer] ========== R2 UPLOAD ERROR ==========');
         console.error('[uploadFromBuffer] Error name:', error.name);
         console.error('[uploadFromBuffer] Error message:', error.message);
         console.error('[uploadFromBuffer] Error stack:', error.stack);
+        console.error('[uploadFromBuffer] Input objectPath:', objectPath);
+        console.error('[uploadFromBuffer] Bucket:', bucketName);
         throw error;
       }
     } else if (mode === 'replit') {

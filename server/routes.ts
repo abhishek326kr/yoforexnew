@@ -1690,16 +1690,37 @@ export async function registerRoutes(app: Express): Promise<Express> {
           const randomSuffix = Math.round(Math.random() * 1E9);
           const filename = `${timestamp}-${randomSuffix}${ext}`;
           
-          // Upload to object storage using uploadFromBuffer
-          // Note: uploadFromBuffer expects path without leading slash
+          console.log('[Upload Endpoint] ========== UPLOADING FILE ==========');
+          console.log('[Upload Endpoint] Original name:', file.originalname);
+          console.log('[Upload Endpoint] Generated filename:', filename);
+          
+          // Get private directory and construct full path for proper normalization
+          const privateDir = objectStorageService.getPrivateObjectDir();
+          console.log('[Upload Endpoint] Private directory:', privateDir);
+          
+          const fullPath = `${privateDir}/uploads/${filename}`;
+          console.log('[Upload Endpoint] Full upload path:', fullPath);
+          
+          // Upload to object storage with full path
+          // uploadFromBuffer will normalize it to /objects/uploads/... format
           const objectPath = await objectStorageService.uploadFromBuffer(
-            `uploads/${filename}`,
+            fullPath,
             fileBuffer,
             contentType
           );
+          console.log('[Upload Endpoint] Returned objectPath:', objectPath);
+          
+          // objectPath is now normalized (e.g., /objects/uploads/filename)
+          // Return URL that exactly matches the objectPath for serving
+          // Keep the full path (minus /objects prefix) so GET handler can reconstruct it
+          const urlPath = objectPath.startsWith('/objects/') 
+            ? objectPath.substring('/objects/'.length)
+            : objectPath;
+          console.log('[Upload Endpoint] URL path (for API response):', urlPath);
+          console.log('[Upload Endpoint] Final URL:', `/api/images/${urlPath}`);
           
           return {
-            url: objectPath, // Returns /objects/uploads/...
+            url: `/api/images/${urlPath}`, // e.g., /api/images/uploads/filename
             originalName: file.originalname,
             filename: filename,
             size: fileBuffer.length,
@@ -1720,6 +1741,68 @@ export async function registerRoutes(app: Express): Promise<Express> {
     } catch (error: any) {
       console.error('File upload error:', error);
       res.status(500).json({ error: error.message || "Failed to upload files" });
+    }
+  });
+
+  // ===== IMAGE SERVING ENDPOINT =====
+  // Serve uploaded images from object storage (R2/GCS) with authorization
+  app.get('/api/images/*', async (req, res) => {
+    try {
+      console.log('[GET Image] ========== SERVING IMAGE ==========');
+      
+      // Extract image path from URL (e.g., "uploads/123.jpg")
+      const imagePath = req.params[0];
+      console.log('[GET Image] Extracted imagePath from URL:', imagePath);
+      
+      if (!imagePath) {
+        console.error('[GET Image] ERROR: No image path provided');
+        return res.status(400).json({ error: 'Image path required' });
+      }
+      
+      // Construct full object path in /objects/... format
+      const objectPath = `/objects/${imagePath}`;
+      console.log('[GET Image] Constructed objectPath:', objectPath);
+      console.log('[GET Image] Calling getObjectEntityFile...');
+      
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+      
+      // SECURITY: Check if user can access this object
+      // Marketplace screenshots are public (follow pattern /objects/.../marketplace/screenshots/...)
+      // All other images require authentication and ACL check
+      const isMarketplaceScreenshot = objectPath.includes('/marketplace/screenshots/');
+      
+      if (!isMarketplaceScreenshot) {
+        // Check if user is authenticated
+        if (!req.isAuthenticated || !req.isAuthenticated()) {
+          return res.status(401).json({ error: 'Authentication required' });
+        }
+        
+        // Use existing ACL system to verify access
+        const userId = (req.user as any)?.id;
+        const canAccess = await objectStorageService.canAccessObjectEntity({
+          userId: userId,
+          objectFile,
+          requestedPermission: ObjectPermission.READ
+        });
+        
+        if (!canAccess) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      }
+      
+      // Stream the image from storage with 24-hour cache
+      await objectStorageService.downloadObject(objectFile, res, 86400);
+    } catch (error: any) {
+      console.error('[Image Serve] Error serving image:', error);
+      
+      // Return 404 for not found errors
+      if (error instanceof ObjectNotFoundError || error.message?.includes('not found')) {
+        return res.status(404).json({ error: 'Image not found' });
+      }
+      
+      // Return 500 for other errors
+      res.status(500).json({ error: 'Failed to serve image' });
     }
   });
 
@@ -5749,7 +5832,16 @@ export async function registerRoutes(app: Express): Promise<Express> {
           const timestamp = Date.now();
           const randomId = Math.random().toString(36).substring(2, 8);
           const ext = path.extname(file.originalname);
-          const objectName = `thread-images/${authenticatedUserId}/${timestamp}-${randomId}${ext}`;
+          const relativePath = `thread-images/${authenticatedUserId}/${timestamp}-${randomId}${ext}`;
+          
+          // CRITICAL FIX: Must use full path with private directory prefix
+          // for normalization to work correctly in uploadFromBuffer
+          const privateDir = objectStorageService.getPrivateObjectDir();
+          const fullPath = `${privateDir}/${relativePath}`;
+          
+          console.log('[Thread Image Upload] Uploading:', file.originalname);
+          console.log('[Thread Image Upload] Relative path:', relativePath);
+          console.log('[Thread Image Upload] Full path:', fullPath);
           
           // Read file data (multer saves files to disk with diskStorage)
           let fileData: Buffer;
@@ -5764,12 +5856,13 @@ export async function registerRoutes(app: Express): Promise<Express> {
             continue;
           }
           
-          // Upload to object storage using uploadFromBuffer
+          // Upload to object storage using uploadFromBuffer with FULL path
           const url = await objectStorageService.uploadFromBuffer(
-            objectName,
+            fullPath,
             fileData,
             file.mimetype
           );
+          console.log('[Thread Image Upload] Normalized URL:', url);
           
           uploadedUrls.push(url);
           
@@ -8488,15 +8581,28 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const timestamp = Date.now();
       const randomSuffix = Math.round(Math.random() * 1E9);
       const filename = `message-${req.params.messageId}-${timestamp}-${randomSuffix}${ext}`;
+      const relativePath = `message-attachments/${filename}`;
       
       try {
         // Upload to object storage using uploadFromBuffer
         const objectStorageService = new ObjectStorageService();
+        
+        // CRITICAL FIX: Must use full path with private directory prefix
+        // for normalization to work correctly in uploadFromBuffer
+        const privateDir = objectStorageService.getPrivateObjectDir();
+        const fullPath = `${privateDir}/${relativePath}`;
+        
+        console.log('[Message Attachment Upload] Message ID:', req.params.messageId);
+        console.log('[Message Attachment Upload] Original filename:', file.originalname);
+        console.log('[Message Attachment Upload] Relative path:', relativePath);
+        console.log('[Message Attachment Upload] Full path:', fullPath);
+        
         const storagePath = await objectStorageService.uploadFromBuffer(
-          `message-attachments/${filename}`,
+          fullPath,
           file.buffer,
           file.mimetype
         );
+        console.log('[Message Attachment Upload] Normalized storage path:', storagePath);
         
         // Get the GCS file object to set ACL policy
         const objectFile = await objectStorageService.getObjectEntityFile(storagePath);
