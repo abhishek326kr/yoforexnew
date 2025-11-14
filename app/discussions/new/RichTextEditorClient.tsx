@@ -59,7 +59,7 @@ export function RichTextEditorClient({
       setIsUploadingImage(true);
       
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('files', file); // Changed from 'file' to 'files' to match endpoint
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -68,7 +68,8 @@ export function RichTextEditorClient({
 
       if (res.ok) {
         const data = await res.json();
-        const imageUrl = data.url || data.imageUrl;
+        // API returns array of files, get the first URL
+        const imageUrl = data.urls?.[0] || data.files?.[0]?.url || data.url || data.imageUrl;
         
         if (imageUrl && editorInstance) {
           editorInstance.chain()

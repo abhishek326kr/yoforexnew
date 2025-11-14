@@ -337,7 +337,7 @@ export default function ErrorTestPage() {
       });
       
       const formData = new FormData();
-      formData.append('file', largeFile);
+      formData.append('files', largeFile); // Changed from 'file' to 'files' to match endpoint
       
       const response = await fetch('/api/upload', {
         method: 'POST',
