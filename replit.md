@@ -68,16 +68,56 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
-### Rich Text Editor Image Upload & Infinite Loop Fix (Nov 14, 2025)
-**✅ COMPLETED** - Fixed image upload system and React infinite loop error in TipTap rich text editor
+### Website-Wide Infinite Loop Prevention System (Nov 14, 2025)
+**✅ COMPLETED** - Created reusable solution to prevent infinite loops across the entire platform
 
-**Problems:** 
-1. Images uploaded through TipTap rich text editor weren't displaying after upload due to incorrect path handling
-2. Clicking "Next" button to submit thread content caused "Maximum update depth exceeded" error (infinite re-render loop)
+**Problem:** React useEffect hooks with callback dependencies can cause infinite loops when callbacks trigger re-renders, which recreate callbacks, which trigger useEffect again.
 
-**Root Causes:** 
-1. Upload endpoints were passing RELATIVE paths instead of FULL paths with private directory prefix, causing path duplication issues in getObjectEntityFile
-2. onUpdate callback in useEffect dependency array caused infinite loop when editor updated form state
+**Solution Implemented:**
+
+1. **Created useLatestRef Utility Hook** (`app/hooks/useLatestRef.ts`):
+   - Reusable pattern for storing callbacks in refs
+   - Prevents useEffect from re-running when callbacks change
+   - Ensures latest callback version is always used
+
+2. **Fixed useMessagingSocket.ts**:
+   - Had 10 callback props in dependency array causing socket reconnections on every parent re-render
+   - Applied ref pattern to all callbacks
+   - Changed deps from `[userId, queryClient, ...10 callbacks]` to `[userId, queryClient]`
+   - Result: Socket connects once per user session, no reconnection storms
+
+3. **Fixed RichTextEditorClient.tsx**:
+   - `onUpdate` callback in deps caused infinite loops when submitting threads
+   - Applied ref pattern to store callback
+   - Result: Editor listeners register once, use latest callback
+
+**Pattern:**
+```typescript
+// Before (causes infinite loops)
+useEffect(() => {
+  resource.on('event', () => callback());
+}, [resource, callback]); // ❌
+
+// After (stable)
+const callbackRef = useLatestRef(callback);
+useEffect(() => {
+  resource.on('event', () => callbackRef.current());
+}, [resource]); // ✅
+```
+
+**Files Modified:**
+- `app/hooks/useLatestRef.ts` (NEW) - Reusable utility
+- `app/hooks/useMessagingSocket.ts` - Fixed WebSocket loops
+- `app/discussions/new/RichTextEditorClient.tsx` - Fixed editor loops
+
+**Status:** ✅ Architect approved - production ready with "Pass" rating
+
+### Rich Text Editor Image Upload Fix (Nov 14, 2025)
+**✅ COMPLETED** - Fixed image upload system for TipTap rich text editor
+
+**Problem:** Images uploaded through TipTap rich text editor weren't displaying after upload due to incorrect path handling.
+
+**Root Cause:** Upload endpoints were passing RELATIVE paths instead of FULL paths with private directory prefix, causing path duplication issues in getObjectEntityFile.
 
 **Fixes Implemented:**
 
@@ -90,11 +130,6 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 3. **getObjectEntityFile Fix** - Updated to handle both normalized (`/objects/...`) and legacy (privateDir-prefixed) paths without duplication
 
-4. **React Infinite Loop Fix** - Fixed by using ref pattern to store latest onUpdate callback:
-   - Added `onUpdateRef` to store the latest callback without triggering useEffect re-runs
-   - Removed `onUpdate` from useEffect dependency array to prevent editor listener re-registration
-   - This breaks the infinite loop: editor updates → setValue → re-render → ref updated (but useEffect doesn't re-run)
-
 **Complete Upload→Download Flow:**
 1. Upload → R2 stores at `e119.../content/uploads/filename.jpg`
 2. Normalize → Returns `/objects/uploads/filename.jpg`
@@ -106,10 +141,8 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 **Files Modified:**
 - `server/routes.ts` - Fixed upload endpoints + created /api/images/* serving endpoint
 - `server/objectStorage.ts` - Fixed getObjectEntityFile + added comprehensive logging
-- `app/discussions/new/RichTextEditorClient.tsx` - Fixed React infinite loop
-- `app/discussions/new/page.tsx` - Added useCallback wrapper
 
-**Status:** ✅ Architect approved - production ready
+**Status:** ✅ Completed
 
 ### Cloudflare R2 Object Storage Migration (Nov 14, 2025)
 **✅ COMPLETED** - Successfully migrated object storage from GCS/Replit to Cloudflare R2 with full S3-compatible API integration
