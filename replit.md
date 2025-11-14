@@ -68,123 +68,46 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
-### Cloudflare R2 Object Storage Integration (Nov 14, 2025)
-**✅ COMPLETED** - Successfully migrated object storage from GCS/Replit to Cloudflare R2
+### Rich Text Editor Image Upload Fix (Nov 14, 2025)
+**✅ COMPLETED** - Fixed image upload system for TipTap rich text editor with correct path handling and R2 integration
 
-**Overview:**
-Implemented complete Cloudflare R2 support as a third storage mode alongside existing Replit and GCS options. The system now automatically detects R2 credentials and uses AWS S3-compatible API for all object storage operations.
+**Problem:** Images uploaded through TipTap rich text editor weren't displaying after upload due to incorrect path handling and normalization failures.
 
-**Implementation Details:**
+**Root Cause:** Upload endpoints were passing RELATIVE paths instead of FULL paths with private directory prefix, causing path duplication issues in getObjectEntityFile.
 
-**1. R2Signer Class (server/objectStorage.ts):**
-- Created R2Signer implementing StorageSigner interface
-- Initialized S3Client with:
-  - region: 'auto'
-  - endpoint: `https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`
-  - credentials: R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY
-- Implements signURL() for presigned URL generation
-- Maps HTTP methods (GET/HEAD/PUT/DELETE) to S3 commands
+**Fixes Implemented:**
 
-**2. Storage Mode Detection:**
-- Updated detectStorageMode() to support 'r2' | 'replit' | 'gcs'
-- Auto-detects R2 when CLOUDFLARE_ACCOUNT_ID + R2_ACCESS_KEY_ID present
-- Checks STORAGE_MODE env var for explicit mode selection
-- Falls back to Replit/GCS detection
+1. **Upload Endpoints** - All three upload endpoints now use full paths with private directory:
+   - TipTap: `${privateDir}/uploads/${filename}`
+   - Thread images: `${privateDir}/thread-images/${userId}/${filename}`
+   - Message attachments: `${privateDir}/message-attachments/${filename}`
 
-**3. Complete R2 Operations Support:**
-- **uploadFromBuffer()**: Uses S3 PutObjectCommand for uploads
-- **downloadObject()**: Uses S3 GetObjectCommand for streaming downloads
-- **getObjectEntityFile()**: Uses S3 HeadObjectCommand to verify object exists
-- **searchPublicObject()**: Uses S3 HeadObjectCommand to check public objects
-- **ACL Methods**: Skipped for R2 (R2 uses bucket-level permissions + presigned URLs)
-- **Path Normalization**: Converts R2 paths to /objects/... format for database
+2. **Image Serving Endpoint** - Created `/api/images/*` endpoint for secure image delivery with ACL-based authorization
 
-**4. R2 Helper Methods:**
-- `getR2Client()`: Initializes and caches S3Client for R2 operations
-- `checkR2ObjectExists(key)`: Verifies object existence using HeadObjectCommand
-- `getR2Object(key)`: Retrieves object metadata and stream
-- `deleteR2Object(key)`: Deletes R2 objects
+3. **getObjectEntityFile Fix** - Updated to handle both normalized (`/objects/...`) and legacy (privateDir-prefixed) paths without duplication
 
-**Environment Variables Required:**
-- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare account ID
-- `R2_ACCESS_KEY_ID` - R2 access key
-- `R2_SECRET_ACCESS_KEY` - R2 secret key
-- `R2_BUCKET_NAME` - R2 bucket name
-- `STORAGE_MODE` - Optional explicit mode ('r2', 'replit', 'gcs')
-- `PRIVATE_OBJECT_DIR` - Object storage directory (e.g., `/bucket-name/content`)
+4. **React Infinite Loop** - Fixed with useCallback wrapper in parent component
+
+**Complete Upload→Download Flow:**
+1. Upload → R2 stores at `e119.../content/uploads/filename.jpg`
+2. Normalize → Returns `/objects/uploads/filename.jpg`
+3. Response → `/api/images/uploads/filename.jpg`
+4. GET → Reconstructs `/objects/uploads/filename.jpg`
+5. getObjectEntityFile → Extracts entityId correctly (no duplication)
+6. Download → Fetches from R2 using correct key
 
 **Files Modified:**
-- `server/objectStorage.ts` - Complete R2 integration with all operations
-- `package.json` - Added @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner
+- `server/routes.ts` - Fixed upload endpoints + created /api/images/* serving endpoint
+- `server/objectStorage.ts` - Fixed getObjectEntityFile + added comprehensive logging
+- `app/discussions/new/RichTextEditorClient.tsx` - Fixed React infinite loop
+- `app/discussions/new/page.tsx` - Added useCallback wrapper
 
-**Verification:**
-- ✅ Server auto-detects R2 mode: "[ObjectStorage] Auto-detected R2 credentials, using r2 mode"
-- ✅ No TypeScript/LSP errors
-- ✅ Backward compatible with existing Replit and GCS modes
-- ✅ All CRUD operations (Create, Read, Update, Delete) work with R2
-- ✅ Presigned URLs work for secure access
-- ✅ Path normalization correct (/objects/... format)
+**Status:** ✅ Architect approved - production ready
 
-**Benefits:**
-- Zero egress fees with Cloudflare R2 (vs GCS)
-- S3-compatible API for easy integration
-- Automatic mode detection based on credentials
-- Seamless migration path from GCS/Replit
+### Cloudflare R2 Object Storage Migration (Nov 14, 2025)
+**✅ COMPLETED** - Successfully migrated object storage from GCS/Replit to Cloudflare R2 with full S3-compatible API integration
 
-### File Upload Error Handling Fix (Nov 14, 2025)
-**✅ COMPLETED** - Fixed critical upload errors: "Unexpected field" and "uploadObject is not a function"
-
-**Problems Identified:**
-1. **"Unexpected field" Error:**
-   - Users encountered 500 error when uploading images in discussions
-   - Multer errors weren't being caught before throwing to Express
-   - Frontend using wrong field name ('file' instead of 'files')
-
-2. **"uploadObject is not a function" Error:**
-   - Backend calling non-existent method `uploadObject()`
-   - Should use `uploadFromBuffer()` instead
-
-**Root Causes:**
-1. **Backend - Missing Error Handling:**
-   - Multer errors (LIMIT_FILE_SIZE, LIMIT_FILE_COUNT, LIMIT_UNEXPECTED_FILE) not properly caught
-   - Errors threw before route handler execution → generic 500 responses
-
-2. **Frontend - Field Name Mismatch:**
-   - RichTextEditorClient using `formData.append('file', ...)` (singular)
-   - Backend expecting `'files'` (plural)
-
-3. **Backend - Wrong Method Name:**
-   - Code calling `objectStorageService.uploadObject()` which doesn't exist
-   - Correct method is `uploadFromBuffer(objectPath, buffer, contentType)`
-
-**Solutions Implemented:**
-
-**Backend (server/routes.ts):**
-1. Wrapped multer middleware in custom error handler catching all errors before route handler
-2. Specific error messages for each error type:
-   - LIMIT_FILE_SIZE: "File too large. Maximum size is 10MB per file."
-   - LIMIT_FILE_COUNT: "Too many files. Maximum 10 files allowed."
-   - LIMIT_UNEXPECTED_FILE: "Unexpected file field. Please use 'files' as the field name."
-3. Fixed ObjectStorageService method call: `uploadObject()` → `uploadFromBuffer()`
-4. Added detailed logging with `[Upload] Multer error:` prefix
-
-**Frontend:**
-- RichTextEditorClient.tsx: Changed field name from 'file' to 'files'
-- Updated response parsing to handle array response
-- test-errors/page.tsx: Fixed field name for testing
-
-**Files Modified:**
-- `server/routes.ts` - Error handling + ObjectStorageService fix
-- `app/discussions/new/RichTextEditorClient.tsx` - Field name + response parsing
-- `app/test-errors/page.tsx` - Field name fix
-
-**Verification:**
-- ✅ Server running successfully
-- ✅ No "uploadObject is not a function" errors
-- ✅ No "Unexpected field" errors
-- ✅ Image uploads in rich text editor work correctly
-- ✅ Helpful error messages for upload failures
-- ✅ Production-ready with detailed logging
+**Status:** Fully functional with auto-detection, comprehensive logging, and backward compatibility
 
 ## System Architecture
 
@@ -214,9 +137,8 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## External Dependencies
 
--   **Core Infrastructure:** Neon PostgreSQL (serverless database), Replit Object Storage (persistent file storage), Replit OIDC (OAuth authentication provider).
+-   **Core Infrastructure:** Neon PostgreSQL (serverless database), Cloudflare R2 (object storage), Replit OIDC (OAuth authentication provider).
 -   **Email Services:** Hostinger SMTP (transactional email delivery).
 -   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
--   **CDN & Storage:** Google Cloud Storage.
 -   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
 -   **Build & Deployment:** Next.js 16, esbuild, Docker.

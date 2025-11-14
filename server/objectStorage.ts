@@ -625,37 +625,55 @@ export class ObjectStorageService {
     console.log('[getObjectEntityFile] ========== START ==========');
     console.log('[getObjectEntityFile] Input objectPath:', objectPath);
     
-    if (!objectPath.startsWith("/objects/")) {
-      console.log('[getObjectEntityFile] ERROR: Path does not start with /objects/');
-      throw new ObjectNotFoundError();
-    }
-
-    const parts = objectPath.slice(1).split("/");
-    console.log('[getObjectEntityFile] Path parts:', parts);
-    
-    if (parts.length < 2) {
-      console.log('[getObjectEntityFile] ERROR: Not enough path parts');
-      throw new ObjectNotFoundError();
-    }
-
-    const entityId = parts.slice(1).join("/");
-    console.log('[getObjectEntityFile] Entity ID:', entityId);
-    
     const mode = detectStorageMode();
     console.log('[getObjectEntityFile] Storage mode:', mode);
+    
+    // Get private directory for path normalization
+    let privateDir = this.getPrivateObjectDir();
+    if (!privateDir.endsWith("/")) {
+      privateDir = `${privateDir}/`;
+    }
+    
+    let entityId: string;
+    
+    // Handle normalized paths (/objects/...)
+    if (objectPath.startsWith("/objects/")) {
+      const parts = objectPath.slice(1).split("/");
+      console.log('[getObjectEntityFile] Path parts (normalized):', parts);
+      
+      if (parts.length < 2) {
+        console.log('[getObjectEntityFile] ERROR: Not enough path parts');
+        throw new ObjectNotFoundError();
+      }
+      
+      entityId = parts.slice(1).join("/");
+      console.log('[getObjectEntityFile] Entity ID from normalized path:', entityId);
+    }
+    // Handle legacy paths with private directory prefix
+    else if (objectPath.startsWith(privateDir) || objectPath.startsWith(privateDir.replace(/\/$/, ''))) {
+      console.log('[getObjectEntityFile] Path contains private directory prefix (legacy format)');
+      // Strip the private directory prefix to get entityId
+      const normalizedPrivateDir = privateDir.replace(/\/$/, '');
+      if (objectPath.startsWith(normalizedPrivateDir + '/')) {
+        entityId = objectPath.substring((normalizedPrivateDir + '/').length);
+      } else {
+        entityId = objectPath.substring(normalizedPrivateDir.length);
+      }
+      console.log('[getObjectEntityFile] Entity ID from legacy path:', entityId);
+    }
+    else {
+      console.log('[getObjectEntityFile] ERROR: Path does not start with /objects/ or private directory');
+      console.log('[getObjectEntityFile] Expected: /objects/... or', privateDir);
+      throw new ObjectNotFoundError();
+    }
     
     if (mode === 'r2') {
       // R2 implementation - NO objectStorageClient usage
       console.log('[getObjectEntityFile] R2 mode - using S3Client directly');
       
-      // Extract R2 key without using parseObjectPath (which assumes GCS format)
-      let entityDir = this.getPrivateObjectDir();
-      if (!entityDir.endsWith("/")) {
-        entityDir = `${entityDir}/`;
-      }
-      
-      // Build R2 key: remove leading slash from entityDir and append entityId
-      const r2Key = `${entityDir.replace(/^\//, '')}${entityId}`;
+      // Build R2 key: remove leading slash from privateDir and append entityId
+      // entityId already has the path after private directory (e.g., "uploads/filename.jpg")
+      const r2Key = `${privateDir.replace(/^\//, '')}${entityId}`;
       
       console.log('[getObjectEntityFile] R2 Key:', r2Key);
       console.log('[getObjectEntityFile] Checking if R2 object exists...');
@@ -687,15 +705,10 @@ export class ObjectStorageService {
       throw new Error('Storage client not initialized for GCS/Replit mode');
     }
     
-    let entityDir = this.getPrivateObjectDir();
-    console.log('[getObjectEntityFile] Entity dir (before slash):', entityDir);
+    // Use the same entityId extracted above (works for both normalized and legacy paths)
+    console.log('[getObjectEntityFile] Building object entity path for GCS/Replit');
     
-    if (!entityDir.endsWith("/")) {
-      entityDir = `${entityDir}/`;
-    }
-    console.log('[getObjectEntityFile] Entity dir (after slash):', entityDir);
-    
-    const objectEntityPath = `${entityDir}${entityId}`;
+    const objectEntityPath = `${privateDir}${entityId}`;
     console.log('[getObjectEntityFile] Full object entity path:', objectEntityPath);
     
     const { bucketName, objectName } = parseObjectPath(objectEntityPath);
