@@ -68,6 +68,61 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
+### Thread Creation Infinite Loop Fix (Nov 14, 2025)
+**✅ COMPLETED** - Fixed "Maximum update depth exceeded" error when creating forum threads
+
+**Problem:** Users experienced infinite loop error when typing in the thread creation rich text editor. The issue manifested as "Maximum update depth exceeded" React error.
+
+**Root Cause:** 
+- `handleEditorUpdate` called `setValue` on every TipTap keystroke
+- React Hook Form re-rendered parent component
+- Sanitization/normalization of HTML triggered editor content update
+- Editor emitted another update event, creating ping-pong cycle
+- No value comparison meant identical content still triggered setValue
+
+**Solution Implemented:**
+
+1. **Added Value Comparison Guard** in `EnhancedThreadComposeClient.tsx`:
+   ```typescript
+   const handleEditorUpdate = useCallback((html: string, text: string) => {
+     const currentValues = getValues();
+     
+     // Only update if values have actually changed
+     if (currentValues.contentHtml !== html) {
+       setValue("contentHtml", html);
+     }
+     if (currentValues.body !== text) {
+       setValue("body", text);
+     }
+   }, [setValue, getValues]);
+   ```
+
+2. **Added Optional Chaining** in `RichTextEditorClient.tsx`:
+   - Used `onUpdateRef.current?.()` to safely call callback
+   - Prevents errors if callback is undefined
+
+**Pattern for React Hook Form + TipTap:**
+```typescript
+// ❌ BAD: Calls setValue on every keystroke
+const handleEditorUpdate = (html, text) => {
+  setValue("contentHtml", html);
+  setValue("body", text);
+};
+
+// ✅ GOOD: Compare before updating
+const handleEditorUpdate = (html, text) => {
+  const current = getValues();
+  if (current.contentHtml !== html) setValue("contentHtml", html);
+  if (current.body !== text) setValue("body", text);
+};
+```
+
+**Files Modified:**
+- `app/discussions/new/EnhancedThreadComposeClient.tsx` - Added comparison guard
+- `app/discussions/new/RichTextEditorClient.tsx` - Added optional chaining
+
+**Status:** ✅ Architect approved - infinite loop prevented
+
 ### Website-Wide Infinite Loop Prevention System (Nov 14, 2025)
 **✅ COMPLETED** - Created reusable solution to prevent infinite loops across the entire platform
 

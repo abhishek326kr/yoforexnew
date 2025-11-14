@@ -796,15 +796,22 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
   const isFormValid = canProceedStep1;
   
-  // Extract setValue as a stable reference for RichTextEditorClient
-  const { setValue } = form;
+  // Extract setValue and getValues as stable references
+  const { setValue, getValues } = form;
 
-  // Wrap onUpdate in useCallback to prevent infinite loop in RichTextEditorClient
-  // setValue from react-hook-form is stable and doesn't change between renders
+  // Wrap onUpdate in useCallback with value comparison to prevent infinite loops
+  // Only update form values if the content has actually changed
   const handleEditorUpdate = useCallback((html: string, text: string) => {
-    setValue("contentHtml", html);
-    setValue("body", text);
-  }, [setValue]);
+    const currentValues = getValues();
+    
+    // Only update if values have actually changed to prevent infinite loop
+    if (currentValues.contentHtml !== html) {
+      setValue("contentHtml", html);
+    }
+    if (currentValues.body !== text) {
+      setValue("body", text);
+    }
+  }, [setValue, getValues]);
 
   // Hashtag management
   const addHashtag = () => {

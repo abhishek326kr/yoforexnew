@@ -208,7 +208,8 @@ export function RichTextEditorClient({
   useEffect(() => {
     if (editor) {
       const updateContent = () => {
-        onUpdateRef.current(editor.getHTML(), editor.getText());
+        // Use optional chaining in case callback is undefined
+        onUpdateRef.current?.(editor.getHTML(), editor.getText());
       };
       editor.on('update', updateContent);
       return () => {
