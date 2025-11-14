@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dynamic from 'next/dynamic';
 import DOMPurify from 'isomorphic-dompurify';
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 // Dynamically import TipTap editor with SSR disabled to prevent hydration errors
 const RichTextEditorClient = dynamic(
@@ -796,22 +797,22 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
   const isFormValid = canProceedStep1;
   
-  // Extract setValue and getValues as stable references
-  const { setValue, getValues } = form;
+  // Store form methods in a ref to avoid recreating callbacks
+  const formRef = useLatestRef(form);
 
   // Wrap onUpdate in useCallback with value comparison to prevent infinite loops
-  // Only update form values if the content has actually changed
+  // Use empty dependency array since we're using refs and value comparison
   const handleEditorUpdate = useCallback((html: string, text: string) => {
-    const currentValues = getValues();
+    const currentValues = formRef.current.getValues();
     
     // Only update if values have actually changed to prevent infinite loop
     if (currentValues.contentHtml !== html) {
-      setValue("contentHtml", html);
+      formRef.current.setValue("contentHtml", html);
     }
     if (currentValues.body !== text) {
-      setValue("body", text);
+      formRef.current.setValue("body", text);
     }
-  }, [setValue, getValues]);
+  }, []); // Empty array - callback never changes, uses ref to access latest form
 
   // Hashtag management
   const addHashtag = () => {
