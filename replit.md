@@ -68,6 +68,44 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
+### File Upload Error Handling Fix (Nov 14, 2025)
+**✅ COMPLETED** - Fixed critical "Unexpected field" error on /api/upload endpoint
+
+**Problem:**
+- Users encountered 500 error: "Unexpected field" when uploading files in discussions
+- Error occurred when multer encountered issues before route handler could process
+- No helpful error messages to guide users
+
+**Root Cause:**
+- Multer errors (LIMIT_FILE_SIZE, LIMIT_FILE_COUNT, LIMIT_UNEXPECTED_FILE) were not properly caught
+- Errors threw before route handler execution, resulting in generic 500 responses
+- Missing error handling middleware for multer-specific errors
+
+**Solution Implemented:**
+1. **Wrapped multer middleware** in custom error handler:
+   - Catches all multer errors before route handler
+   - Provides specific error messages for each error type
+   - Logs detailed error information for debugging
+
+2. **Specific Error Messages** for common cases:
+   - `LIMIT_FILE_SIZE`: "File too large. Maximum size is 10MB per file."
+   - `LIMIT_FILE_COUNT`: "Too many files. Maximum 10 files allowed."
+   - `LIMIT_UNEXPECTED_FILE`: "Unexpected file field. Please use 'files' as the field name."
+   - File filter rejections: Returns the specific rejection reason
+
+3. **Improved Error Logging**:
+   - All multer errors logged with `[Upload] Multer error:` prefix
+   - Helps diagnose file upload issues in production
+
+**Files Modified:**
+- `server/routes.ts` - Added comprehensive multer error handling to /api/upload endpoint
+
+**Verification:**
+- ✅ Server running successfully with new error handling
+- ✅ Proper error responses for file size limits
+- ✅ Clear error messages guide users on how to fix issues
+- ✅ Detailed logging for production debugging
+
 ### EA Detail Page UI & Security Improvements (Nov 14, 2025)
 **✅ COMPLETED** - Beautiful modern download UI with responsive design and critical security fix
 

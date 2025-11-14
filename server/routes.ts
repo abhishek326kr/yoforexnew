@@ -1601,7 +1601,44 @@ export async function registerRoutes(app: Express): Promise<Express> {
   });
 
   // FILE UPLOAD ENDPOINT with enhanced metadata and image resizing (using object storage)
-  app.post("/api/upload", isAuthenticated, uploadMultiple.array('files', 10), async (req, res) => {
+  app.post("/api/upload", isAuthenticated, (req, res, next) => {
+    uploadMultiple.array('files', 10)(req, res, (err: any) => {
+      if (err) {
+        console.error('[Upload] Multer error:', err);
+        
+        // Handle specific multer errors
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ 
+            message: "File too large. Maximum size is 10MB per file.",
+            error: "File too large"
+          });
+        }
+        
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({ 
+            message: "Too many files. Maximum 10 files allowed.",
+            error: "Too many files"
+          });
+        }
+        
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({ 
+            message: "Unexpected file field. Please use 'files' as the field name.",
+            error: "Unexpected field"
+          });
+        }
+        
+        // File filter errors or other multer errors
+        return res.status(400).json({ 
+          message: err.message || "File upload failed",
+          error: err.message || "Upload failed"
+        });
+      }
+      
+      // No multer error, proceed to route handler
+      next();
+    });
+  }, async (req, res) => {
     try {
       if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
         return res.status(400).json({ error: "No files uploaded" });
