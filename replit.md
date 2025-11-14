@@ -71,18 +71,33 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 ### Thread Creation Infinite Loop Fix (Nov 14, 2025)
 **✅ COMPLETED** - Fixed "Maximum update depth exceeded" error when creating forum threads
 
-**Problem:** Users experienced infinite loop error when typing in the thread creation rich text editor. The issue manifested as "Maximum update depth exceeded" React error.
+**Problem:** Users experienced infinite loop error when creating threads. The page would crash with "Maximum update depth exceeded" React error, making it impossible to post threads.
 
-**Root Cause:** 
-- `handleEditorUpdate` called `setValue` on every TipTap keystroke
-- React Hook Form re-rendered parent component
-- Sanitization/normalization of HTML triggered editor content update
-- Editor emitted another update event, creating ping-pong cycle
-- No value comparison meant identical content still triggered setValue
+**Root Causes Identified:**
 
-**Solution Implemented:**
+1. **useEditor Hook Recreating on Every Render** (Primary Issue):
+   - The TipTap useEditor hook was called without a dependency array
+   - Created fresh configuration object on every render
+   - Editor instance torn down and recreated repeatedly
+   - Caused component mount/unmount infinite loop
 
-1. **Added Value Comparison Guard** in `EnhancedThreadComposeClient.tsx`:
+2. **setValue Called on Every Keystroke** (Secondary Issue):
+   - `handleEditorUpdate` called `setValue` on every TipTap keystroke
+   - React Hook Form re-rendered parent component
+   - HTML sanitization potentially triggered editor updates
+   - No value comparison meant identical content still triggered setValue
+
+**Solutions Implemented:**
+
+1. **Fixed useEditor Hook** in `RichTextEditorClient.tsx`:
+   ```typescript
+   const editor = useEditor({
+     // ... configuration ...
+   }, []); // Empty dependency array prevents recreation
+   ```
+   This ensures the editor is created ONCE and persists across renders.
+
+2. **Added Value Comparison Guard** in `EnhancedThreadComposeClient.tsx`:
    ```typescript
    const handleEditorUpdate = useCallback((html: string, text: string) => {
      const currentValues = getValues();
@@ -97,31 +112,36 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
    }, [setValue, getValues]);
    ```
 
-2. **Added Optional Chaining** in `RichTextEditorClient.tsx`:
+3. **Added Optional Chaining** for safety:
    - Used `onUpdateRef.current?.()` to safely call callback
-   - Prevents errors if callback is undefined
 
-**Pattern for React Hook Form + TipTap:**
+**Pattern for TipTap + React Hook Form:**
 ```typescript
-// ❌ BAD: Calls setValue on every keystroke
-const handleEditorUpdate = (html, text) => {
-  setValue("contentHtml", html);
-  setValue("body", text);
+// ❌ BAD: Editor recreates on every render
+const editor = useEditor({ config });
+
+// ✅ GOOD: Editor created once
+const editor = useEditor({ config }, []);
+
+// ❌ BAD: Calls setValue unconditionally
+const handleUpdate = (html, text) => {
+  setValue("html", html);
+  setValue("text", text);
 };
 
 // ✅ GOOD: Compare before updating
-const handleEditorUpdate = (html, text) => {
+const handleUpdate = (html, text) => {
   const current = getValues();
-  if (current.contentHtml !== html) setValue("contentHtml", html);
-  if (current.body !== text) setValue("body", text);
+  if (current.html !== html) setValue("html", html);
+  if (current.text !== text) setValue("text", text);
 };
 ```
 
 **Files Modified:**
+- `app/discussions/new/RichTextEditorClient.tsx` - Added dependency array to useEditor + optional chaining
 - `app/discussions/new/EnhancedThreadComposeClient.tsx` - Added comparison guard
-- `app/discussions/new/RichTextEditorClient.tsx` - Added optional chaining
 
-**Status:** ✅ Architect approved - infinite loop prevented
+**Status:** ✅ Complete - Users can now create threads without infinite loops
 
 ### Website-Wide Infinite Loop Prevention System (Nov 14, 2025)
 **✅ COMPLETED** - Created reusable solution to prevent infinite loops across the entire platform

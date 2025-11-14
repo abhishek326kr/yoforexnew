@@ -201,7 +201,7 @@ export function RichTextEditorClient({
         },
       },
     },
-  });
+  }, []); // Empty dependency array to prevent editor from being recreated on every render
 
   // Update parent when editor content changes
   // Use ref to avoid infinite loops caused by onUpdate changing on every render
