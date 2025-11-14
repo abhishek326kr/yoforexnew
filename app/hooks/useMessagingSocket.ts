@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import type {
   TypingEvent,
   NewMessageEvent,
@@ -44,6 +45,17 @@ export function useMessagingSocket(options: UseMessagingSocketOptions = {}) {
   const currentConversationRef = useRef<string | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const onlineUsersRef = useRef<Set<string>>(new Set());
+  
+  // Use refs to store latest callbacks without triggering useEffect re-runs
+  const onNewMessageRef = useLatestRef(onNewMessage);
+  const onMessageReadRef = useLatestRef(onMessageRead);
+  const onTypingRef = useLatestRef(onTyping);
+  const onUserOnlineRef = useLatestRef(onUserOnline);
+  const onUserOfflineRef = useLatestRef(onUserOffline);
+  const onReactionAddedRef = useLatestRef(onReactionAdded);
+  const onReactionRemovedRef = useLatestRef(onReactionRemoved);
+  const onParticipantAddedRef = useLatestRef(onParticipantAdded);
+  const onParticipantRemovedRef = useLatestRef(onParticipantRemoved);
 
   // Initialize socket connection
   useEffect(() => {
@@ -78,7 +90,7 @@ export function useMessagingSocket(options: UseMessagingSocketOptions = {}) {
       console.error('[Messaging WS] WebSocket error:', error);
     });
 
-    // Handle new message
+    // Handle new message - use ref to avoid infinite loops
     socket.on('new-message', (event: NewMessageEvent) => {
       console.log('[Messaging WS] New message received:', event);
       
@@ -92,42 +104,42 @@ export function useMessagingSocket(options: UseMessagingSocketOptions = {}) {
         });
       }
 
-      onNewMessage?.(event);
+      onNewMessageRef.current?.(event);
     });
 
-    // Handle message read receipt
+    // Handle message read receipt - use ref to avoid infinite loops
     socket.on('message-read', (event: MessageReadEvent) => {
       console.log('[Messaging WS] Message read:', event);
       
       // Update conversations to reflect read status
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       
-      onMessageRead?.(event);
+      onMessageReadRef.current?.(event);
     });
 
-    // Handle typing indicator
+    // Handle typing indicator - use ref to avoid infinite loops
     socket.on('typing', (event: TypingEvent) => {
-      onTyping?.(event);
+      onTypingRef.current?.(event);
     });
 
-    // Handle user online status
+    // Handle user online status - use ref to avoid infinite loops
     socket.on('user-online', (event: UserOnlineEvent) => {
       onlineUsersRef.current.add(event.userId);
-      onUserOnline?.(event);
+      onUserOnlineRef.current?.(event);
     });
 
     socket.on('user-offline', (event: UserOnlineEvent) => {
       onlineUsersRef.current.delete(event.userId);
-      onUserOffline?.(event);
+      onUserOfflineRef.current?.(event);
     });
 
-    // Handle reactions
+    // Handle reactions - use ref to avoid infinite loops
     socket.on('reaction-added', (event: ReactionEvent) => {
       console.log('[Messaging WS] Reaction added:', event);
       queryClient.invalidateQueries({ 
         queryKey: ['/api/messages', event.messageId, 'reactions'],
       });
-      onReactionAdded?.(event);
+      onReactionAddedRef.current?.(event);
     });
 
     socket.on('reaction-removed', (event: any) => {
@@ -135,27 +147,27 @@ export function useMessagingSocket(options: UseMessagingSocketOptions = {}) {
       queryClient.invalidateQueries({ 
         queryKey: ['/api/messages', event.messageId, 'reactions'],
       });
-      onReactionRemoved?.(event);
+      onReactionRemovedRef.current?.(event);
     });
 
-    // Handle participant events
+    // Handle participant events - use ref to avoid infinite loops
     socket.on('participant-added', (event: ParticipantEvent) => {
       console.log('[Messaging WS] Participant added:', event);
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-      onParticipantAdded?.(event);
+      onParticipantAddedRef.current?.(event);
     });
 
     socket.on('participant-removed', (event: ParticipantEvent) => {
       console.log('[Messaging WS] Participant removed:', event);
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-      onParticipantRemoved?.(event);
+      onParticipantRemovedRef.current?.(event);
     });
 
     return () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [userId, queryClient, onNewMessage, onMessageRead, onTyping, onUserOnline, onUserOffline, onReactionAdded, onReactionRemoved, onParticipantAdded, onParticipantRemoved]);
+  }, [userId, queryClient]); // Only depend on userId and queryClient - callbacks are stored in refs
 
   // Join conversation room
   const joinConversation = useCallback((conversationId: string) => {
