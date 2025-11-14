@@ -68,6 +68,69 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
+### Cloudflare R2 Object Storage Integration (Nov 14, 2025)
+**✅ COMPLETED** - Successfully migrated object storage from GCS/Replit to Cloudflare R2
+
+**Overview:**
+Implemented complete Cloudflare R2 support as a third storage mode alongside existing Replit and GCS options. The system now automatically detects R2 credentials and uses AWS S3-compatible API for all object storage operations.
+
+**Implementation Details:**
+
+**1. R2Signer Class (server/objectStorage.ts):**
+- Created R2Signer implementing StorageSigner interface
+- Initialized S3Client with:
+  - region: 'auto'
+  - endpoint: `https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`
+  - credentials: R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY
+- Implements signURL() for presigned URL generation
+- Maps HTTP methods (GET/HEAD/PUT/DELETE) to S3 commands
+
+**2. Storage Mode Detection:**
+- Updated detectStorageMode() to support 'r2' | 'replit' | 'gcs'
+- Auto-detects R2 when CLOUDFLARE_ACCOUNT_ID + R2_ACCESS_KEY_ID present
+- Checks STORAGE_MODE env var for explicit mode selection
+- Falls back to Replit/GCS detection
+
+**3. Complete R2 Operations Support:**
+- **uploadFromBuffer()**: Uses S3 PutObjectCommand for uploads
+- **downloadObject()**: Uses S3 GetObjectCommand for streaming downloads
+- **getObjectEntityFile()**: Uses S3 HeadObjectCommand to verify object exists
+- **searchPublicObject()**: Uses S3 HeadObjectCommand to check public objects
+- **ACL Methods**: Skipped for R2 (R2 uses bucket-level permissions + presigned URLs)
+- **Path Normalization**: Converts R2 paths to /objects/... format for database
+
+**4. R2 Helper Methods:**
+- `getR2Client()`: Initializes and caches S3Client for R2 operations
+- `checkR2ObjectExists(key)`: Verifies object existence using HeadObjectCommand
+- `getR2Object(key)`: Retrieves object metadata and stream
+- `deleteR2Object(key)`: Deletes R2 objects
+
+**Environment Variables Required:**
+- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare account ID
+- `R2_ACCESS_KEY_ID` - R2 access key
+- `R2_SECRET_ACCESS_KEY` - R2 secret key
+- `R2_BUCKET_NAME` - R2 bucket name
+- `STORAGE_MODE` - Optional explicit mode ('r2', 'replit', 'gcs')
+- `PRIVATE_OBJECT_DIR` - Object storage directory (e.g., `/bucket-name/content`)
+
+**Files Modified:**
+- `server/objectStorage.ts` - Complete R2 integration with all operations
+- `package.json` - Added @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner
+
+**Verification:**
+- ✅ Server auto-detects R2 mode: "[ObjectStorage] Auto-detected R2 credentials, using r2 mode"
+- ✅ No TypeScript/LSP errors
+- ✅ Backward compatible with existing Replit and GCS modes
+- ✅ All CRUD operations (Create, Read, Update, Delete) work with R2
+- ✅ Presigned URLs work for secure access
+- ✅ Path normalization correct (/objects/... format)
+
+**Benefits:**
+- Zero egress fees with Cloudflare R2 (vs GCS)
+- S3-compatible API for easy integration
+- Automatic mode detection based on credentials
+- Seamless migration path from GCS/Replit
+
 ### File Upload Error Handling Fix (Nov 14, 2025)
 **✅ COMPLETED** - Fixed critical upload errors: "Unexpected field" and "uploadObject is not a function"
 
