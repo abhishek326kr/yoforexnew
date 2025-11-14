@@ -66,6 +66,63 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 - **Be Specific:** Include file paths, dates, and reasons for changes
 - **Section Organization:** Recent Changes should list newest first with dates
 
+## Recent Changes
+
+### File Upload Error Handling Fix (Nov 14, 2025)
+**✅ COMPLETED** - Fixed critical upload errors: "Unexpected field" and "uploadObject is not a function"
+
+**Problems Identified:**
+1. **"Unexpected field" Error:**
+   - Users encountered 500 error when uploading images in discussions
+   - Multer errors weren't being caught before throwing to Express
+   - Frontend using wrong field name ('file' instead of 'files')
+
+2. **"uploadObject is not a function" Error:**
+   - Backend calling non-existent method `uploadObject()`
+   - Should use `uploadFromBuffer()` instead
+
+**Root Causes:**
+1. **Backend - Missing Error Handling:**
+   - Multer errors (LIMIT_FILE_SIZE, LIMIT_FILE_COUNT, LIMIT_UNEXPECTED_FILE) not properly caught
+   - Errors threw before route handler execution → generic 500 responses
+
+2. **Frontend - Field Name Mismatch:**
+   - RichTextEditorClient using `formData.append('file', ...)` (singular)
+   - Backend expecting `'files'` (plural)
+
+3. **Backend - Wrong Method Name:**
+   - Code calling `objectStorageService.uploadObject()` which doesn't exist
+   - Correct method is `uploadFromBuffer(objectPath, buffer, contentType)`
+
+**Solutions Implemented:**
+
+**Backend (server/routes.ts):**
+1. Wrapped multer middleware in custom error handler catching all errors before route handler
+2. Specific error messages for each error type:
+   - LIMIT_FILE_SIZE: "File too large. Maximum size is 10MB per file."
+   - LIMIT_FILE_COUNT: "Too many files. Maximum 10 files allowed."
+   - LIMIT_UNEXPECTED_FILE: "Unexpected file field. Please use 'files' as the field name."
+3. Fixed ObjectStorageService method call: `uploadObject()` → `uploadFromBuffer()`
+4. Added detailed logging with `[Upload] Multer error:` prefix
+
+**Frontend:**
+- RichTextEditorClient.tsx: Changed field name from 'file' to 'files'
+- Updated response parsing to handle array response
+- test-errors/page.tsx: Fixed field name for testing
+
+**Files Modified:**
+- `server/routes.ts` - Error handling + ObjectStorageService fix
+- `app/discussions/new/RichTextEditorClient.tsx` - Field name + response parsing
+- `app/test-errors/page.tsx` - Field name fix
+
+**Verification:**
+- ✅ Server running successfully
+- ✅ No "uploadObject is not a function" errors
+- ✅ No "Unexpected field" errors
+- ✅ Image uploads in rich text editor work correctly
+- ✅ Helpful error messages for upload failures
+- ✅ Production-ready with detailed logging
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.

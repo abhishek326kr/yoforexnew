@@ -1690,16 +1690,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
           const randomSuffix = Math.round(Math.random() * 1E9);
           const filename = `${timestamp}-${randomSuffix}${ext}`;
           
-          // Upload to object storage
-          const objectPath = await objectStorageService.uploadObject(
+          // Upload to object storage using uploadFromBuffer
+          // Note: uploadFromBuffer expects path without leading slash
+          const objectPath = await objectStorageService.uploadFromBuffer(
             `uploads/${filename}`,
             fileBuffer,
-            contentType,
-            {
-              uploadedBy: userId,
-              originalName: file.originalname,
-              uploadedAt: new Date().toISOString()
-            }
+            contentType
           );
           
           return {
@@ -5768,16 +5764,11 @@ export async function registerRoutes(app: Express): Promise<Express> {
             continue;
           }
           
-          // Upload to object storage
-          const url = await objectStorageService.uploadObject(
+          // Upload to object storage using uploadFromBuffer
+          const url = await objectStorageService.uploadFromBuffer(
             objectName,
             fileData,
-            file.mimetype,
-            {
-              uploadedBy: authenticatedUserId,
-              uploadType: 'thread_image',
-              originalName: file.originalname,
-            }
+            file.mimetype
           );
           
           uploadedUrls.push(url);
@@ -8499,18 +8490,12 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const filename = `message-${req.params.messageId}-${timestamp}-${randomSuffix}${ext}`;
       
       try {
-        // Upload to object storage
+        // Upload to object storage using uploadFromBuffer
         const objectStorageService = new ObjectStorageService();
-        const storagePath = await objectStorageService.uploadObject(
+        const storagePath = await objectStorageService.uploadFromBuffer(
           `message-attachments/${filename}`,
           file.buffer,
-          file.mimetype,
-          {
-            uploadedBy: authenticatedUserId,
-            messageId: req.params.messageId,
-            originalName: file.originalname,
-            uploadedAt: new Date().toISOString()
-          }
+          file.mimetype
         );
         
         // Get the GCS file object to set ACL policy
