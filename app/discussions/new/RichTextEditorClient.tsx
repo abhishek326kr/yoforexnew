@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   Bold, 
   Italic, 
@@ -39,6 +39,13 @@ export function RichTextEditorClient({
   const { toast } = useToast();
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [mounted, setMounted] = useState(false);
+  
+  // Use ref to store the latest onUpdate callback to avoid infinite loops
+  const onUpdateRef = useRef(onUpdate);
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  }, [onUpdate]);
 
   useEffect(() => {
     setMounted(true);
@@ -197,18 +204,18 @@ export function RichTextEditorClient({
   });
 
   // Update parent when editor content changes
-  // onUpdate is now stable thanks to useCallback in parent component
+  // Use ref to avoid infinite loops caused by onUpdate changing on every render
   useEffect(() => {
     if (editor) {
       const updateContent = () => {
-        onUpdate(editor.getHTML(), editor.getText());
+        onUpdateRef.current(editor.getHTML(), editor.getText());
       };
       editor.on('update', updateContent);
       return () => {
         editor.off('update', updateContent);
       };
     }
-  }, [editor, onUpdate]); // Restored onUpdate now that parent uses useCallback
+  }, [editor]); // Only depend on editor, not onUpdate
 
   // Trigger image upload from file input
   const triggerImageUpload = () => {

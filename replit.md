@@ -68,12 +68,16 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
-### Rich Text Editor Image Upload Fix (Nov 14, 2025)
-**✅ COMPLETED** - Fixed image upload system for TipTap rich text editor with correct path handling and R2 integration
+### Rich Text Editor Image Upload & Infinite Loop Fix (Nov 14, 2025)
+**✅ COMPLETED** - Fixed image upload system and React infinite loop error in TipTap rich text editor
 
-**Problem:** Images uploaded through TipTap rich text editor weren't displaying after upload due to incorrect path handling and normalization failures.
+**Problems:** 
+1. Images uploaded through TipTap rich text editor weren't displaying after upload due to incorrect path handling
+2. Clicking "Next" button to submit thread content caused "Maximum update depth exceeded" error (infinite re-render loop)
 
-**Root Cause:** Upload endpoints were passing RELATIVE paths instead of FULL paths with private directory prefix, causing path duplication issues in getObjectEntityFile.
+**Root Causes:** 
+1. Upload endpoints were passing RELATIVE paths instead of FULL paths with private directory prefix, causing path duplication issues in getObjectEntityFile
+2. onUpdate callback in useEffect dependency array caused infinite loop when editor updated form state
 
 **Fixes Implemented:**
 
@@ -86,7 +90,10 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 3. **getObjectEntityFile Fix** - Updated to handle both normalized (`/objects/...`) and legacy (privateDir-prefixed) paths without duplication
 
-4. **React Infinite Loop** - Fixed with useCallback wrapper in parent component
+4. **React Infinite Loop Fix** - Fixed by using ref pattern to store latest onUpdate callback:
+   - Added `onUpdateRef` to store the latest callback without triggering useEffect re-runs
+   - Removed `onUpdate` from useEffect dependency array to prevent editor listener re-registration
+   - This breaks the infinite loop: editor updates → setValue → re-render → ref updated (but useEffect doesn't re-run)
 
 **Complete Upload→Download Flow:**
 1. Upload → R2 stores at `e119.../content/uploads/filename.jpg`
