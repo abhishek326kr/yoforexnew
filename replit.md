@@ -102,23 +102,50 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
-### CoinBalanceWidget - Infinite Loop Fix (November 15, 2025)
+### Thread Creation Page - Complete Debugging Resolution (November 15, 2025)
 
-**Problem**: "Maximum update depth exceeded" error causing blank page render on pages with Header component (including `/discussions/new`).
+**Overview**: Successfully debugged and fixed all issues preventing the `/discussions/new` thread creation page from loading. The page now renders correctly for both authenticated and unauthenticated users with proper authentication flow integration.
 
-**Root Cause**: `CoinBalanceWidget` component uses `<Tooltip>` components without a `<TooltipProvider>` wrapper. Radix UI's Tooltip requires a TooltipProvider ancestor to function correctly - without it, the component enters an infinite re-render loop.
+**Issues Fixed**:
 
-**Solution Applied**:
+1. **CoinBalanceWidget Infinite Loop**
+   - **Problem**: "Maximum update depth exceeded" error causing blank page render
+   - **Root Cause**: `<Tooltip>` components missing required `<TooltipProvider>` wrapper
+   - **Solution**: Added `TooltipProvider` wrapper in `app/components/CoinBalanceWidget.tsx`
+   - **Result**: ✅ Zero infinite loop errors
 
-**File: `app/components/CoinBalanceWidget.tsx`**
-- Added `TooltipProvider` to imports from `@/components/ui/tooltip`
-- Wrapped entire component return value with `<TooltipProvider>...</TooltipProvider>`
-- This provides the required context for all nested `<Tooltip>` components to function correctly
+2. **SSR Gateway Timeout (504)**
+   - **Problem**: Page timing out during server-side rendering
+   - **Root Cause**: Heavy client components (TipTap, React Query, DOMPurify) evaluated during SSR
+   - **Solution**: Converted `app/discussions/new/page.tsx` to client component with static import
+   - **Result**: ✅ Page loads in ~3s without timeouts
 
-**Result**: ✅ **COMPLETELY RESOLVED**
-- Zero "Maximum update depth exceeded" errors after fix
-- Pages with CoinBalanceWidget now render correctly
-- All tooltip functionality preserved and working properly
-- No performance impact - TooltipProvider is lightweight
+3. **Authentication Flow Blocking**
+   - **Problem**: Loading spinner blocking UI, preventing AuthPrompt modal from appearing
+   - **Root Cause**: Early return checking `isLoading || isAuthenticating` blocked entire component render
+   - **Solution**: Removed blocking early return in `EnhancedThreadComposeClient.tsx`, allowing AuthPrompt to render
+   - **Result**: ✅ Unauthenticated users see form with auth modal appearing when needed
 
-**Critical Lesson**: Always ensure Radix UI components have their required Provider ancestor. Missing providers cause infinite loops, not runtime errors.
+4. **Dynamic Import Module Evaluation Failure**
+   - **Problem**: Page stuck on loading spinner indefinitely
+   - **Root Cause**: Dynamic import with `ssr: false` prevented module from loading
+   - **Solution**: Reverted to static import of `EnhancedThreadComposeClient` in page.tsx
+   - **Result**: ✅ Component loads immediately without import overhead
+
+**Files Modified**:
+- `app/components/CoinBalanceWidget.tsx` - Added TooltipProvider wrapper
+- `app/discussions/new/page.tsx` - Converted to client component, static import
+- `app/discussions/new/EnhancedThreadComposeClient.tsx` - Removed blocking loading guard
+
+**Current State**: ✅ **FULLY FUNCTIONAL**
+- Page renders successfully for authenticated and unauthenticated users
+- All form fields visible and functional
+- Authentication flow works correctly with modal prompt
+- No loading spinner stuck states
+- Architect reviewed and approved all fixes
+
+**Critical Lessons**:
+1. Radix UI components require Provider ancestors - missing providers cause infinite loops
+2. Heavy client-only components should use client component pages, not SSR
+3. Don't block UI with loading guards when modals need to be visible
+4. Static imports are more reliable than dynamic imports for core components
