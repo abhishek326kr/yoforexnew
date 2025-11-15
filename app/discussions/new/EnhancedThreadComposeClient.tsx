@@ -52,18 +52,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthPrompt } from "@/hooks/useAuthPrompt";
 import { apiRequest } from "@/lib/queryClient";
