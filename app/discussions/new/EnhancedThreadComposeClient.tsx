@@ -1045,7 +1045,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                               Your story or question
                             </Label>
                             <RichTextEditorClient
-                              initialContent={contentHtmlValue}
+                              initialContent=""
                               onUpdate={handleEditorUpdate}
                               isDragging={isDragging}
                               onDragStateChange={setIsDragging}

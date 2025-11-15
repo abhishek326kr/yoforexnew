@@ -40,12 +40,8 @@ export function RichTextEditorClient({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [mounted, setMounted] = useState(false);
   
-  // Use ref to store the latest onUpdate callback to avoid infinite loops
-  const onUpdateRef = useRef(onUpdate);
-
-  useEffect(() => {
-    onUpdateRef.current = onUpdate;
-  }, [onUpdate]);
+  // Track the last content we set to prevent setting the same content twice
+  const lastSetContentRef = useRef<string>('');
 
   useEffect(() => {
     setMounted(true);
@@ -66,7 +62,7 @@ export function RichTextEditorClient({
       setIsUploadingImage(true);
       
       const formData = new FormData();
-      formData.append('files', file); // Changed from 'file' to 'files' to match endpoint
+      formData.append('files', file);
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -75,7 +71,6 @@ export function RichTextEditorClient({
 
       if (res.ok) {
         const data = await res.json();
-        // API returns array of files, get the first URL
         const imageUrl = data.urls?.[0] || data.files?.[0]?.url || data.url || data.imageUrl;
         
         if (imageUrl && editorInstance) {
@@ -132,7 +127,11 @@ export function RichTextEditorClient({
         emptyEditorClass: 'is-editor-empty',
       }),
     ],
-    content: '', // Static empty content - initialContent will be set via setContent in useEffect
+    content: '', // Start empty
+    onUpdate: ({ editor }) => {
+      // Directly call onUpdate when editor changes
+      onUpdate(editor.getHTML(), editor.getText());
+    },
     editorProps: {
       attributes: {
         class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4',
@@ -201,33 +200,24 @@ export function RichTextEditorClient({
         },
       },
     },
-  }, []); // Empty dependency array to prevent editor from being recreated on every render
+  }, []); // Empty deps - editor created once
 
-  // Set initial content when editor is ready (avoids closure issues)
+  // Update editor content when initialContent changes, but prevent loops
+  // Only set if: (1) content is different AND (2) it's not the same as what editor currently has
   useEffect(() => {
     if (editor && initialContent && !editor.isDestroyed) {
-      // Only set if content is different to avoid unnecessary updates
       const currentContent = editor.getHTML();
-      if (currentContent !== initialContent) {
+      
+      // Only update if:
+      // 1. initialContent is different from what we last set
+      // 2. initialContent is different from current editor content
+      // This prevents the loop: form updates → prop changes → setContent → update event → form updates...
+      if (initialContent !== lastSetContentRef.current && initialContent !== currentContent) {
+        lastSetContentRef.current = initialContent;
         editor.commands.setContent(initialContent);
       }
     }
   }, [editor, initialContent]);
-
-  // Update parent when editor content changes
-  // Use ref to avoid infinite loops caused by onUpdate changing on every render
-  useEffect(() => {
-    if (editor) {
-      const updateContent = () => {
-        // Use optional chaining in case callback is undefined
-        onUpdateRef.current?.(editor.getHTML(), editor.getText());
-      };
-      editor.on('update', updateContent);
-      return () => {
-        editor.off('update', updateContent);
-      };
-    }
-  }, [editor]); // Only depend on editor, not onUpdate
 
   // Trigger image upload from file input
   const triggerImageUpload = () => {
