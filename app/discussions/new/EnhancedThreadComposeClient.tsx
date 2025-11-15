@@ -6,22 +6,8 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import dynamic from 'next/dynamic';
 import DOMPurify from 'isomorphic-dompurify';
-import { useLatestRef } from "@/hooks/useLatestRef";
-
-// Dynamically import TipTap editor with SSR disabled to prevent hydration errors
-const RichTextEditorClient = dynamic(
-  () => import('./RichTextEditorClient').then(mod => ({ default: mod.RichTextEditorClient })),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center min-h-[400px] border rounded-lg bg-muted/20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    )
-  }
-);
+import RichTextEditor from './RichTextEditor';
 import type { ForumCategory } from "@shared/schema";
 import Header from "@/components/Header";
 import EnhancedFooter from "@/components/EnhancedFooter";
@@ -790,22 +776,6 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
   const isFormValid = canProceedStep1;
   
-  // Store form methods in a ref to avoid recreating callbacks
-  const formRef = useLatestRef(form);
-
-  // Wrap onUpdate in useCallback with value comparison to prevent infinite loops
-  // Use empty dependency array since we're using refs and value comparison
-  const handleEditorUpdate = useCallback((html: string, text: string) => {
-    const currentValues = formRef.current.getValues();
-    
-    // Only update if values have actually changed to prevent infinite loop
-    if (currentValues.contentHtml !== html) {
-      formRef.current.setValue("contentHtml", html);
-    }
-    if (currentValues.body !== text) {
-      formRef.current.setValue("body", text);
-    }
-  }, []); // Empty array - callback never changes, uses ref to access latest form
 
   // Hashtag management
   const addHashtag = () => {
@@ -1039,33 +1009,33 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                           />
 
                           {/* Rich Text Editor */}
-                          <div className="space-y-3">
-                            <Label className="flex items-center gap-2">
-                              <BookOpen className="h-4 w-4" />
-                              Your story or question
-                            </Label>
-                            <RichTextEditorClient
-                              initialContent=""
-                              onUpdate={handleEditorUpdate}
-                              isDragging={isDragging}
-                              onDragStateChange={setIsDragging}
-                            />
-                            <div className="flex justify-between text-xs">
-                              <span className={cn(
-                                "transition-colors",
-                                bodyTextLength < 150 ? "text-red-500" : "text-green-500"
-                              )}>
-                                <span>{bodyTextLength}</span>
-                                <span> characters</span>
-                                {bodyTextLength >= 150 && (
-                                  <CheckCircle className="inline h-3 w-3 ml-1" />
-                                )}
-                              </span>
-                              <span className="text-muted-foreground">
-                                💡 Drag & drop or paste images directly
-                              </span>
-                            </div>
-                          </div>
+                          <FormField
+                            control={form.control}
+                            name="contentHtml"
+                            render={({ field, fieldState }) => (
+                              <FormItem>
+                                <FormLabel className="flex items-center gap-2">
+                                  <BookOpen className="h-4 w-4" />
+                                  Your story or question
+                                </FormLabel>
+                                <FormControl>
+                                  <RichTextEditor
+                                    value={field.value}
+                                    onChange={(html, plainText) => {
+                                      field.onChange(html);
+                                      form.setValue("body", plainText);
+                                    }}
+                                    onBlur={field.onBlur}
+                                    error={!!fieldState.error}
+                                    placeholder="Share your thoughts, analysis, or questions with the community..."
+                                    minLength={20}
+                                    maxLength={50000}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
                           {/* Advanced Options */}
                           {!quickStartMode && (

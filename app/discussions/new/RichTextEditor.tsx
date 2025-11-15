@@ -120,26 +120,26 @@ export default function RichTextEditor({
           className
         ),
       },
-      handleDrop: (view, event, slice, moved) => {
+      handleDrop: (view: any, event: any, slice: any, moved: any) => {
         // Handle image drops
-        const files = Array.from(event.dataTransfer?.files || []);
-        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        const files = Array.from(event.dataTransfer?.files || []) as File[];
+        const imageFiles = files.filter((file: File) => file.type.startsWith('image/'));
         
         if (imageFiles.length > 0) {
           event.preventDefault();
-          imageFiles.forEach(file => handleImageUpload(file));
+          imageFiles.forEach((file: File) => handleImageUpload(file));
           return true;
         }
         return false;
       },
-      handlePaste: (view, event, slice) => {
+      handlePaste: (view: any, event: any, slice: any) => {
         // Handle image pastes
-        const files = Array.from(event.clipboardData?.files || []);
-        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        const files = Array.from(event.clipboardData?.files || []) as File[];
+        const imageFiles = files.filter((file: File) => file.type.startsWith('image/'));
         
         if (imageFiles.length > 0) {
           event.preventDefault();
-          imageFiles.forEach(file => handleImageUpload(file));
+          imageFiles.forEach((file: File) => handleImageUpload(file));
           return true;
         }
         return false;
