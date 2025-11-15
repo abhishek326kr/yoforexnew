@@ -7,7 +7,23 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import DOMPurify from 'isomorphic-dompurify';
-import RichTextEditor from './RichTextEditor';
+import dynamic from 'next/dynamic';
+
+// Dynamically import RichTextEditor with SSR disabled to prevent TipTap module evaluation errors
+const RichTextEditor = dynamic(
+  () => import('./RichTextEditor'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-[300px] border-2 rounded-lg bg-muted/20">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Loading editor...</span>
+        </div>
+      </div>
+    )
+  }
+);
 import type { ForumCategory } from "@shared/schema";
 import Header from "@/components/Header";
 import EnhancedFooter from "@/components/EnhancedFooter";
