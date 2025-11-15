@@ -6,31 +6,34 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import DOMPurify from 'isomorphic-dompurify';
-import dynamic from 'next/dynamic';
+import DOMPurify from "isomorphic-dompurify";
+import dynamic from "next/dynamic";
 
 // Dynamically import RichTextEditor with SSR disabled to prevent TipTap module evaluation errors
-const RichTextEditor = dynamic(
-  () => import('./RichTextEditor'),
-  { 
-    ssr: true,
-    loading: () => (
-      <div className="flex items-center justify-center h-[300px] border-2 rounded-lg bg-muted/20">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Loading editor...</span>
-        </div>
+const RichTextEditor = dynamic(() => import("./RichTextEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-[300px] border-2 rounded-lg bg-muted/20">
+      <div className="flex flex-col items-center gap-2">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Loading editor...</span>
       </div>
-    )
-  }
-);
+    </div>
+  ),
+});
 import type { ForumCategory } from "@shared/schema";
 import Header from "@/components/Header";
 import EnhancedFooter from "@/components/EnhancedFooter";
 import LeftEngagementSidebar from "./LeftEngagementSidebar";
 import RightEngagementSidebar from "./RightEngagementSidebar";
 import AutoSEOPanel, { type SEOData } from "@/components/AutoSEOPanel";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,13 +66,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuthPrompt } from "@/hooks/useAuthPrompt";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  AlertCircle, 
-  Check, 
-  Copy, 
-  Share2, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  Check,
+  Copy,
+  Share2,
   Upload,
   X,
   Coins,
@@ -112,7 +115,7 @@ import {
   Plus,
   Minus,
   CheckCircle,
-  Circle
+  Circle,
 } from "lucide-react";
 
 // Thread types configuration with improved descriptions
@@ -120,45 +123,51 @@ const threadTypes = [
   {
     value: "discussion",
     icon: MessageSquare,
-    color: "bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/30",
+    color:
+      "bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/30",
     title: "Discussion",
-    description: "Start a conversation about trading strategies or market trends"
+    description:
+      "Start a conversation about trading strategies or market trends",
   },
   {
     value: "question",
     icon: HelpCircle,
-    color: "bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/30",
+    color:
+      "bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/30",
     title: "Question",
-    description: "Ask the community for help or advice"
+    description: "Ask the community for help or advice",
   },
   {
     value: "ea-review",
     icon: Code,
-    color: "bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/30",
+    color:
+      "bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/30",
     title: "EA Review",
-    description: "Share and review Expert Advisors or automated strategies"
+    description: "Share and review Expert Advisors or automated strategies",
   },
   {
     value: "analysis",
     icon: BarChart3,
-    color: "bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-orange-500/30",
+    color:
+      "bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-orange-500/30",
     title: "Analysis",
-    description: "Share technical or fundamental market analysis"
+    description: "Share technical or fundamental market analysis",
   },
   {
     value: "education",
     icon: BookOpen,
-    color: "bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 border-indigo-500/30",
+    color:
+      "bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 border-indigo-500/30",
     title: "Education",
-    description: "Create educational content or tutorials"
+    description: "Create educational content or tutorials",
   },
   {
     value: "announcement",
     icon: TrendingUp,
     color: "bg-red-500/10 text-red-600 hover:bg-red-500/20 border-red-500/30",
     title: "Announcement",
-    description: "Share important news or updates"
-  }
+    description: "Share important news or updates",
+  },
 ];
 
 // File attachment interface
@@ -174,7 +183,8 @@ interface FileAttachment {
 // Enhanced form validation schema
 const threadFormSchema = z.object({
   threadType: z.string().default("discussion"),
-  title: z.string()
+  title: z
+    .string()
     .min(5, "Title must be at least 5 characters")
     .max(90, "Keep it under 90 characters")
     .refine(
@@ -183,21 +193,25 @@ const threadFormSchema = z.object({
         const letterCount = (val.match(/[a-zA-Z]/g) || []).length;
         return letterCount === 0 || upperCount / letterCount < 0.5;
       },
-      { message: "Avoid ALL CAPS - it's easier to read in normal case" }
+      { message: "Avoid ALL CAPS - it's easier to read in normal case" },
     ),
   body: z.string().min(20, "Content must be at least 20 characters"), // Plain text content
   contentHtml: z.string().min(20, "Content must be at least 20 characters"), // Rich HTML content
   categorySlug: z.string().min(1, "Please select a category"),
   hashtags: z.array(z.string()).max(10).default([]),
-  attachments: z.array(z.object({
-    id: z.string(),
-    filename: z.string(),
-    size: z.number(),
-    url: z.string(),
-    mimeType: z.string(),
-    price: z.number().min(0).max(10000),
-    downloads: z.number().default(0)
-  })).default([]),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string(),
+        filename: z.string(),
+        size: z.number(),
+        url: z.string(),
+        mimeType: z.string(),
+        price: z.number().min(0).max(10000),
+        downloads: z.number().default(0),
+      }),
+    )
+    .default([]),
 });
 
 type ThreadFormData = z.infer<typeof threadFormSchema>;
@@ -207,14 +221,14 @@ interface EnhancedThreadComposeClientProps {
 }
 
 // Modern chip/tag selector component
-function ChipSelector({ 
-  options, 
-  selected, 
-  onSelect, 
+function ChipSelector({
+  options,
+  selected,
+  onSelect,
   placeholder = "Select items...",
   maxItems = 10,
-  icon
-}: { 
+  icon,
+}: {
   options: string[];
   selected: string[];
   onSelect: (items: string[]) => void;
@@ -225,14 +239,15 @@ function ChipSelector({
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
-  const filteredOptions = options.filter(opt => 
-    !selected.includes(opt) && 
-    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredOptions = options.filter(
+    (opt) =>
+      !selected.includes(opt) &&
+      opt.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const toggleOption = (option: string) => {
     if (selected.includes(option)) {
-      onSelect(selected.filter(s => s !== option));
+      onSelect(selected.filter((s) => s !== option));
     } else if (selected.length < maxItems) {
       onSelect([...selected, option]);
     }
@@ -242,15 +257,21 @@ function ChipSelector({
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 min-h-[2.5rem] p-2 border rounded-lg bg-background">
         {selected.length === 0 ? (
-          <span className="text-muted-foreground text-sm py-1">{placeholder}</span>
+          <span className="text-muted-foreground text-sm py-1">
+            {placeholder}
+          </span>
         ) : (
-          selected.map(item => (
-            <Badge 
-              key={item} 
+          selected.map((item) => (
+            <Badge
+              key={item}
               variant="secondary"
               className="gap-1 px-3 py-1 hover:bg-secondary/80 transition-colors animate-in fade-in-50 zoom-in-95 max-w-[200px]"
             >
-              {icon ? React.createElement(icon, { className: "w-3 h-3 flex-shrink-0" }) : null}
+              {icon
+                ? React.createElement(icon, {
+                    className: "w-3 h-3 flex-shrink-0",
+                  })
+                : null}
               <span className="truncate">{item}</span>
               <button
                 type="button"
@@ -266,15 +287,19 @@ function ChipSelector({
 
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
-          <Button 
-            type="button" 
-            variant="ghost" 
+          <Button
+            type="button"
+            variant="ghost"
             size="sm"
             className="gap-1 text-muted-foreground hover:text-foreground"
           >
-            {isOpen ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {isOpen ? (
+              <Minus className="w-4 h-4" />
+            ) : (
+              <Plus className="w-4 h-4" />
+            )}
             <span>
-              <span>{isOpen ? 'Hide' : 'Show'}</span>
+              <span>{isOpen ? "Hide" : "Show"}</span>
               <span> available options (</span>
               <span>{filteredOptions.length}</span>
               <span>)</span>
@@ -293,7 +318,7 @@ function ChipSelector({
               />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-              {filteredOptions.map(option => (
+              {filteredOptions.map((option) => (
                 <button
                   key={option}
                   type="button"
@@ -312,13 +337,12 @@ function ChipSelector({
   );
 }
 
-
 // Enhanced file attachment component
-function FileAttachmentSection({ 
-  attachments, 
-  onAttachmentsChange 
-}: { 
-  attachments: FileAttachment[]; 
+function FileAttachmentSection({
+  attachments,
+  onAttachmentsChange,
+}: {
+  attachments: FileAttachment[];
   onAttachmentsChange: React.Dispatch<React.SetStateAction<FileAttachment[]>>;
 }) {
   const { toast } = useToast();
@@ -339,7 +363,7 @@ function FileAttachmentSection({
     }
 
     const newAttachments: FileAttachment[] = [];
-    
+
     for (const file of Array.from(files)) {
       // Check file size (20MB max)
       const maxFileSize = 20 * 1024 * 1024; // 20MB in bytes
@@ -368,13 +392,15 @@ function FileAttachmentSection({
     // Upload files
     for (const attachment of newAttachments) {
       const formData = new FormData();
-      formData.append('files', attachment.file);
+      formData.append("files", attachment.file);
 
       try {
-        setUploadingFiles(prev => [...prev, attachment.id]);
-        
-        console.log(`[FileUpload] Starting upload for: ${attachment.file.name}`);
-        
+        setUploadingFiles((prev) => [...prev, attachment.id]);
+
+        console.log(
+          `[FileUpload] Starting upload for: ${attachment.file.name}`,
+        );
+
         const res = await fetch("/api/upload", {
           method: "POST",
           body: formData,
@@ -387,25 +413,28 @@ function FileAttachmentSection({
         try {
           data = JSON.parse(responseText);
         } catch (parseError) {
-          console.error('[FileUpload] Failed to parse response:', responseText);
+          console.error("[FileUpload] Failed to parse response:", responseText);
           data = { error: responseText };
         }
 
         if (res.ok) {
-          console.log(`[FileUpload] Upload successful for: ${attachment.file.name}`, data);
+          console.log(
+            `[FileUpload] Upload successful for: ${attachment.file.name}`,
+            data,
+          );
           const url = data.urls?.[0];
-          
+
           if (!url) {
-            console.error('[FileUpload] No URL returned from server:', data);
+            console.error("[FileUpload] No URL returned from server:", data);
             throw new Error("Server did not return file URL");
           }
-          
-          onAttachmentsChange((prev: FileAttachment[]) => prev.map((a: FileAttachment) => 
-            a.id === attachment.id 
-              ? { ...a, url, uploading: false }
-              : a
-          ));
-          
+
+          onAttachmentsChange((prev: FileAttachment[]) =>
+            prev.map((a: FileAttachment) =>
+              a.id === attachment.id ? { ...a, url, uploading: false } : a,
+            ),
+          );
+
           toast({
             title: "File uploaded",
             description: `${attachment.file.name} uploaded successfully`,
@@ -413,14 +442,17 @@ function FileAttachmentSection({
           });
         } else {
           // Handle different error scenarios
-          console.error(`[FileUpload] Upload failed for: ${attachment.file.name}`, {
-            status: res.status,
-            statusText: res.statusText,
-            response: data
-          });
+          console.error(
+            `[FileUpload] Upload failed for: ${attachment.file.name}`,
+            {
+              status: res.status,
+              statusText: res.statusText,
+              response: data,
+            },
+          );
 
           let errorMessage = "Upload failed";
-          
+
           // Parse error message based on status code
           if (res.status === 401) {
             errorMessage = "Please log in to upload files";
@@ -439,44 +471,55 @@ function FileAttachmentSection({
           throw new Error(errorMessage);
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-        
-        console.error(`[FileUpload] Error uploading ${attachment.file.name}:`, error);
-        
-        onAttachmentsChange((prev: FileAttachment[]) => prev.map((a: FileAttachment) => 
-          a.id === attachment.id 
-            ? { ...a, uploading: false, error: errorMessage }
-            : a
-        ));
-        
+        const errorMessage =
+          error instanceof Error ? error.message : "Upload failed";
+
+        console.error(
+          `[FileUpload] Error uploading ${attachment.file.name}:`,
+          error,
+        );
+
+        onAttachmentsChange((prev: FileAttachment[]) =>
+          prev.map((a: FileAttachment) =>
+            a.id === attachment.id
+              ? { ...a, uploading: false, error: errorMessage }
+              : a,
+          ),
+        );
+
         toast({
           title: "Upload failed",
           description: errorMessage,
           variant: "destructive",
         });
       } finally {
-        setUploadingFiles(prev => prev.filter(id => id !== attachment.id));
+        setUploadingFiles((prev) => prev.filter((id) => id !== attachment.id));
       }
     }
   };
 
   const handlePriceChange = (id: string, price: number) => {
-    onAttachmentsChange(attachments.map(a => 
-      a.id === id ? { ...a, price } : a
-    ));
+    onAttachmentsChange(
+      attachments.map((a) => (a.id === id ? { ...a, price } : a)),
+    );
   };
 
   const removeAttachment = (id: string) => {
-    onAttachmentsChange(attachments.filter(a => a.id !== id));
+    onAttachmentsChange(attachments.filter((a) => a.id !== id));
   };
 
-  const totalPotentialEarnings = attachments.reduce((sum, a) => sum + a.price, 0);
+  const totalPotentialEarnings = attachments.reduce(
+    (sum, a) => sum + a.price,
+    0,
+  );
 
   const getFileIcon = (fileName: string) => {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    if (['pdf'].includes(ext || '')) return <FileText className="h-5 w-5" />;
-    if (['zip', 'rar', '7z'].includes(ext || '')) return <File className="h-5 w-5" />;
-    if (['ex4', 'ex5', 'mq4', 'mq5'].includes(ext || '')) return <Code className="h-5 w-5" />;
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    if (["pdf"].includes(ext || "")) return <FileText className="h-5 w-5" />;
+    if (["zip", "rar", "7z"].includes(ext || ""))
+      return <File className="h-5 w-5" />;
+    if (["ex4", "ex5", "mq4", "mq5"].includes(ext || ""))
+      return <Code className="h-5 w-5" />;
     return <Paperclip className="h-5 w-5" />;
   };
 
@@ -489,7 +532,10 @@ function FileAttachmentSection({
             File Attachments
           </div>
           {totalPotentialEarnings > 0 && (
-            <Badge variant="secondary" className="bg-yellow-500/10 text-yellow-600 animate-pulse">
+            <Badge
+              variant="secondary"
+              className="bg-yellow-500/10 text-yellow-600 animate-pulse"
+            >
               <Coins className="h-3 w-3 mr-1" />
               <span>Potential: </span>
               <span>{totalPotentialEarnings}</span>
@@ -532,23 +578,30 @@ function FileAttachmentSection({
         {attachments.length > 0 && (
           <div className="space-y-3">
             {attachments.map((attachment) => (
-              <div 
-                key={attachment.id} 
+              <div
+                key={attachment.id}
                 className={cn(
                   "relative p-4 border-2 rounded-xl bg-card transition-all animate-in fade-in-50 zoom-in-95",
-                  attachment.error ? "border-destructive/50 bg-destructive/5" : "hover:shadow-md"
+                  attachment.error
+                    ? "border-destructive/50 bg-destructive/5"
+                    : "hover:shadow-md",
                 )}
               >
                 <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "p-2 rounded-lg",
-                    attachment.error ? "bg-destructive/20" : "bg-primary/10"
-                  )}>
+                  <div
+                    className={cn(
+                      "p-2 rounded-lg",
+                      attachment.error ? "bg-destructive/20" : "bg-primary/10",
+                    )}
+                  >
                     {getFileIcon(attachment.file.name)}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0 overflow-hidden">
-                    <p className="font-medium truncate" title={attachment.file.name}>
+                    <p
+                      className="font-medium truncate"
+                      title={attachment.file.name}
+                    >
                       {attachment.file.name}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -564,7 +617,12 @@ function FileAttachmentSection({
                         min="0"
                         max="10000"
                         value={attachment.price}
-                        onChange={(e) => handlePriceChange(attachment.id, parseInt(e.target.value) || 0)}
+                        onChange={(e) =>
+                          handlePriceChange(
+                            attachment.id,
+                            parseInt(e.target.value) || 0,
+                          )
+                        }
                         className="w-20 h-7 text-sm bg-transparent border-0 focus-visible:ring-0"
                         placeholder="0"
                         disabled={attachment.uploading}
@@ -578,7 +636,7 @@ function FileAttachmentSection({
                       <span className="text-xs">Uploading...</span>
                     </div>
                   )}
-                  
+
                   <Button
                     type="button"
                     size="sm"
@@ -607,31 +665,41 @@ function FileAttachmentSection({
 }
 
 // Enhanced character counter with visual feedback
-function CharacterCounter({ current, min, max }: { current: number; min?: number; max: number }) {
+function CharacterCounter({
+  current,
+  min,
+  max,
+}: {
+  current: number;
+  min?: number;
+  max: number;
+}) {
   const percentage = (current / max) * 100;
   const isValid = (!min || current >= min) && current <= max;
   const isTooShort = min && current < min;
   const isNearLimit = current > max * 0.8;
-  
+
   return (
     <div className="flex items-center gap-3">
       <div className="relative w-32 h-1.5 bg-muted rounded-full overflow-hidden">
-        <div 
+        <div
           className={cn(
             "absolute left-0 top-0 h-full transition-all duration-300",
             isValid && !isNearLimit && "bg-green-500",
             isNearLimit && isValid && "bg-yellow-500",
-            !isValid && "bg-red-500"
+            !isValid && "bg-red-500",
           )}
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
-      <span className={cn(
-        "text-xs font-medium transition-colors",
-        isValid && !isNearLimit && "text-green-600",
-        isNearLimit && isValid && "text-yellow-600",
-        !isValid && "text-red-600"
-      )}>
+      <span
+        className={cn(
+          "text-xs font-medium transition-colors",
+          isValid && !isNearLimit && "text-green-600",
+          isNearLimit && isValid && "text-yellow-600",
+          !isValid && "text-red-600",
+        )}
+      >
         {current}/{max}
         {isTooShort && <span className="ml-1">({min - current} more)</span>}
       </span>
@@ -640,13 +708,13 @@ function CharacterCounter({ current, min, max }: { current: number; min?: number
 }
 
 // Enhanced progress indicator with clickable steps
-function EnhancedProgressIndicator({ 
-  currentStep, 
+function EnhancedProgressIndicator({
+  currentStep,
   totalSteps,
   onStepClick,
-  steps
-}: { 
-  currentStep: number; 
+  steps,
+}: {
+  currentStep: number;
   totalSteps: number;
   onStepClick?: (step: number) => void;
   steps: { title: string; description: string; icon: any }[];
@@ -656,30 +724,37 @@ function EnhancedProgressIndicator({
       <div className="flex items-center justify-between relative">
         {/* Progress line */}
         <div className="absolute left-0 right-0 top-8 h-0.5 bg-muted">
-          <div 
+          <div
             className="h-full bg-primary transition-all duration-500"
-            style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+            style={{
+              width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%`,
+            }}
           />
         </div>
-        
+
         {steps.map((step, index) => {
           const stepNumber = index + 1;
           const isActive = stepNumber === currentStep;
           const isCompleted = stepNumber < currentStep;
           const Icon = step.icon;
-          
+
           return (
-            <div 
+            <div
               key={stepNumber}
               className="relative z-10 flex flex-col items-center cursor-pointer group"
-              onClick={() => onStepClick && stepNumber <= currentStep && onStepClick(stepNumber)}
+              onClick={() =>
+                onStepClick &&
+                stepNumber <= currentStep &&
+                onStepClick(stepNumber)
+              }
             >
               <div
                 className={cn(
                   "w-16 h-16 rounded-full flex items-center justify-center font-semibold transition-all duration-300 shadow-lg",
-                  isActive && "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20",
+                  isActive &&
+                    "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20",
                   isCompleted && "bg-primary/20 text-primary hover:scale-105",
-                  !isActive && !isCompleted && "bg-muted text-muted-foreground"
+                  !isActive && !isCompleted && "bg-muted text-muted-foreground",
                 )}
               >
                 {isCompleted ? (
@@ -689,11 +764,13 @@ function EnhancedProgressIndicator({
                 )}
               </div>
               <div className="mt-3 text-center">
-                <p className={cn(
-                  "font-semibold text-sm transition-colors",
-                  isActive && "text-primary",
-                  !isActive && "text-muted-foreground"
-                )}>
+                <p
+                  className={cn(
+                    "font-semibold text-sm transition-colors",
+                    isActive && "text-primary",
+                    !isActive && "text-muted-foreground",
+                  )}
+                >
                   {step.title}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-[120px]">
@@ -708,12 +785,14 @@ function EnhancedProgressIndicator({
   );
 }
 
-export default function EnhancedThreadComposeClient({ categories = [] }: EnhancedThreadComposeClientProps) {
+export default function EnhancedThreadComposeClient({
+  categories = [],
+}: EnhancedThreadComposeClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { requireAuth, isAuthenticating } = useAuthPrompt("create a thread");
-  
+
   const [currentStep, setCurrentStep] = useState(1);
   const [hashtagInput, setHashtagInput] = useState("");
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -723,35 +802,35 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
   const [quickStartMode, setQuickStartMode] = useState(true);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [seoData, setSeoData] = useState<SEOData | null>(null);
-  
+
   // Pre-select category from URL param
   const categoryParam = searchParams?.get("category") || "";
-  
+
   // Ensure categories is always an array
   const safeCategories = Array.isArray(categories) ? categories : [];
-  
+
   // Group categories by parent/subcategory structure
-  const parentCategories = safeCategories.filter(c => !c.parentSlug);
-  const getCategorySubcategories = (parentSlug: string) => 
-    safeCategories.filter(c => c.parentSlug === parentSlug);
+  const parentCategories = safeCategories.filter((c) => !c.parentSlug);
+  const getCategorySubcategories = (parentSlug: string) =>
+    safeCategories.filter((c) => c.parentSlug === parentSlug);
 
   // Steps configuration
   const steps = [
     {
       title: "Basics",
       description: "Type & content",
-      icon: FileText
+      icon: FileText,
     },
     {
       title: "Enhance",
       description: "Files & pricing",
-      icon: Sparkles
+      icon: Sparkles,
     },
     {
       title: "Review",
       description: "Preview & post",
-      icon: CheckCircle
-    }
+      icon: CheckCircle,
+    },
   ];
 
   // Form setup
@@ -770,11 +849,19 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
   // Use useWatch to subscribe to form values efficiently - include body for validation
   // When passing an array of field names, useWatch returns an array of values in the same order
-  const [title, body, contentHtml, categorySlug, hashtags, threadType] = useWatch({
-    control: form.control,
-    name: ["title", "body", "contentHtml", "categorySlug", "hashtags", "threadType"]
-  }) as [string, string, string, string, string[], string];
-  
+  const [title, body, contentHtml, categorySlug, hashtags, threadType] =
+    useWatch({
+      control: form.control,
+      name: [
+        "title",
+        "body",
+        "contentHtml",
+        "categorySlug",
+        "hashtags",
+        "threadType",
+      ],
+    }) as [string, string, string, string, string[], string];
+
   const titleLength = title?.length || 0;
   const bodyText = body || "";
   const contentHtmlValue = contentHtml || "";
@@ -784,18 +871,17 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
   // Validation helpers - use form values for proper reactivity
   const bodyTextLength = bodyText?.length || 0;
-  
-  const canProceedStep1 = 
+
+  const canProceedStep1 =
     titleLength >= 5 && // Match schema minimum
-    categorySlug && 
+    categorySlug &&
     bodyTextLength >= 20; // Match schema minimum
 
   const isFormValid = canProceedStep1;
-  
 
   // Hashtag management
   const addHashtag = () => {
-    const tag = hashtagInput.trim().replace(/^#/, '');
+    const tag = hashtagInput.trim().replace(/^#/, "");
     const currentHashtags = form.getValues("hashtags");
     if (tag && !currentHashtags.includes(tag) && currentHashtags.length < 10) {
       form.setValue("hashtags", [...currentHashtags, tag]);
@@ -805,7 +891,10 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
   const removeHashtag = (tag: string) => {
     const currentHashtags = form.getValues("hashtags");
-    form.setValue("hashtags", currentHashtags.filter(t => t !== tag));
+    form.setValue(
+      "hashtags",
+      currentHashtags.filter((t) => t !== tag),
+    );
   };
 
   // Create thread mutation
@@ -815,21 +904,21 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
       await new Promise<void>((resolve) => {
         requireAuth(() => resolve());
       });
-      
+
       // Use the body field directly from the form data (already extracted by editor.getText())
       const threadData = {
         ...data,
         body: data.body, // Plain text content from editor.getText()
         contentHtml: data.contentHtml, // Rich HTML content from editor.getHTML()
-        attachments: attachments.map(a => ({
+        attachments: attachments.map((a) => ({
           id: a.id,
           filename: a.file.name,
           size: a.file.size,
-          url: a.url || '',
+          url: a.url || "",
           mimeType: a.file.type,
           price: a.price,
-          downloads: 0
-        }))
+          downloads: 0,
+        })),
       };
 
       const response = await apiRequest("POST", "/api/threads", threadData);
@@ -840,7 +929,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
         title: "Thread created!",
         description: "Your thread has been published successfully.",
       });
-      
+
       // Redirect to the newly created thread
       if (data.thread?.slug && data.thread?.categorySlug) {
         router.push(`/thread/${data.thread.categorySlug}/${data.thread.slug}`);
@@ -855,7 +944,8 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
     onError: (error) => {
       toast({
         title: "Failed to create thread",
-        description: error instanceof Error ? error.message : "Something went wrong",
+        description:
+          error instanceof Error ? error.message : "Something went wrong",
         variant: "destructive",
       });
     },
@@ -884,7 +974,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
             <p className="text-muted-foreground mt-2">
               Share your knowledge and connect with the trading community
             </p>
-            
+
             {/* Quick Start Toggle */}
             <div className="flex items-center justify-center gap-2 mt-6">
               <Label htmlFor="quick-start" className="text-sm font-medium">
@@ -898,20 +988,22 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                 onClick={() => setQuickStartMode(!quickStartMode)}
                 className={cn(
                   "relative w-12 h-6 rounded-full transition-colors",
-                  quickStartMode ? "bg-primary" : "bg-muted"
+                  quickStartMode ? "bg-primary" : "bg-muted",
                 )}
               >
-                <div className={cn(
-                  "absolute w-5 h-5 bg-background rounded-full transition-transform",
-                  quickStartMode ? "translate-x-6" : "translate-x-0.5"
-                )} />
+                <div
+                  className={cn(
+                    "absolute w-5 h-5 bg-background rounded-full transition-transform",
+                    quickStartMode ? "translate-x-6" : "translate-x-0.5",
+                  )}
+                />
               </Button>
             </div>
           </div>
 
           {/* Progress Indicator */}
-          <EnhancedProgressIndicator 
-            currentStep={currentStep} 
+          <EnhancedProgressIndicator
+            currentStep={currentStep}
             totalSteps={3}
             onStepClick={handleStepClick}
             steps={steps}
@@ -928,7 +1020,10 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
             {/* Main Form */}
             <div className="w-full">
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-8"
+                >
                   {/* STEP 1: Basic Information */}
                   {currentStep === 1 && (
                     <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2">
@@ -954,43 +1049,53 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                   <Target className="h-4 w-4" />
                                   Category
                                 </FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select
+                                  onValueChange={field.onChange}
+                                  value={field.value}
+                                >
                                   <FormControl>
                                     <SelectTrigger className="h-11 text-base">
                                       <SelectValue placeholder="Select a category..." />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent className="max-h-[300px]">
-                                    {parentCategories.map((parent) => {
-                                      const subcategories = getCategorySubcategories(parent.slug);
-                                      
-                                      return [
-                                        <SelectItem 
-                                          key={parent.slug} 
-                                          value={parent.slug}
-                                          className="py-3"
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <Globe className="h-4 w-4" />
-                                            <span className="font-medium">{parent.name}</span>
-                                          </div>
-                                        </SelectItem>,
-                                        ...subcategories.map(subcat => (
-                                          <SelectItem 
-                                            key={subcat.slug} 
-                                            value={subcat.slug}
-                                            className="pl-8 py-2"
+                                    {parentCategories
+                                      .map((parent) => {
+                                        const subcategories =
+                                          getCategorySubcategories(parent.slug);
+
+                                        return [
+                                          <SelectItem
+                                            key={parent.slug}
+                                            value={parent.slug}
+                                            className="py-3"
                                           >
-                                            <div>
-                                              <span className="font-medium">↳ {subcat.name}</span>
-                                              <span className="text-xs text-muted-foreground block">
-                                                {subcat.description}
+                                            <div className="flex items-center gap-2">
+                                              <Globe className="h-4 w-4" />
+                                              <span className="font-medium">
+                                                {parent.name}
                                               </span>
                                             </div>
-                                          </SelectItem>
-                                        ))
-                                      ];
-                                    }).flat()}
+                                          </SelectItem>,
+                                          ...subcategories.map((subcat) => (
+                                            <SelectItem
+                                              key={subcat.slug}
+                                              value={subcat.slug}
+                                              className="pl-8 py-2"
+                                            >
+                                              <div>
+                                                <span className="font-medium">
+                                                  ↳ {subcat.name}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground block">
+                                                  {subcat.description}
+                                                </span>
+                                              </div>
+                                            </SelectItem>
+                                          )),
+                                        ];
+                                      })
+                                      .flat()}
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -1009,7 +1114,11 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                     <Sparkles className="h-4 w-4" />
                                     Title
                                   </span>
-                                  <CharacterCounter current={titleLength} min={5} max={90} />
+                                  <CharacterCounter
+                                    current={titleLength}
+                                    min={5}
+                                    max={90}
+                                  />
                                 </FormLabel>
                                 <FormControl>
                                   <Input
@@ -1055,21 +1164,26 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
 
                           {/* Advanced Options */}
                           {!quickStartMode && (
-                            <Collapsible open={showAdvancedOptions} onOpenChange={setShowAdvancedOptions}>
+                            <Collapsible
+                              open={showAdvancedOptions}
+                              onOpenChange={setShowAdvancedOptions}
+                            >
                               <CollapsibleTrigger asChild>
-                                <Button 
-                                  type="button" 
-                                  variant="outline" 
+                                <Button
+                                  type="button"
+                                  variant="outline"
                                   className="w-full justify-between"
                                 >
                                   <span className="flex items-center gap-2">
                                     <Settings2 className="h-4 w-4" />
                                     Advanced Options
                                   </span>
-                                  <ChevronDown className={cn(
-                                    "h-4 w-4 transition-transform",
-                                    showAdvancedOptions && "rotate-180"
-                                  )} />
+                                  <ChevronDown
+                                    className={cn(
+                                      "h-4 w-4 transition-transform",
+                                      showAdvancedOptions && "rotate-180",
+                                    )}
+                                  />
                                 </Button>
                               </CollapsibleTrigger>
                               <CollapsibleContent className="mt-4 space-y-4">
@@ -1082,9 +1196,11 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                   <div className="flex gap-2">
                                     <Input
                                       value={hashtagInput}
-                                      onChange={(e) => setHashtagInput(e.target.value)}
+                                      onChange={(e) =>
+                                        setHashtagInput(e.target.value)
+                                      }
                                       onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
+                                        if (e.key === "Enter") {
                                           e.preventDefault();
                                           addHashtag();
                                         }
@@ -1104,12 +1220,14 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                   {hashtagsList.length > 0 && (
                                     <div className="flex flex-wrap gap-2">
                                       {hashtagsList.map((tag: string) => (
-                                        <Badge 
-                                          key={tag} 
+                                        <Badge
+                                          key={tag}
                                           variant="secondary"
                                           className="hashtag-badge gap-1 px-3 py-1 animate-in fade-in-50 zoom-in-95"
                                         >
-                                          <span className="truncate">#{tag}</span>
+                                          <span className="truncate">
+                                            #{tag}
+                                          </span>
                                           <button
                                             type="button"
                                             onClick={() => removeHashtag(tag)}
@@ -1138,12 +1256,12 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                         title={title || ""}
                         body={bodyText || ""}
                         imageUrls={[]}
-                        categories={categories.map(c => c.slug)}
+                        categories={categories.map((c) => c.slug)}
                         onSEOUpdate={(data) => setSeoData(data)}
                       />
-                      
+
                       {/* File Attachments Section */}
-                      <FileAttachmentSection 
+                      <FileAttachmentSection
                         attachments={attachments}
                         onAttachmentsChange={setAttachments}
                       />
@@ -1171,16 +1289,16 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                               </Badge>
                               <h2 className="text-2xl font-bold">{title}</h2>
                             </div>
-                            
+
                             <Separator />
-                            
-                            <div 
+
+                            <div
                               className="prose prose-sm dark:prose-invert max-w-none"
-                              dangerouslySetInnerHTML={{ 
-                                __html: DOMPurify.sanitize(contentHtmlValue)
+                              dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(contentHtmlValue),
                               }}
                             />
-                            
+
                             {hashtagsList.length > 0 && (
                               <>
                                 <Separator />
@@ -1193,7 +1311,7 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                 </div>
                               </>
                             )}
-                            
+
                             {attachments.length > 0 && (
                               <>
                                 <Separator />
@@ -1204,19 +1322,29 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                                     <span>)</span>
                                   </Label>
                                   {attachments.map((attachment) => (
-                                    <div 
-                                      key={attachment.id} 
+                                    <div
+                                      key={attachment.id}
                                       className="flex items-center justify-between p-3 border rounded-lg bg-muted/30"
                                     >
                                       <div className="flex items-center gap-3">
                                         <FileText className="h-5 w-5 text-muted-foreground" />
-                                        <span className="text-sm font-medium">{attachment.file.name}</span>
+                                        <span className="text-sm font-medium">
+                                          {attachment.file.name}
+                                        </span>
                                       </div>
-                                      <Badge variant={attachment.price > 0 ? "default" : "secondary"}>
+                                      <Badge
+                                        variant={
+                                          attachment.price > 0
+                                            ? "default"
+                                            : "secondary"
+                                        }
+                                      >
                                         {attachment.price > 0 ? (
                                           <>
                                             <Coins className="h-3 w-3 mr-1" />
-                                            <span>{attachment.price} Sweets</span>
+                                            <span>
+                                              {attachment.price} Sweets
+                                            </span>
                                           </>
                                         ) : (
                                           <span>Free</span>
@@ -1241,7 +1369,9 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                         <div className="flex items-start gap-2">
                           <Info className="h-4 w-4 mt-0.5 text-orange-500" />
                           <div className="space-y-1">
-                            <p className="font-medium text-orange-600">Complete these to continue:</p>
+                            <p className="font-medium text-orange-600">
+                              Complete these to continue:
+                            </p>
                             <ul className="space-y-0.5">
                               {!categorySlug && (
                                 <li className="flex items-center gap-1">
@@ -1252,13 +1382,19 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                               {titleLength < 5 && (
                                 <li className="flex items-center gap-1">
                                   <Circle className="h-2 w-2" />
-                                  <span>Add {5 - titleLength} more characters to title</span>
+                                  <span>
+                                    Add {5 - titleLength} more characters to
+                                    title
+                                  </span>
                                 </li>
                               )}
                               {bodyTextLength < 20 && (
                                 <li className="flex items-center gap-1">
                                   <Circle className="h-2 w-2" />
-                                  <span>Add {20 - bodyTextLength} more characters to content</span>
+                                  <span>
+                                    Add {20 - bodyTextLength} more characters to
+                                    content
+                                  </span>
                                 </li>
                               )}
                             </ul>
@@ -1266,14 +1402,14 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-between">
                       {currentStep > 1 && (
                         <Button
                           type="button"
                           variant="outline"
                           size="lg"
-                          onClick={() => setCurrentStep(currentStep - 1)}
+                          onClick={() => handleStepClick(currentStep - 1)}
                           className="gap-2"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -1286,33 +1422,38 @@ export default function EnhancedThreadComposeClient({ categories = [] }: Enhance
                           <Button
                             type="button"
                             size="lg"
-                            onClick={() => setCurrentStep(currentStep + 1)}
+                            onClick={() => {
+                                if(currentStep === 1 && !canProceedStep1) return;
+                                handleStepClick(currentStep + 1);
+                            }}
                             disabled={currentStep === 1 && !canProceedStep1}
                             className="gap-2 min-w-[120px]"
                           >
                             <span>Next</span>
                             <ArrowRight className="w-4 h-4" />
                           </Button>
-                      ) : (
-                        <Button
-                          type="submit"
-                          size="lg"
-                          disabled={!isFormValid || createThreadMutation.isPending}
-                          className="gap-2 min-w-[140px] bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-                        >
-                          {createThreadMutation.isPending ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Creating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Rocket className="w-4 h-4" />
-                              <span>Post Thread (+3 coins)</span>
-                            </>
-                          )}
-                        </Button>
-                      )}
+                        ) : (
+                          <Button
+                            type="submit"
+                            size="lg"
+                            disabled={
+                              !isFormValid || createThreadMutation.isPending
+                            }
+                            className="gap-2 min-w-[140px] bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                          >
+                            {createThreadMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Creating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Rocket className="w-4 h-4" />
+                                <span>Post Thread (+3 coins)</span>
+                              </>
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
