@@ -78,8 +78,7 @@ export default function ThreadComposeWithErrorBoundary({ categories }: ThreadCom
   console.log('[ThreadComposeWithErrorBoundary] Rendering with categories:', categories?.length || 0);
   
   return (
-    <ErrorBoundary>
+
       <EnhancedThreadComposeClient categories={categories} />
-    </ErrorBoundary>
   );
 }

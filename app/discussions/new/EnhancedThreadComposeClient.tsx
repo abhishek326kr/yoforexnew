@@ -1425,8 +1425,9 @@ export default function EnhancedThreadComposeClient({
                             type="button"
                             size="lg"
                             onClick={() => {
-                                if(currentStep === 1 && !canProceedStep1) return;
-                                handleStepClick(currentStep + 1);
+                                if(currentStep === 1 && !canProceedStep1) {
+                                    handleStepClick(currentStep + 1);
+                                }
                             }}
                             disabled={currentStep === 1 && !canProceedStep1}
                             className="gap-2 min-w-[120px]"

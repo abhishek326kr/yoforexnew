@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import React from 'react';
-import { headers } from 'next/headers';
 import './globals.css';
 import { AppProviders } from './components/providers/AppProviders';
 
 const inter = Inter({ subsets: ['latin'] });
+
+export const dynamic = 'force-dynamic';
 
 export const viewport: Viewport = {
   themeColor: '#1e40af',

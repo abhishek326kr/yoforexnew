@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   
+  // Output mode for Autoscale deployment
+  output: 'standalone',
+  
   // Temporarily ignore TypeScript errors during build
   typescript: {
     ignoreBuildErrors: true,
