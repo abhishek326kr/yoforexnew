@@ -6,7 +6,10 @@ import { AppProviders } from './components/providers/AppProviders';
 
 const inter = Inter({ subsets: ['latin'] });
 
+// Force all pages to use dynamic rendering (required for headers() in AppProviders)
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 
 export const viewport: Viewport = {
   themeColor: '#1e40af',

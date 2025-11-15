@@ -9,6 +9,16 @@ import type { User } from "../../../shared/schema";
  * This prevents hydration mismatches by ensuring consistent auth state between server and client
  */
 export async function AppProviders({ children }: { children: ReactNode }) {
+  // Skip auth fetch during production build (Express server not running)
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    console.log('[AppProviders] Build phase detected - skipping auth fetch');
+    return (
+      <ClientProviders initialUser={null}>
+        {children}
+      </ClientProviders>
+    );
+  }
+
   // Fetch auth state on server with forwarded cookies
   let initialUser: User | null = null;
   
