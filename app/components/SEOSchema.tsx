@@ -6,7 +6,7 @@ import {
   generateDiscussionForumPostingSchema,
   generateFAQPageSchema,
   generateBreadcrumbSchema,
-} from '../../lib/schema-generator';
+} from '@/lib/schema-generator';
 
 interface SEOSchemaProps {
   type: 'Organization' | 'WebSite' | 'Product' | 'Article' | 'DiscussionForumPosting' | 'FAQPage' | 'BreadcrumbList';

@@ -2,14 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import React from 'react';
 import './globals.css';
-import { AppProviders } from './components/providers/AppProviders';
+import { RootProviders } from '@/components/providers/RootProviders';
 
 const inter = Inter({ subsets: ['latin'] });
-
-// Force all pages to use dynamic rendering (required for headers() in AppProviders)
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-export const revalidate = 0;
 
 export const viewport: Viewport = {
   themeColor: '#1e40af',
@@ -136,9 +131,9 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             />
           </noscript>
         )}
-        <AppProviders>
+        <RootProviders>
           {children}
-        </AppProviders>
+        </RootProviders>
       </body>
     </html>
   );

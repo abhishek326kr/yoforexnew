@@ -18,7 +18,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from '../ui/dropdown-menu';
-import { toast } from '../../hooks/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 interface SocialShareProps {
   url?: string;

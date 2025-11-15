@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '../../../../server/db';
-import { seoCategories } from '../../../../shared/schema';
+import { seoCategories } from '@shared/schema';
 import { eq, and, isNull, asc } from 'drizzle-orm';
 
 export async function GET() {
