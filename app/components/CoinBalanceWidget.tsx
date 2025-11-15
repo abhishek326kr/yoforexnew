@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import TransactionHistoryDrawer from "./TransactionHistoryDrawer";
@@ -53,7 +54,7 @@ export default function CoinBalanceWidget() {
   const weeklyEarned = balanceData?.weeklyEarned ?? 0;
 
   return (
-    <>
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -85,6 +86,6 @@ export default function CoinBalanceWidget() {
       </Tooltip>
 
       <TransactionHistoryDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
-    </>
+    </TooltipProvider>
   );
 }

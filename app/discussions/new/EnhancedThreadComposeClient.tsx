@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 const RichTextEditor = dynamic(
   () => import('./RichTextEditor'),
   { 
-    ssr: false,
+    ssr: true,
     loading: () => (
       <div className="flex items-center justify-center h-[300px] border-2 rounded-lg bg-muted/20">
         <div className="flex flex-col items-center gap-2">

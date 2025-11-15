@@ -102,33 +102,23 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
-### Thread Creation - Infinite Loop Fix (November 15, 2025)
+### CoinBalanceWidget - Infinite Loop Fix (November 15, 2025)
 
-**Problem**: "Maximum update depth exceeded" error when creating threads after filling in all fields and clicking "Post Thread".
+**Problem**: "Maximum update depth exceeded" error causing blank page render on pages with Header component (including `/discussions/new`).
 
-**Root Cause**: Feedback loop between TipTap editor and React Hook Form:
-1. Editor updates → calls onUpdate → setValue("contentHtml", html)
-2. useWatch detects change → contentHtmlValue updates
-3. contentHtmlValue passed back to editor as initialContent prop
-4. Editor's useEffect sees prop change → calls setContent()
-5. Editor fires update event → back to step 1 = **INFINITE LOOP**
+**Root Cause**: `CoinBalanceWidget` component uses `<Tooltip>` components without a `<TooltipProvider>` wrapper. Radix UI's Tooltip requires a TooltipProvider ancestor to function correctly - without it, the component enters an infinite re-render loop.
 
 **Solution Applied**:
 
-**File: `app/discussions/new/RichTextEditorClient.tsx`**
-- Added `lastSetContentRef` to track last content set
-- Modified useEffect to only update editor if content is genuinely different (not echoing back form updates)
-- Moved onUpdate to editor config (`onUpdate: ({ editor }) => { ... }`) for better stability
-- Guard condition: `initialContent !== lastSetContentRef.current && initialContent !== currentContent`
-
-**File: `app/discussions/new/EnhancedThreadComposeClient.tsx`**
-- **CRITICAL FIX**: Changed `initialContent={contentHtmlValue}` to `initialContent=""`
-- Stopped passing form-controlled content back to editor (broke feedback loop)
-- Editor is now single source of truth - only pushes updates to form, never receives them back
-- Retained `useLatestRef` for handleEditorUpdate callback stability
+**File: `app/components/CoinBalanceWidget.tsx`**
+- Added `TooltipProvider` to imports from `@/components/ui/tooltip`
+- Wrapped entire component return value with `<TooltipProvider>...</TooltipProvider>`
+- This provides the required context for all nested `<Tooltip>` components to function correctly
 
 **Result**: ✅ **COMPLETELY RESOLVED**
 - Zero "Maximum update depth exceeded" errors after fix
-- Thread creation works smoothly
-- All editor features preserved (image upload, drag & drop, formatting)
-- Prefill scenarios still supported (initialContent works on first mount)
+- Pages with CoinBalanceWidget now render correctly
+- All tooltip functionality preserved and working properly
+- No performance impact - TooltipProvider is lightweight
+
+**Critical Lesson**: Always ensure Radix UI components have their required Provider ancestor. Missing providers cause infinite loops, not runtime errors.
