@@ -1,9 +1,9 @@
+'use client';
+
 import { Suspense } from 'react';
 import { Skeleton } from "@/components/ui/skeleton";
-import EnhancedThreadComposeClient from "./EnhancedThreadComposeClient";
 import type { ForumCategory } from "@shared/schema";
-
-export const dynamic = 'force-dynamic';
+import EnhancedThreadComposeClient from './EnhancedThreadComposeClient';
 
 function ThreadComposeLoading() {
   return (

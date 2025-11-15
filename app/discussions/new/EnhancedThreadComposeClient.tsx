@@ -64,6 +64,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthPrompt } from "@/hooks/useAuthPrompt";
+import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
@@ -791,7 +792,8 @@ export default function EnhancedThreadComposeClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { requireAuth, isAuthenticating } = useAuthPrompt("create a thread");
+  const { user } = useAuth();
+  const { requireAuth, AuthPrompt, isAuthenticating } = useAuthPrompt("create a thread");
 
   const [currentStep, setCurrentStep] = useState(1);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -1471,6 +1473,7 @@ export default function EnhancedThreadComposeClient({
         </div>
       </div>
       <EnhancedFooter />
+      <AuthPrompt />
     </>
   );
 }
