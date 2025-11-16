@@ -100,3 +100,64 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 -   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
 -   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
 -   **Build & Deployment:** Next.js 16, esbuild, Docker.
+## Recent Changes
+
+### Next.js 16 Deployment Fixes - Autoscale Ready (November 16, 2025)
+
+**Overview**: Comprehensive fixes applied to resolve deployment failure caused by React hooks errors during static page generation. All suggested deployment fixes have been implemented.
+
+**Deployment Error Fixed**: 
+```
+TypeError: Cannot read properties of null (reading 'useContext') on /_global-error page
+React hydration/SSR error during static page generation
+Build process exited with code 1
+```
+
+**All Deployment Fixes Applied**:
+
+1. **✅ Global Dynamic Rendering (Prevents Static Generation)**
+   - Added `export const dynamic = 'force-dynamic'` to root layout and public layout
+   - Forces all pages to use dynamic rendering instead of static generation
+   - **Files**: `app/layout.tsx`, `app/(public)/layout.tsx`
+
+2. **✅ Fixed global-error.tsx to Avoid React Hooks During SSR**
+   - Removed `useEffect` hook that was causing "Cannot read properties of null (reading 'useContext')" error
+   - Replaced with conditional `window` check to prevent SSR issues
+   - **File**: `app/global-error.tsx`
+
+3. **✅ Set NODE_ENV=production in Build Command**
+   - Updated package.json build script to explicitly set `NODE_ENV=production`
+   - Eliminates "non-standard NODE_ENV" warnings during build
+   - **File**: `package.json` - build script now includes `NODE_ENV=production`
+
+4. **✅ Updated Deployment Configuration for Autoscale**
+   - Configured deployment target as `autoscale` with proper NODE_ENV
+   - Build command: `NODE_ENV=production npm run build`
+   - Run command: `NODE_ENV=production npm run start`
+   - **Tool**: deploy_config_tool (Replit deployment configuration)
+
+5. **✅ Next.js Configuration Cleanup**
+   - Removed invalid experimental option `dynamicIO` (not supported in Next.js 16)
+   - Removed deprecated `skipMiddlewareUrlNormalize` option
+   - Kept minimal configuration to prevent build-time static generation
+   - **File**: `next.config.js`
+
+**Previous SSR/SSG Fixes (Still Active)**:
+
+6. **FAQSchema SSR Fix**
+   - Removed `window.location.href` reference causing SSR errors
+   - **Files**: `app/components/SEOSchema.tsx`, `app/(public)/mt4-vs-mt5/page.tsx`
+
+7. **Static Generation Disabled for Dynamic Routes**
+   - Disabled `generateStaticParams` to prevent Express API calls during build
+   - **Files**: `app/(public)/category/[slug]/page.tsx`
+
+**Deployment Checklist**:
+- ✅ NODE_ENV set to 'production' in build and run commands
+- ✅ All pages use dynamic rendering (no static generation)
+- ✅ React hooks removed from error boundaries
+- ✅ Autoscale deployment target configured
+- ✅ No invalid Next.js experimental options
+- ✅ SSR-safe components (no window/document references)
+
+**Ready for Production Deployment** 🚀

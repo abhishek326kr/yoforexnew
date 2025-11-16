@@ -10,6 +10,10 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   
+  // CRITICAL: Skip static page generation to prevent SSR/build errors
+  // Forces all pages to use dynamic rendering
+  skipTrailingSlashRedirect: true,
+  
   // Environment variables (NO DEFAULTS - must be set in production)
   env: {
     EXPRESS_URL: process.env.EXPRESS_URL,

@@ -7,7 +7,7 @@
     "dev": "NODE_ENV=development tsx server/index.ts",
     "dev:next": "next dev -p 3000",
     "dev:hybrid": "bash start-hybrid.sh",
-    "build": "npm run build:express && npm run build:next",
+    "build": "NODE_ENV=production npm run build:express && NODE_ENV=production npm run build:next",
     "build:express": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "build:next": "next build",
     "start": "bash start-production.sh",
