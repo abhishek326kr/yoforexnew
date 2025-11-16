@@ -146,7 +146,7 @@ export function FAQSchema({ faqs }: { faqs: Array<{ question: string; answer: st
       answer: faq.answer
     })),
     baseUrl: "https://yoforex.net",
-    pageUrl: typeof window !== 'undefined' ? window.location.href : "https://yoforex.net"
+    pageUrl: "https://yoforex.net"
   });
   
   return (

@@ -12,24 +12,11 @@ export const revalidate = 60;
 export const dynamicParams = true;
 
 // Pre-generate static pages for all categories
+// DISABLED: Express server is not available during build, use ISR instead
 export async function generateStaticParams() {
-  try {
-    const res = await fetch(`${EXPRESS_URL}/api/categories`, {
-      next: { revalidate: 60 },
-    });
-    
-    if (!res.ok) {
-      return [];
-    }
-    
-    const categories = await res.json();
-    return categories.map((cat: any) => ({
-      slug: cat.slug,
-    }));
-  } catch (error) {
-    console.error('Error fetching categories for static params:', error);
-    return [];
-  }
+  // Return empty array to skip static generation during build
+  // Pages will be generated on-demand with ISR (revalidate: 60)
+  return [];
 }
 
 // Generate metadata for SEO
