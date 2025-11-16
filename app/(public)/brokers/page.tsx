@@ -1,28 +1,26 @@
-"use client";
-
+import { Metadata } from 'next';
 import BrokersComingSoonClient from './BrokersComingSoonClient';
-import { useEffect } from 'react';
 
-// Client component - prevents any server-side rendering during build
+// Prevent static generation - force dynamic rendering at runtime
+export const dynamic = 'force-dynamic';
+
+// SEO metadata for the coming soon page
+export const metadata: Metadata = {
+  title: "Broker Reviews Coming Soon | YoForex",
+  description: "Our comprehensive broker review system is launching soon. Get ready to explore detailed analyses, user ratings, and expert insights on the best forex brokers for MT4/MT5 trading.",
+  keywords: "forex brokers, MT4 brokers, MT5 brokers, broker reviews, regulated brokers, coming soon",
+  openGraph: {
+    title: "Broker Reviews Coming Soon | YoForex",
+    description: "Our comprehensive broker review system is launching soon. Get ready to explore detailed analyses, user ratings, and expert insights on the best forex brokers for MT4/MT5 trading.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Broker Reviews Coming Soon | YoForex",
+    description: "Our comprehensive broker review system is launching soon. Get ready to explore detailed analyses, user ratings, and expert insights on the best forex brokers for MT4/MT5 trading.",
+  },
+};
+
 export default function BrokerDirectoryPage() {
-  // Set page metadata on client side for SEO
-  useEffect(() => {
-    document.title = "Broker Reviews Coming Soon | YoForex";
-    
-    // Update meta tags
-    const updateMeta = (name: string, content: string) => {
-      let meta = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement;
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = name;
-        document.head.appendChild(meta);
-      }
-      meta.content = content;
-    };
-    
-    updateMeta('description', 'Our comprehensive broker review system is launching soon. Get ready to explore detailed analyses, user ratings, and expert insights on the best forex brokers for MT4/MT5 trading.');
-    updateMeta('keywords', 'forex brokers, MT4 brokers, MT5 brokers, broker reviews, regulated brokers, coming soon');
-  }, []);
-
   return <BrokersComingSoonClient />;
 }
