@@ -1,10 +1,22 @@
-'use client';
-
 import Header from '@/components/Header';
 import EnhancedFooter from '@/components/EnhancedFooter';
-import { Wrench, RefreshCw, ArrowLeft, Clock } from 'lucide-react';
+import { Wrench, ArrowLeft, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from './RefreshButton';
+import { Metadata } from 'next';
+
+// Prevent static generation - force dynamic rendering at runtime
+export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Under Maintenance | YoForex',
+  description: 'YoForex is currently under maintenance. We\'ll be back shortly!',
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function MaintenancePage() {
   return (
@@ -31,17 +43,9 @@ export default function MaintenancePage() {
             </div>
 
             <div className="flex gap-3 justify-center">
-              <Button 
-                variant="outline" 
-                size="lg"
-                onClick={() => window.location.reload()}
-                className="gap-2"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Try Again
-              </Button>
+              <RefreshButton />
               <Link href="/">
-                <Button size="lg" className="gap-2">
+                <Button size="lg" className="gap-2" data-testid="button-home">
                   <ArrowLeft className="h-4 w-4" />
                   Go Home
                 </Button>
