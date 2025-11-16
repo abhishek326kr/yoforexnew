@@ -35,26 +35,26 @@ const nextConfig = {
   async rewrites() {
     const expressUrl = process.env.EXPRESS_URL;
     const isProduction = process.env.NODE_ENV === 'production';
+    const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
     const isReplitDeployment = process.env.REPLIT_DEPLOYMENT || process.env.REPL_ID;
     
-    // If EXPRESS_URL is missing in production
+    // If EXPRESS_URL is missing
     if (!expressUrl) {
-      if (isProduction && !isReplitDeployment) {
-        // Non-Replit production: Hard fail to prevent misconfig
-        throw new Error(
-          '🚨 CRITICAL: EXPRESS_URL environment variable is required for production deployment.\n' +
-          'Set it in your deployment configuration.\n' +
-          'Example: EXPRESS_URL=http://127.0.0.1:3001'
-        );
-      }
-      
-      // Replit/Autoscale: Allow build with default (start-production.sh sets it at runtime)
       const defaultUrl = 'http://127.0.0.1:3001';
-      if (isReplitDeployment && isProduction) {
+      
+      // Always allow build phase with default (build may not have runtime env vars)
+      if (isBuildPhase) {
         console.warn(
-          '⚠️  EXPRESS_URL not set during build phase (expected for Replit Autoscale).\n' +
+          '⚠️  EXPRESS_URL not set during build phase (expected).\n' +
           `   Using default: ${defaultUrl}\n` +
-          '   start-production.sh will set the correct value at runtime.'
+          '   Production runtime will use actual EXPRESS_URL value.'
+        );
+      } else if (isProduction && !isReplitDeployment) {
+        // Non-Replit production runtime: Log warning but allow with default
+        console.warn(
+          '⚠️  WARNING: EXPRESS_URL not set in production.\n' +
+          `   Using default: ${defaultUrl}\n` +
+          '   Set EXPRESS_URL in deployment config for production use.'
         );
       } else {
         console.warn(`⚠️  EXPRESS_URL not set - using development default: ${defaultUrl}`);

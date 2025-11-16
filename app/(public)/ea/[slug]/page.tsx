@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation';
 import EADetailClient from './EADetailClient';
 import { getInternalApiUrl } from '@/lib/api-config';
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 // Enable ISR with 60-second revalidation
 export const revalidate = 60;
 

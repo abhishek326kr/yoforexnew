@@ -4,6 +4,9 @@ import type { ForumCategory } from '@shared/schema';
 import { getInternalApiUrl } from '@/lib/api-config';
 import { ssrSafeFetch } from '@/lib/ssrSafeFetch';
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 // Enable ISR with 60-second revalidation (only applies at runtime, not during build)
 export const revalidate = 60;
 

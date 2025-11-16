@@ -5,6 +5,9 @@ import LeaderboardClient from './LeaderboardClient';
 import { getInternalApiUrl } from '@/lib/api-config';
 import { ssrSafeFetch } from '@/lib/ssrSafeFetch';
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Leaderboard | YoForex',
   description: 'View the top contributors, publishers, and active members in the YoForex community. See who\'s leading the expert advisor marketplace.',

@@ -5,6 +5,9 @@ import JsonLd from '@/components/JsonLd';
 import { generateOrganizationSchema, generateWebSiteSchema, SITE_CONFIG } from '@/lib/schema-generator';
 import { ssrSafeFetch } from '@/lib/ssrSafeFetch';
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 // Enable ISR with 60-second revalidation (only applies at runtime, not during build)
 export const revalidate = 60;
 

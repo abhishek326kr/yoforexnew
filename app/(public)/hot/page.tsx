@@ -6,6 +6,9 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { ssrSafeFetch } from "@/lib/ssrSafeFetch";
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 type ContentType = 'thread' | 'ea' | 'indicator' | 'article' | 'source_code' | 'broker';
 
 interface HotItem {

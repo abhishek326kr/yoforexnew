@@ -3,6 +3,9 @@ import { Suspense } from 'react';
 import SearchClient from './SearchClient';
 import { Skeleton } from "@/components/ui/skeleton";
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Search | YoForex',
   description: 'Search across forums, members, marketplace, and brokers on YoForex.',

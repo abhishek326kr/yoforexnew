@@ -1,6 +1,9 @@
 import { Metadata } from 'next';
 import BrokersComingSoonClient from './BrokersComingSoonClient';
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 // SEO metadata for the coming soon page
 export const metadata: Metadata = {
   title: "Broker Reviews Coming Soon | YoForex",
