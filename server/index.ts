@@ -72,11 +72,12 @@ const corsOptions = {
     }
     
     // Always allow Replit domains (development and production)
+    // IMPORTANT: Include optional port numbers (:\d+)? for published deployments
     const replitDomainPatterns = [
-      /^https?:\/\/.*\.replit\.app$/,      // Replit app domains (multi-level)
-      /^https?:\/\/.*\.replit\.dev$/,      // Replit dev domains (multi-level)
-      /^https?:\/\/.*\.repl\.co$/,         // Replit co domains (multi-level)
-      /^https?:\/\/.*\.repl\.run$/,        // Replit run domains (multi-level)
+      /^https?:\/\/.*\.replit\.app(:\d+)?$/,      // Replit app domains (multi-level) with optional port
+      /^https?:\/\/.*\.replit\.dev(:\d+)?$/,      // Replit dev domains (multi-level) with optional port
+      /^https?:\/\/.*\.repl\.co(:\d+)?$/,         // Replit co domains (multi-level) with optional port
+      /^https?:\/\/.*\.repl\.run(:\d+)?$/,        // Replit run domains (multi-level) with optional port
     ];
     
     if (replitDomainPatterns.some(pattern => pattern.test(origin))) {

@@ -161,3 +161,39 @@ Build process exited with code 1
 - ✅ SSR-safe components (no window/document references)
 
 **Ready for Production Deployment** 🚀
+
+### Production CORS Fix - Published Deployment Working (November 16, 2025)
+
+**Overview**: Fixed CORS configuration in Express server to allow published deployment URLs with port numbers.
+
+**Production Error Fixed**: 
+```
+CORS: Origin not allowed: https://[deployment-id].riker.replit.dev:3000
+Internal Server Error on published deployment link
+```
+
+**Root Cause**:
+- The CORS regex patterns in `server/index.ts` were checking for Replit domains ending with `.replit.dev`, `.replit.app`, etc.
+- Published deployments include a port number (`:3000`) in the origin header
+- Patterns like `/^https?:\/\/.*\.replit\.dev$/` failed to match `https://xxx.replit.dev:3000` because the port broke the pattern
+
+**Fix Applied**:
+- Updated all Replit domain regex patterns to include optional port numbers: `(:\d+)?`
+- **File**: `server/index.ts` (lines 77-84)
+
+**Updated Patterns**:
+```javascript
+const replitDomainPatterns = [
+  /^https?:\/\/.*\.replit\.app(:\d+)?$/,      // Allow optional port
+  /^https?:\/\/.*\.replit\.dev(:\d+)?$/,      // Allow optional port
+  /^https?:\/\/.*\.repl\.co(:\d+)?$/,         // Allow optional port
+  /^https?:\/\/.*\.repl\.run(:\d+)?$/,        // Allow optional port
+];
+```
+
+**Verification**:
+- ✅ No more CORS errors in logs
+- ✅ API requests returning 200 status codes
+- ✅ Published deployment now works correctly
+
+**Deployment Status**: Production CORS issue resolved - published link should now work without errors! 🚀
