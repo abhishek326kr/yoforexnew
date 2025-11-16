@@ -1,11 +1,31 @@
+"use client";
+
 import Header from '@/components/Header';
 import EnhancedFooter from '@/components/EnhancedFooter';
 import { Sparkles, Mail, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useEffect } from 'react';
 
+// Client component - prevents server-side rendering during build
 export default function ComingSoonPage() {
+  // Set page metadata on client side for SEO
+  useEffect(() => {
+    document.title = 'Coming Soon | YoForex';
+    
+    const updateMeta = (name: string, content: string) => {
+      let meta = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement;
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = name;
+        document.head.appendChild(meta);
+      }
+      meta.content = content;
+    };
+    
+    updateMeta('description', 'This page is coming soon. Stay tuned for exciting updates!');
+  }, []);
   return (
     <>
       <Header />
@@ -49,12 +69,3 @@ export default function ComingSoonPage() {
     </>
   );
 }
-
-export const metadata = {
-  title: 'Coming Soon | YoForex',
-  description: 'This page is coming soon. Stay tuned for exciting updates!',
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
