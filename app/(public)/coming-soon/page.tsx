@@ -1,9 +1,12 @@
-import Header from '@/components/Header';
-import EnhancedFooter from '@/components/EnhancedFooter';
+import dynamic from 'next/dynamic';
 import { Sparkles, Mail, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+
+// Lazy-load client components to prevent React hooks evaluation during build
+const Header = dynamic(() => import('@/components/Header'), { ssr: false });
+const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'), { ssr: false });
 
 // Prevent static generation - force dynamic rendering at runtime
 export const dynamic = 'force-dynamic';

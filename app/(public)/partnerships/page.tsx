@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
-import Header from '@/components/Header';
-import EnhancedFooter from '@/components/EnhancedFooter';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Handshake, TrendingUp, Users, Megaphone } from 'lucide-react';
+
+// Lazy-load client components to prevent React hooks evaluation during build
+const Header = dynamic(() => import('@/components/Header'), { ssr: false });
+const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'), { ssr: false });
+
+// Prevent static generation - force dynamic rendering at runtime
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Partnerships | YoForex',
