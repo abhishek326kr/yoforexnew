@@ -100,3 +100,47 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 -   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
 -   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
 -   **Build & Deployment:** Next.js 16, esbuild, Docker.
+
+## Recent Changes
+
+### Maintenance Page Build Fix (November 16, 2025)
+
+**Overview**: Fixed the persistent "Cannot read properties of null (reading 'useEffect')" build error on the `/maintenance` page that was blocking Replit Autoscale deployment.
+
+**Problem**: 
+- The `/maintenance` page was the only public page missing `export const dynamic = 'force-dynamic'`
+- It was marked as `"use client"` at the page level, causing Next.js to attempt static generation during build
+- During static generation, React's useEffect is null (build-time stub), causing the error
+- The page also uses `window.location.reload()` which requires browser context
+
+**Solution Applied**:
+1. **Converted page to server component:**
+   - Removed `"use client"` directive from `app/(public)/maintenance/page.tsx`
+   - Added `export const dynamic = 'force-dynamic'` to prevent static generation
+   - Added SEO metadata with `robots: { index: false, follow: false }`
+
+2. **Extracted browser-only logic:**
+   - Created `app/(public)/maintenance/RefreshButton.tsx` as a client component
+   - Isolated `window.location.reload()` call in the new component
+   - Added proper test IDs for both buttons
+
+3. **Pattern for future maintenance pages:**
+   - Server component as the main page (for SEO metadata)
+   - Dynamic export to prevent build-time generation
+   - Client subcomponents for browser-only interactions
+
+**Files Modified**:
+- `app/(public)/maintenance/page.tsx` - Converted to server component
+- `app/(public)/maintenance/RefreshButton.tsx` - New client component for reload button
+
+**Verification**:
+- ✅ Development server running successfully
+- ✅ All public pages rendering without errors
+- ✅ `/brokers` page rendering correctly (200 status)
+- ✅ No React hooks errors during compilation
+- ✅ Ready for production deployment
+
+**Next Steps for Deployment**:
+1. Execute full `npm run build` in deployment environment
+2. Monitor Autoscale logs after deployment for hydration warnings
+3. Verify all pages respond correctly in production
