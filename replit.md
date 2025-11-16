@@ -197,3 +197,49 @@ const replitDomainPatterns = [
 - ✅ Published deployment now works correctly
 
 **Deployment Status**: Production CORS issue resolved - published link should now work without errors! 🚀
+
+### Deployment Run Command Fix - Autoscale Compatible (November 16, 2025)
+
+**Overview**: Fixed deployment configuration to use proper command format for Autoscale deployments.
+
+**Deployment Error Fixed**: 
+```
+The run command format is incorrect. "NODE_ENV=production npm run start" is being 
+interpreted as an executable file path instead of a command with environment variable.
+```
+
+**Root Cause**:
+- The deployment configuration was using an array format that interpreted "NODE_ENV=production" as a separate executable
+- Array format: `["NODE_ENV=production", "npm", "run", "start"]` is INCORRECT
+- This tries to execute a file named "NODE_ENV=production" which doesn't exist
+
+**Fix Applied**:
+- **Build command**: Uses shell wrapper to properly handle environment variables
+  ```toml
+  build = ["sh", "-c", "NODE_ENV=production npm run build"]
+  ```
+
+- **Run command**: Simple npm command (start-production.sh already sets NODE_ENV)
+  ```toml
+  run = ["npm", "run", "start"]
+  ```
+
+**Why This Works**:
+1. Build command uses `sh -c` to execute the full command with environment variable in a shell
+2. Run command doesn't need NODE_ENV in the command because `start-production.sh` already sets it (line 44)
+3. This format is compatible with Autoscale deployment requirements
+
+**Deployment Configuration**:
+```toml
+[deployment]
+deploymentTarget = "autoscale"
+build = ["sh", "-c", "NODE_ENV=production npm run build"]
+run = ["npm", "run", "start"]
+```
+
+**Next Steps**:
+- ⚠️ **MANUAL FIX STILL REQUIRED**: Edit `.replit` to remove extra port configurations (see previous documentation)
+- Only keep ONE external port: `[[ports]] localPort = 5000, externalPort = 5000`
+- After fixing ports, republish the deployment
+
+**Status**: Deployment command format fixed, awaiting manual port configuration fix before republishing.
