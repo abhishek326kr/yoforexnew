@@ -315,10 +315,13 @@ class OrchestratedStorageBase {
  * This function wraps OrchestratedStorageBase in a JavaScript Proxy that:
  * 1. First checks if a method exists on the orchestrator (migrated to domain modules)
  * 2. If not found, automatically delegates to DrizzleStorage fallback
- * 3. Logs which methods are being delegated for monitoring migration progress
+ * 3. Logs which methods are being delegated (once per method) for monitoring migration progress
  * 
  * This ensures ALL IStorage methods work, even if not explicitly implemented.
  */
+// Track logged methods globally (outside function to persist across calls)
+const loggedMethods = new Set<string>();
+
 const createOrchestratedStorage = (): IStorage => {
   const base = new OrchestratedStorageBase();
   
@@ -331,7 +334,11 @@ const createOrchestratedStorage = (): IStorage => {
       
       // Otherwise, delegate to DrizzleStorage fallback
       if (prop in target.fallback && typeof (target.fallback as any)[prop] === 'function') {
-        console.log(`[STORAGE] Delegating unmigrated method '${prop}' to DrizzleStorage`);
+        // Log delegation only once per method to avoid spam
+        if (!loggedMethods.has(prop)) {
+          console.log(`[STORAGE] Delegating unmigrated method '${prop}' to DrizzleStorage`);
+          loggedMethods.add(prop);
+        }
         return (target.fallback as any)[prop].bind(target.fallback);
       }
       
