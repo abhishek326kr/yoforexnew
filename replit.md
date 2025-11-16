@@ -198,9 +198,9 @@ const replitDomainPatterns = [
 
 **Deployment Status**: Production CORS issue resolved - published link should now work without errors! 🚀
 
-### Deployment Run Command Fix - Autoscale Compatible (November 16, 2025)
+### Deployment Command Fix - Final Solution (November 16, 2025)
 
-**Overview**: Fixed deployment configuration to use proper command format for Autoscale deployments.
+**Overview**: Fixed deployment configuration by removing NODE_ENV from deployment commands and relying on existing scripts and Replit secrets.
 
 **Deployment Error Fixed**: 
 ```
@@ -209,37 +209,42 @@ interpreted as an executable file path instead of a command with environment var
 ```
 
 **Root Cause**:
-- The deployment configuration was using an array format that interpreted "NODE_ENV=production" as a separate executable
-- Array format: `["NODE_ENV=production", "npm", "run", "start"]` is INCORRECT
-- This tries to execute a file named "NODE_ENV=production" which doesn't exist
+- Deployment configuration was attempting to set NODE_ENV in the command array
+- This is incorrect for Replit's deployment system
+- NODE_ENV should be set via Replit Secrets or in the scripts themselves
 
-**Fix Applied**:
-- **Build command**: Uses shell wrapper to properly handle environment variables
-  ```toml
-  build = ["sh", "-c", "NODE_ENV=production npm run build"]
-  ```
-
-- **Run command**: Simple npm command (start-production.sh already sets NODE_ENV)
-  ```toml
-  run = ["npm", "run", "start"]
-  ```
-
-**Why This Works**:
-1. Build command uses `sh -c` to execute the full command with environment variable in a shell
-2. Run command doesn't need NODE_ENV in the command because `start-production.sh` already sets it (line 44)
-3. This format is compatible with Autoscale deployment requirements
-
-**Deployment Configuration**:
+**Final Solution - Clean Deployment Commands**:
 ```toml
 [deployment]
 deploymentTarget = "autoscale"
-build = ["sh", "-c", "NODE_ENV=production npm run build"]
+build = ["npm", "run", "build"]
 run = ["npm", "run", "start"]
 ```
 
+**Why This Works**:
+1. ✅ **package.json build script** (line 10) already sets `NODE_ENV=production`
+2. ✅ **start-production.sh** (line 44) already sets `NODE_ENV=production`
+3. ✅ **Replit Secret** `NODE_ENV` already exists (verified with check_secrets)
+4. ✅ No need to duplicate NODE_ENV in deployment commands
+5. ✅ Simple command arrays that Replit deployment system understands
+
+**Environment Variable Strategy**:
+- **Build time**: `package.json` build script sets NODE_ENV
+- **Runtime**: `start-production.sh` sets NODE_ENV
+- **Deployment**: Replit secret NODE_ENV provides fallback
+- **Result**: No environment variables needed in deployment commands
+
 **Next Steps**:
-- ⚠️ **MANUAL FIX STILL REQUIRED**: Edit `.replit` to remove extra port configurations (see previous documentation)
-- Only keep ONE external port: `[[ports]] localPort = 5000, externalPort = 5000`
+- ⚠️ **MANUAL FIX REQUIRED**: Edit `.replit` to remove extra port configurations
+- Keep ONLY ONE external port: `[[ports]] localPort = 5000, externalPort = 5000`
+- Delete the other two port configurations (ports 3000 and 43461)
 - After fixing ports, republish the deployment
 
-**Status**: Deployment command format fixed, awaiting manual port configuration fix before republishing.
+**Deployment Checklist**:
+- ✅ Clean deployment commands (no environment variables)
+- ✅ NODE_ENV set in package.json build script
+- ✅ NODE_ENV set in start-production.sh
+- ✅ NODE_ENV secret exists in Replit
+- ⚠️ Port configuration still needs manual fix
+
+**Status**: Deployment commands fixed - awaiting manual port configuration before republishing.
