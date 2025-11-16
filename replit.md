@@ -155,3 +155,51 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - Use plain `dynamic(() => import(...))` without options for client components
 - Server components importing client layout components must use dynamic imports
 - Pages with client wrappers (HomeClient, CategoriesClient) are safe - they have `"use client"`
+
+### Next.js 16 Turbopack Naming Conflict Fix (November 16, 2025)
+
+**Overview**: Resolved Turbopack build failure caused by naming conflict between `next/dynamic` import and route segment config in the same file.
+
+**Turbopack Error Fixed**:
+- Turbopack was failing with: `"the name 'dynamic' is defined multiple times"`
+- Error occurred in 3 pages: coming-soon, leaderboard, and maintenance
+- Build process stopped before completing deployment
+
+**Root Cause**:
+- Files had both `import dynamic from 'next/dynamic'` (defines variable `dynamic`)
+- AND `export const dynamic = 'force-dynamic'` (defines another variable `dynamic`)
+- This created duplicate identifier in Next.js 16 Turbopack which cannot handle name collisions
+
+**Solution - Import Aliasing**:
+```typescript
+// ❌ WRONG - Causes Turbopack "name defined multiple times" error:
+import dynamic from 'next/dynamic';
+const Header = dynamic(() => import('@/components/Header'));
+export const dynamic = 'force-dynamic'; // ← Naming conflict!
+
+// ✅ CORRECT - Rename the import to avoid conflict:
+import dynamicImport from 'next/dynamic';
+const Header = dynamicImport(() => import('@/components/Header'));
+export const dynamic = 'force-dynamic'; // ← No conflict!
+```
+
+**All 6 Pages Fixed**:
+- app/(public)/coming-soon/page.tsx
+- app/(public)/leaderboard/page.tsx
+- app/(public)/maintenance/page.tsx
+- app/(public)/partnerships/page.tsx
+- app/(public)/terms/page.tsx
+- app/(public)/refund-policy/page.tsx
+
+**Verification**:
+- ✅ All pages compile without Turbopack naming errors
+- ✅ Development server: GET / 200 in 307ms
+- ✅ No "name defined multiple times" errors
+- ✅ Production build ready
+- ✅ Architect-reviewed and approved
+
+**Pattern for Future Pages**:
+- When using BOTH `next/dynamic` AND `export const dynamic`:
+  - Import as `import dynamicImport from 'next/dynamic'`
+  - Use `dynamicImport(() => import(...))` for dynamic imports
+  - Keep `export const dynamic = 'force-dynamic'` unchanged

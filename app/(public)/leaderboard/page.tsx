@@ -1,12 +1,12 @@
 import { Metadata } from 'next';
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
 import LeaderboardClient from './LeaderboardClient';
 import { getInternalApiUrl } from '@/lib/api-config';
 import { ssrSafeFetch } from '@/lib/ssrSafeFetch';
 
 // Dynamically import client components (Next.js 16 compatible)
-const Header = dynamic(() => import('@/components/Header'));
-const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'));
+const Header = dynamicImport(() => import('@/components/Header'));
+const EnhancedFooter = dynamicImport(() => import('@/components/EnhancedFooter'));
 
 // Force dynamic rendering to prevent build-time static generation errors
 export const dynamic = 'force-dynamic';

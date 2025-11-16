@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
 
 // Dynamically import client components (Next.js 16 compatible)
-const Header = dynamic(() => import('@/components/Header'));
-const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'));
+const Header = dynamicImport(() => import('@/components/Header'));
+const EnhancedFooter = dynamicImport(() => import('@/components/EnhancedFooter'));
 
 // Prevent static generation - force dynamic rendering at runtime
 export const dynamic = 'force-dynamic';
