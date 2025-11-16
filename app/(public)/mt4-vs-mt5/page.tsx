@@ -7,6 +7,9 @@ import { CheckCircle, XCircle, Server, Cpu, TrendingUp, Code, Users, ArrowRight 
 import Link from 'next/link';
 import { FAQSchema, OrganizationSchema } from '@/components/SEOSchema';
 
+// Force dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'MT4 vs MT5 - Complete MetaTrader Comparison 2025',
   description: 'Detailed MT4 vs MT5 comparison. Learn differences between MetaTrader 4 and 5, which is better for Expert Advisors, and download EAs.',

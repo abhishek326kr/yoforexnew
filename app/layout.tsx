@@ -6,6 +6,9 @@ import { RootProviders } from '@/components/providers/RootProviders';
 
 const inter = Inter({ subsets: ['latin'] });
 
+// Force all pages to use dynamic rendering to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export const viewport: Viewport = {
   themeColor: '#1e40af',
   width: 'device-width',
