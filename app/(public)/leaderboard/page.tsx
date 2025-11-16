@@ -4,9 +4,9 @@ import LeaderboardClient from './LeaderboardClient';
 import { getInternalApiUrl } from '@/lib/api-config';
 import { ssrSafeFetch } from '@/lib/ssrSafeFetch';
 
-// Lazy-load client components to prevent React hooks evaluation during build
-const Header = dynamic(() => import('@/components/Header'), { ssr: false });
-const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'), { ssr: false });
+// Dynamically import client components (Next.js 16 compatible)
+const Header = dynamic(() => import('@/components/Header'));
+const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'));
 
 // Force dynamic rendering to prevent build-time static generation errors
 export const dynamic = 'force-dynamic';

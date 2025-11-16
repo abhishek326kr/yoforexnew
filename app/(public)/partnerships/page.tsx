@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Handshake, TrendingUp, Users, Megaphone } from 'lucide-react';
 
-// Lazy-load client components to prevent React hooks evaluation during build
-const Header = dynamic(() => import('@/components/Header'), { ssr: false });
-const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'), { ssr: false });
+// Dynamically import client components (Next.js 16 compatible)
+const Header = dynamic(() => import('@/components/Header'));
+const EnhancedFooter = dynamic(() => import('@/components/EnhancedFooter'));
 
 // Prevent static generation - force dynamic rendering at runtime
 export const dynamic = 'force-dynamic';
