@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useDropzone } from "react-dropzone";
 import ReactMarkdown from "react-markdown";
@@ -242,6 +242,7 @@ export default function ThreadCreationWizard({
 }: ThreadCreationWizardProps) {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   
@@ -265,8 +266,8 @@ export default function ThreadCreationWizard({
   const navigateToStep = useCallback((step: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("step", step.toString());
-    router.push(`?${params.toString()}`, { scroll: false });
-  }, [router, searchParams]);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [router, pathname, searchParams]);
 
   // Fetch categories for internal link suggestions
   const { data: categories = [] } = useQuery({

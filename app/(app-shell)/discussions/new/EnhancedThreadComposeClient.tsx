@@ -957,9 +957,34 @@ export default function EnhancedThreadComposeClient({
     createThreadMutation.mutate(data);
   };
 
+  // Navigate to a specific step by updating the URL
+  const navigateToStep = useCallback((step: number) => {
+    // Validate step is between 1-3
+    const validStep = Math.min(Math.max(step, 1), 3);
+    
+    // Build URL with step parameter, preserving category if it exists
+    const params = new URLSearchParams();
+    if (categoryParam) {
+      params.set("category", categoryParam);
+    }
+    params.set("step", validStep.toString());
+    
+    // Update URL without scrolling
+    router.push(`/discussions/new?${params.toString()}`, { scroll: false });
+  }, [router, categoryParam]);
+
+  // Sync currentStep state with URL parameter changes
+  useEffect(() => {
+    const stepParam = searchParams?.get("step");
+    const urlStep = stepParam ? Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3) : 1;
+    if (urlStep !== currentStep) {
+      setCurrentStep(urlStep);
+    }
+  }, [searchParams, currentStep]);
+
   const handleStepClick = (step: number) => {
     if (step <= currentStep) {
-      setCurrentStep(step);
+      navigateToStep(step);
     }
   };
 
@@ -1411,7 +1436,7 @@ export default function EnhancedThreadComposeClient({
                           type="button"
                           variant="outline"
                           size="lg"
-                          onClick={() => handleStepClick(currentStep - 1)}
+                          onClick={() => navigateToStep(currentStep - 1)}
                           className="gap-2"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -1424,11 +1449,7 @@ export default function EnhancedThreadComposeClient({
                           <Button
                             type="button"
                             size="lg"
-                            onClick={() => {
-                                if(currentStep === 1 && !canProceedStep1) {
-                                    handleStepClick(currentStep + 1);
-                                }
-                            }}
+                            onClick={() => navigateToStep(currentStep + 1)}
                             disabled={currentStep === 1 && !canProceedStep1}
                             className="gap-2 min-w-[120px]"
                           >
