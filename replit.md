@@ -98,17 +98,18 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
    - Server and client render identical initial state
    - URL parameter reading deferred to client-side useEffect
 
-2. **URL Navigation Function** (lines 961-974):
+2. **URL Navigation Function** (lines 964-977):
    - `navigateToStep(step)` validates step range (1-3) and updates URL
    - Preserves existing query parameters (e.g., category)
-   - Uses `router.push()` with `scroll: false` to prevent page jumping
+   - Uses `router.push()` with `scroll: false` to create new history entries
    - Updates URL as `/discussions/new?step=X` or `/discussions/new?category=Y&step=X`
 
-3. **URL Sync Effect** (lines 977-983):
-   - `useEffect` monitors `searchParams` changes
-   - Reads `step` parameter after client hydration
-   - Updates `currentStep` state when URL changes (browser back/forward)
-   - Validates step range to ensure safety
+3. **URL Sync Effect** (lines 981-1001):
+   - On initial load, if no `?step` parameter exists, uses `router.replace()` to add `?step=1`
+   - `router.replace()` overwrites history entry (prevents back-button trap)
+   - Monitors `searchParams` changes for browser back/forward navigation
+   - Syncs URL step parameter to `currentStep` state
+   - Validates step range (1-3) to ensure safety
 
 4. **Navigation Integration**:
    - `handleStepClick()` delegates to `navigateToStep()` for backward navigation
@@ -119,7 +120,8 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - Hydration-safe: Server always renders step 1, client updates via useEffect
 - Category parameter preserved during step navigation
 - Step validation clamps to 1-3 range in multiple places
-- Browser history fully integrated (back/forward works)
+- Browser history fully integrated (back/forward works correctly)
+- No back-button trap: Initial URL normalization uses `replace`, user navigation uses `push`
 
 **Benefits**:
 - Browser back/forward buttons work correctly

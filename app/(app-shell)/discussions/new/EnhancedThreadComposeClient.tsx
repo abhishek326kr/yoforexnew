@@ -974,13 +974,28 @@ export default function EnhancedThreadComposeClient({
   }, [router, categoryParam]);
 
   // Sync currentStep state with URL parameter changes
+  // Also ensure URL always has a step parameter
   useEffect(() => {
     const stepParam = searchParams?.get("step");
-    const urlStep = stepParam ? Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3) : 1;
+    
+    // If there's no step parameter in the URL, add it using replace to avoid back-button trap
+    if (!stepParam) {
+      const params = new URLSearchParams();
+      if (categoryParam) {
+        params.set("category", categoryParam);
+      }
+      params.set("step", "1");
+      // Use replace instead of push to overwrite current history entry
+      router.replace(`/discussions/new?${params.toString()}`, { scroll: false });
+      return;
+    }
+    
+    // Otherwise sync URL step to state
+    const urlStep = Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3);
     if (urlStep !== currentStep) {
       setCurrentStep(urlStep);
     }
-  }, [searchParams, currentStep]);
+  }, [searchParams, currentStep, router, categoryParam]);
 
   const handleStepClick = (step: number) => {
     if (step <= currentStep) {
