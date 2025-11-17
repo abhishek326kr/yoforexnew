@@ -82,4 +82,68 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 -   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
 -   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
 -   **Build & Deployment:** Next.js 16, esbuild, Docker.
-```
+
+## Recent Changes (November 2025)
+
+### Thread Creation Wizard - Sequential Step Validation
+
+**Date**: November 17, 2025
+
+**Goal**: Prevent users from skipping ahead to step 2 or 3 without completing previous steps in the thread creation wizard.
+
+**Component**: `app/(app-shell)/discussions/new/EnhancedThreadComposeClient.tsx`
+
+**Implementation**:
+
+1. **Step Progress Tracking**:
+   - Added `stepProgress` state to track which steps have been "acknowledged" by clicking Continue
+   - Prevents users from accessing steps they haven't reached yet
+
+2. **Validation Helpers**:
+   - `isStep1Complete`: Title (≥5 chars), body (≥20 chars), category selected
+   - `isStep2Complete`: Step 1 complete + step 2 acknowledged
+   - `getMaxAccessibleStep()`: Returns highest step user can access (1, 2, or 3)
+
+3. **Navigation Enforcement**:
+   - `navigateToStep(step, bypassValidation)` clamps requested step to max accessible step
+   - `bypassValidation` parameter solves async state update issue
+   - Users cannot navigate to steps beyond what they've completed
+
+4. **URL Validation**:
+   - URL sync effect validates requested step from URL parameter
+   - Redirects to max accessible step if user tries to access invalid step
+   - Shows toast notification explaining why redirect occurred
+   - Uses `router.replace()` to avoid polluting browser history
+   - Automatically handles regression when fields are cleared (via `getMaxAccessibleStep` in dependencies)
+
+5. **Step Acknowledgement**:
+   - Continue button acknowledges current step before navigating forward
+   - Uses `bypassValidation=true` to avoid async state race condition
+   - Tracks user progression through the wizard
+
+**Critical Bug Fixes**:
+
+1. **Async State Race Condition** (Lines 993-1021):
+   - Problem: `setStepProgress()` followed by `navigateToStep()` caused navigation to use stale state
+   - Solution: Added `bypassValidation` parameter to skip validation check when Continue is clicked
+   - Continue button sets acknowledgement state AND bypasses validation (line 1566)
+
+2. **Infinite Loop Prevention** (November 17, 2025):
+   - Problem: Separate regression effect created circular dependency with URL sync effect
+   - Both effects tried to manage navigation simultaneously, triggering each other infinitely
+   - Solution: Removed redundant regression effect
+   - URL sync effect handles all validation scenarios automatically via `getMaxAccessibleStep` dependency
+
+**Behavior**:
+- Step 1 → Step 2: Only allowed after title, body, and category are filled
+- Step 2 → Step 3: Only allowed after clicking Continue on step 2
+- Direct URL access: `/discussions/new?step=3` automatically redirects to step 1 if incomplete
+- Browser back button: Works correctly, respects validation rules
+- Field clearing: Automatically redirects back when required fields are cleared on later step
+
+**Verification**:
+- ✅ Users cannot skip steps or access steps prematurely
+- ✅ Toast notifications inform users why they were redirected
+- ✅ Browser navigation (back/forward) respects validation
+- ✅ No infinite loops or redirect cycles
+- ✅ Continue button advances user through wizard correctly

@@ -1075,16 +1075,6 @@ export default function EnhancedThreadComposeClient({
     }
   }, [searchParams, currentStep, router, categoryParam, getMaxAccessibleStep, toast]);
 
-  // Regression effect: Auto-redirect if user clears required fields on later steps
-  useEffect(() => {
-    const maxStep = getMaxAccessibleStep();
-    
-    // If current step is beyond what's accessible, redirect back
-    if (currentStep > maxStep) {
-      navigateToStep(maxStep);
-    }
-  }, [currentStep, getMaxAccessibleStep, navigateToStep]);
-
   const handleStepClick = (step: number) => {
     if (step <= currentStep) {
       navigateToStep(step);
