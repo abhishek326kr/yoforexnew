@@ -91,6 +91,22 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
+### Thread Creation "Next" Button Fix (November 17, 2025)
+
+**Issue**: User reported that the "Next" button on the thread creation wizard (/discussions/new) wasn't working even though all form validations passed.
+
+**Root Cause**: Validation mismatch between form schema and UI logic. The Zod schema required minimum 100 characters for the thread body, but `canProceedToNextStep()` function was checking for minimum 500 characters. This caused the Next button to remain disabled even when the form was valid.
+
+**Fix Applied**:
+- **ThreadCreationWizard.tsx** (line 355): Changed validation from `watchedFields.body.length >= 500` to `watchedFields.body.length >= 100` to match schema validation
+
+**Verification**:
+- ✅ Next button now enables at 100 characters (matching schema)
+- ✅ Validation logic is now consistent
+- ✅ No side effects on other wizard steps
+
+**Note**: Minor UI improvement suggested by architect - character counter visual feedback still shows success indicator at 500 chars (doesn't block functionality but could confuse users).
+
 ### AuthUpdater TypeError Fix (November 17, 2025)
 
 **Issue**: `setUser is not a function` error in `AuthUpdater` component causing console errors.
