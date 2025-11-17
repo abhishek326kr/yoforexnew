@@ -21,45 +21,160 @@ import { generateThreadSlug, generateReplySlug, generateMetaDescription, randomU
  * Extracted from DrizzleStorage to reduce monolith complexity
  */
 export class ForumStorage {
+  /**
+   * Create a new forum thread with comprehensive error handling and transaction support
+   * 
+   * This method performs multiple database operations atomically:
+   * 1. Validates user exists
+   * 2. Inserts thread record
+   * 3. Updates category statistics
+   * 4. Creates activity feed entry
+   * 
+   * If any step fails, the entire operation is rolled back.
+   * 
+   * @param insertThread - Thread data to insert
+   * @param authorId - ID of the user creating the thread
+   * @returns The created thread
+   * @throws Error if user not found, validation fails, or database constraints are violated
+   */
   async createForumThread(insertThread: InsertForumThread, authorId: string): Promise<ForumThread> {
-    const [user] = await db.select().from(users).where(eq(users.id, authorId));
-    if (!user) throw new Error("User not found");
-    
-    // Debug logging to track contentHtml and attachments
-    console.log('[ForumStorage] Creating thread with:', {
-      hasContentHtml: !!insertThread.contentHtml,
-      contentHtmlLength: insertThread.contentHtml?.length || 0,
-      attachmentsCount: insertThread.attachments?.length || 0,
-      title: insertThread.title?.substring(0, 50),
-    });
-    
-    // Note: Slug, focusKeyword, metaDescription are now passed from routes.ts
-    // This method just stores whatever is provided, with fallbacks for required fields
-    const [thread] = await db.insert(forumThreads).values({
-      ...insertThread,
-      authorId,
-      // Ensure slug is always defined (generate from title if missing)
-      slug: insertThread.slug || generateThreadSlug(insertThread.title),
-      // Ensure defaults for optional fields
-      isPinned: insertThread.isPinned ?? false,
-      isLocked: insertThread.isLocked ?? false,
-      isSolved: insertThread.isSolved ?? false,
-      engagementScore: insertThread.engagementScore ?? 0,
-      status: "approved" as const,
-    }).returning();
-    
-    await this.updateCategoryStats(insertThread.categorySlug);
-    
-    await db.insert(activityFeed).values({
-      userId: authorId,
-      activityType: "thread_created",
-      entityType: "thread",
-      entityId: thread.id,
-      title: insertThread.title,
-      description: thread.metaDescription || insertThread.body.substring(0, 200),
-    });
-    
-    return thread;
+    try {
+      // Step 1: Validate user exists before starting transaction
+      console.log('[ForumStorage.createForumThread] Step 1: Validating user exists', {
+        authorId,
+        timestamp: new Date().toISOString(),
+      });
+      
+      const [user] = await db.select().from(users).where(eq(users.id, authorId));
+      if (!user) {
+        console.error('[ForumStorage.createForumThread] ERROR: User not found', {
+          authorId,
+          timestamp: new Date().toISOString(),
+        });
+        throw new Error("User not found");
+      }
+      
+      // Debug logging to track contentHtml and attachments
+      console.log('[ForumStorage.createForumThread] Step 2: Preparing thread data', {
+        hasContentHtml: !!insertThread.contentHtml,
+        contentHtmlLength: insertThread.contentHtml?.length || 0,
+        attachmentsCount: insertThread.attachments?.length || 0,
+        title: insertThread.title?.substring(0, 50),
+        categorySlug: insertThread.categorySlug,
+        subcategorySlug: insertThread.subcategorySlug,
+        slug: insertThread.slug,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // Use transaction to ensure atomicity
+      console.log('[ForumStorage.createForumThread] Step 3: Starting database transaction', {
+        timestamp: new Date().toISOString(),
+      });
+      
+      return await db.transaction(async (tx) => {
+        try {
+          // Note: Slug, focusKeyword, metaDescription are now passed from routes.ts
+          // This method just stores whatever is provided, with fallbacks for required fields
+          console.log('[ForumStorage.createForumThread] Step 3a: Inserting thread record', {
+            timestamp: new Date().toISOString(),
+          });
+          
+          const [thread] = await tx.insert(forumThreads).values({
+            ...insertThread,
+            authorId,
+            // Ensure slug is always defined (generate from title if missing)
+            slug: insertThread.slug || generateThreadSlug(insertThread.title),
+            // Ensure defaults for optional fields
+            isPinned: insertThread.isPinned ?? false,
+            isLocked: insertThread.isLocked ?? false,
+            isSolved: insertThread.isSolved ?? false,
+            engagementScore: insertThread.engagementScore ?? 0,
+            status: "approved" as const,
+          }).returning();
+          
+          console.log('[ForumStorage.createForumThread] Step 3b: Thread created successfully', {
+            threadId: thread.id,
+            threadSlug: thread.slug,
+            timestamp: new Date().toISOString(),
+          });
+          
+          // Update category stats
+          console.log('[ForumStorage.createForumThread] Step 3c: Updating category stats', {
+            categorySlug: insertThread.categorySlug,
+            timestamp: new Date().toISOString(),
+          });
+          
+          const category = await tx.select().from(forumCategories).where(eq(forumCategories.slug, insertThread.categorySlug));
+          if (category.length > 0) {
+            await tx.update(forumCategories)
+              .set({ 
+                threadCount: sql`${forumCategories.threadCount} + 1`,
+                postCount: sql`${forumCategories.postCount} + 1`,
+                updatedAt: new Date()
+              })
+              .where(eq(forumCategories.slug, insertThread.categorySlug));
+          } else {
+            console.warn('[ForumStorage.createForumThread] WARNING: Category not found, skipping stats update', {
+              categorySlug: insertThread.categorySlug,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          
+          // Create activity feed entry
+          console.log('[ForumStorage.createForumThread] Step 3d: Creating activity feed entry', {
+            threadId: thread.id,
+            timestamp: new Date().toISOString(),
+          });
+          
+          await tx.insert(activityFeed).values({
+            userId: authorId,
+            activityType: "thread_created",
+            entityType: "thread",
+            entityId: thread.id,
+            title: insertThread.title,
+            description: thread.metaDescription || insertThread.body.substring(0, 200),
+          });
+          
+          console.log('[ForumStorage.createForumThread] Step 4: Transaction completed successfully', {
+            threadId: thread.id,
+            threadSlug: thread.slug,
+            timestamp: new Date().toISOString(),
+          });
+          
+          return thread;
+        } catch (txError) {
+          console.error('[ForumStorage.createForumThread] ERROR: Transaction failed, rolling back', {
+            error: txError instanceof Error ? txError.message : String(txError),
+            stack: txError instanceof Error ? txError.stack : undefined,
+            authorId,
+            title: insertThread.title,
+            categorySlug: insertThread.categorySlug,
+            timestamp: new Date().toISOString(),
+          });
+          throw txError;
+        }
+      });
+    } catch (error) {
+      // Log comprehensive error information for developers
+      console.error('='.repeat(80));
+      console.error('[ForumStorage.createForumThread] CRITICAL ERROR: Thread creation failed');
+      console.error('Timestamp:', new Date().toISOString());
+      console.error('Author ID:', authorId);
+      console.error('Thread Data:', {
+        title: insertThread.title,
+        categorySlug: insertThread.categorySlug,
+        subcategorySlug: insertThread.subcategorySlug,
+        slug: insertThread.slug,
+        hasContentHtml: !!insertThread.contentHtml,
+        hasAttachments: Array.isArray(insertThread.attachments) && insertThread.attachments.length > 0,
+      });
+      console.error('Error:', error instanceof Error ? error.message : String(error));
+      console.error('Stack:', error instanceof Error ? error.stack : 'No stack trace available');
+      console.error('='.repeat(80));
+      
+      // Re-throw with original error for proper handling upstream
+      throw error;
+    }
   }
   
   async getForumThreadById(id: string): Promise<ForumThread | undefined> {

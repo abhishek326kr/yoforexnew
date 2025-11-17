@@ -390,6 +390,7 @@ export function handleRouteError(
 
   // Determine HTTP status code
   let statusCode = 500;
+  const errorMessage = (error?.message || '').toLowerCase();
   if (category === ErrorCategory.VALIDATION) statusCode = 400;
   if (category === ErrorCategory.AUTHENTICATION) statusCode = 401;
   if (category === ErrorCategory.AUTHORIZATION) statusCode = 403;
