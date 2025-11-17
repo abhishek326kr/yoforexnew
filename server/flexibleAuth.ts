@@ -67,9 +67,8 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
   
-  // Setup email/password authentication
-  const { setupEmailAuth } = await import("./auth.js");
-  setupEmailAuth();
+  // Note: LocalStrategy is registered by setupLocalAuth() in server/index.ts
+  // Removed duplicate setupEmailAuth() call to prevent strategy conflict
   
   console.log(`✅ Authentication setup complete`);
 }

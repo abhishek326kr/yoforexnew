@@ -88,3 +88,21 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 -   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
 -   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
 -   **Build & Deployment:** Next.js 16, esbuild, Docker.
+
+## Recent Changes
+
+### Authentication 500 Error Fix (November 17, 2025)
+
+**Issue**: Email authentication was returning "500: Internal Server Error" instead of proper error codes.
+
+**Root Cause**: Duplicate LocalStrategy registration conflict - both `server/flexibleAuth.ts` and `server/localAuth.ts` were registering LocalStrategy with Passport, causing authentication to fail with 500 errors.
+
+**Fix Applied**:
+- **Backend** (`server/flexibleAuth.ts`): Removed duplicate `setupEmailAuth()` call that was registering a second LocalStrategy
+- **Frontend** (`app/components/AuthModal.tsx`): Fixed error handling to extract user-friendly messages from backend JSON responses
+
+**Verification**:
+- ✅ Login endpoint returns 401 Unauthorized (not 500!) for invalid credentials
+- ✅ Proper error message displayed: "Invalid username or password"
+- ✅ Security events logged correctly
+- ✅ Application running with no errors

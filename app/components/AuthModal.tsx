@@ -160,12 +160,8 @@ export default function AuthModal({
 
     try {
       const response = await apiRequest("POST", "/api/auth/login", { email, password });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
+      
+      // apiRequest already throws on non-OK responses, so if we reach here, login succeeded
       await queryClient.invalidateQueries({ queryKey: ["/api/me"] });
       await queryClient.refetchQueries({ queryKey: ["/api/me"] });
 
@@ -177,9 +173,29 @@ export default function AuthModal({
       onOpenChange(false);
     } catch (error: any) {
       console.error("Auth error:", error);
+      
+      // Extract user-friendly error message from backend response
+      // Error format: "401: {"error":"Invalid username or password"}"
+      let errorMessage = "Something went wrong. Please try again.";
+      
+      if (error.message) {
+        try {
+          // Try to extract JSON error message
+          const match = error.message.match(/\{.*\}/);
+          if (match) {
+            const errorData = JSON.parse(match[0]);
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Login Failed",
-        description: error.message || "Something went wrong. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
