@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -232,6 +232,73 @@ export default function PublishEAMultiStepClient() {
   const watchedValues = form.watch();
   const isFree = form.watch("isFree");
   const currentTags = form.watch("tags");
+
+  // Check if current step is valid
+  const isCurrentStepValid = useMemo(() => {
+    const { formState } = form;
+    const { errors } = formState;
+
+    switch (currentStep) {
+      case 1:
+        // Step 1: Basic Information
+        return (
+          !errors.title &&
+          !errors.description &&
+          !errors.category &&
+          !errors.tags &&
+          !errors.platform &&
+          !errors.version &&
+          watchedValues.title &&
+          watchedValues.title.length >= 10 &&
+          watchedValues.description &&
+          watchedValues.description.length >= 100 &&
+          watchedValues.category &&
+          watchedValues.tags &&
+          watchedValues.tags.length > 0
+        );
+      case 2:
+        // Step 2: Files & Media
+        return (
+          !errors.eaFile &&
+          !errors.screenshots &&
+          watchedValues.eaFile !== null &&
+          watchedValues.screenshots &&
+          watchedValues.screenshots.length > 0
+        );
+      case 3:
+        // Step 3: Trading Settings
+        return (
+          !errors.minBalance &&
+          !errors.recommendedPairs &&
+          !errors.timeframes &&
+          !errors.riskLevel &&
+          !errors.maxSpread &&
+          watchedValues.recommendedPairs &&
+          watchedValues.recommendedPairs.length > 0 &&
+          watchedValues.timeframes &&
+          watchedValues.timeframes.length > 0
+        );
+      case 4:
+        // Step 4: Pricing & Terms
+        return (
+          !errors.price &&
+          !errors.installationInstructions &&
+          !errors.riskWarning &&
+          watchedValues.installationInstructions &&
+          watchedValues.installationInstructions.length >= 50 &&
+          watchedValues.riskWarning &&
+          watchedValues.riskWarning.length >= 30
+        );
+      case 5:
+        // Step 5: Preview & Publish
+        return (
+          watchedValues.termsAccepted === true &&
+          watchedValues.qualityGuarantee === true
+        );
+      default:
+        return false;
+    }
+  }, [currentStep, form.formState.errors, watchedValues, form]);
 
   // Effect to handle free/paid logic
   useEffect(() => {
@@ -894,7 +961,7 @@ export default function PublishEAMultiStepClient() {
                   <Button 
                     type="button"
                     onClick={handleNext}
-                    disabled={isPublishing}
+                    disabled={isPublishing || !isCurrentStepValid}
                     data-testid={currentStep === 5 ? "button-publish" : "button-next"}
                   >
                     {isPublishing ? (
