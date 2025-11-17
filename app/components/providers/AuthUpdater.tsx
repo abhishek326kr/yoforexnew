@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ActivityTracker } from "@/components/ActivityTracker";
 import type { User } from "../../../shared/schema";
@@ -16,13 +16,14 @@ interface AuthUpdaterProps {
  * Used in authenticated routes to provide initial auth state
  */
 export function AuthUpdater({ children, initialUser }: AuthUpdaterProps) {
-  const { setUser } = useAuth();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (initialUser) {
-      setUser(initialUser);
+      // Update React Query cache directly since AuthContext doesn't expose setUser
+      queryClient.setQueryData(["/api/me"], initialUser);
     }
-  }, [initialUser, setUser]);
+  }, [initialUser, queryClient]);
 
   return (
     <ErrorBoundary>

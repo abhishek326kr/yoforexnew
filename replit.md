@@ -91,6 +91,21 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
+### AuthUpdater TypeError Fix (November 17, 2025)
+
+**Issue**: `setUser is not a function` error in `AuthUpdater` component causing console errors.
+
+**Root Cause**: The `AuthUpdater` component was trying to call `setUser()` from `AuthContext`, but that method didn't exist. The `AuthContext` uses React Query to manage auth state and doesn't expose a `setUser` method.
+
+**Fix Applied**:
+- **AuthUpdater** (`app/components/providers/AuthUpdater.tsx`): Changed to directly update React Query cache using `queryClient.setQueryData(["/api/me"], initialUser)`
+- **AuthContext** (`app/contexts/AuthContext.tsx`): Fixed TypeScript error by using `query.isPending` instead of `query.status === "pending"`
+
+**Verification**:
+- ✅ No console errors
+- ✅ Auth state properly synchronized between server and client
+- ✅ TypeScript LSP errors resolved
+
 ### React Hydration Error Fix - Google Analytics (November 17, 2025)
 
 **Issue**: React hydration mismatch error caused by Google Tag Manager scripts in `<head>` containing `Date.now()` and `new Date()` calls.

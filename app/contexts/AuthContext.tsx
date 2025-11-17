@@ -41,7 +41,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   });
 
   // Derive loading state from query status (never pending if initialData provided)
-  const isLoading = query.status === "pending";
+  const isLoading = query.isPending;
   const user = query.data;
   const isAuthenticated = user !== null && user !== undefined;
 
