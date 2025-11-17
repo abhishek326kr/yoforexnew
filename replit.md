@@ -89,29 +89,41 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 **Goal**: Implement URL parameter-based navigation for the thread creation wizard so that the current step is reflected in the URL and browser back/forward buttons work properly.
 
+**Component**: `app/(app-shell)/discussions/new/EnhancedThreadComposeClient.tsx` (actively used component on `/discussions/new`)
+
 **Implementation**:
 
-1. **URL State Management** (`app/components/ThreadCreationWizard.tsx`):
-   - Added `useSearchParams` hook to read step from URL query parameters
-   - Step number now stored in URL as `?step=2` instead of just component state
-   - Step validation ensures valid range (1-4) from URL parameter
-   - Default to step 1 if no URL parameter present
+1. **Server-Safe State Initialization**:
+   - `currentStep` always initialized to 1 (line 798) to prevent hydration mismatches
+   - Server and client render identical initial state
+   - URL parameter reading deferred to client-side useEffect
 
-2. **Navigation Functions**:
-   - Created `navigateToStep()` function that uses `router.push()` to update URL
-   - Previous/Next buttons now update URL instead of just local state
-   - "Edit Thread" button on preview step navigates to `?step=1`
-   - URL updates use `scroll: false` to prevent page jumping
+2. **URL Navigation Function** (lines 961-974):
+   - `navigateToStep(step)` validates step range (1-3) and updates URL
+   - Preserves existing query parameters (e.g., category)
+   - Uses `router.push()` with `scroll: false` to prevent page jumping
+   - Updates URL as `/discussions/new?step=X` or `/discussions/new?category=Y&step=X`
 
-3. **Browser Integration**:
-   - Added `useEffect` to sync local state with URL changes
-   - Browser back/forward buttons now work correctly
-   - Step changes are reflected in browser history
-   - Users can bookmark specific steps or share direct links
+3. **URL Sync Effect** (lines 977-983):
+   - `useEffect` monitors `searchParams` changes
+   - Reads `step` parameter after client hydration
+   - Updates `currentStep` state when URL changes (browser back/forward)
+   - Validates step range to ensure safety
+
+4. **Navigation Integration**:
+   - `handleStepClick()` delegates to `navigateToStep()` for backward navigation
+   - Previous/Next buttons call `navigateToStep()` to update URL
+   - Step indicator pills use `handleStepClick()` for direct navigation
+
+**Technical Details**:
+- Hydration-safe: Server always renders step 1, client updates via useEffect
+- Category parameter preserved during step navigation
+- Step validation clamps to 1-3 range in multiple places
+- Browser history fully integrated (back/forward works)
 
 **Benefits**:
-- Users can use browser back/forward buttons to navigate steps
+- Browser back/forward buttons work correctly
 - Direct linking to specific steps (e.g., `/discussions/new?step=3`)
+- Shareable URLs with preserved state
+- No hydration mismatch errors
 - Better UX with browser history integration
-- Step state persists across page refreshes (if form data is preserved)
-- More intuitive navigation experience
