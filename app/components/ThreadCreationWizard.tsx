@@ -194,17 +194,20 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
     }
   }, [autoOptimizeSeo, setValue]);
 
-  // Generate slug from title when not in auto-optimize mode
+  // Generate slug from title (always, can be overridden by SEO optimization later)
   useEffect(() => {
-    if (!autoOptimizeSeo && watchedFields.title) {
+    if (watchedFields.title) {
       const slug = watchedFields.title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
         .substring(0, 60);
-      setValue("slug", slug);
+      // Only update if we don't have SEO data yet, or not in auto-optimize mode
+      if (!autoOptimizeSeo || !seoData) {
+        setValue("slug", slug);
+      }
     }
-  }, [watchedFields.title, autoOptimizeSeo, setValue]);
+  }, [watchedFields.title, autoOptimizeSeo, seoData, setValue]);
 
   // Image upload with dropzone
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
