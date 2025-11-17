@@ -187,10 +187,10 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
     setSeoData(data);
     // Update form values with SEO data when in auto-optimize mode
     if (autoOptimizeSeo) {
-      setValue("primaryKeyword", data.primaryKeyword);
-      setValue("seoExcerpt", data.seoExcerpt);
-      setValue("hashtags", data.hashtags);
-      setValue("slug", data.urlSlug);
+      setValue("primaryKeyword", data.primaryKeyword, { shouldValidate: true });
+      setValue("seoExcerpt", data.seoExcerpt, { shouldValidate: true });
+      setValue("hashtags", data.hashtags, { shouldValidate: true });
+      setValue("slug", data.urlSlug, { shouldValidate: true });
     }
   }, [autoOptimizeSeo, setValue]);
 
@@ -204,7 +204,7 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
         .substring(0, 60);
       // Only update if we don't have SEO data yet, or not in auto-optimize mode
       if (!autoOptimizeSeo || !seoData) {
-        setValue("slug", slug);
+        setValue("slug", slug, { shouldValidate: true });
       }
     }
   }, [watchedFields.title, autoOptimizeSeo, seoData, setValue]);
@@ -352,7 +352,32 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
   const canProceedToNextStep = () => {
     switch (currentStep) {
       case 1:
-        return !errors.title && !errors.body && !errors.categorySlug && watchedFields.title && watchedFields.body.length >= 100 && watchedFields.categorySlug;
+        // All required fields for Step 1: title, body, category, slug
+        const canProceed = !errors.title && !errors.body && !errors.categorySlug && !errors.slug && 
+               watchedFields.title && 
+               watchedFields.body.length >= 100 && 
+               watchedFields.categorySlug && 
+               watchedFields.slug;
+        
+        // Temporary debug logging - will be removed after verification
+        if (!canProceed) {
+          console.log('[DEBUG] Next button disabled. Form state:', {
+            errors: { 
+              title: errors.title?.message, 
+              body: errors.body?.message, 
+              categorySlug: errors.categorySlug?.message,
+              slug: errors.slug?.message
+            },
+            values: {
+              title: watchedFields.title?.substring(0, 20) + '...',
+              bodyLength: watchedFields.body?.length,
+              categorySlug: watchedFields.categorySlug,
+              slug: watchedFields.slug
+            }
+          });
+        }
+        
+        return canProceed;
       case 2:
         return true; // Optional step
       case 3:
