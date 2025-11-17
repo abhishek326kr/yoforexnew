@@ -82,3 +82,36 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 -   **Analytics & SEO:** Google Tag Manager, Google Analytics 4, Google Search Console, Bing Webmaster Tools, Yandex Webmaster, Google PageSpeed Insights API, Gemini AI.
 -   **Development Tools:** Drizzle Kit, TypeScript, shadcn/ui, TailwindCSS, Recharts, Zod, Vitest, Supertest, socket.io & socket.io-client.
 -   **Build & Deployment:** Next.js 16, esbuild, Docker.
+
+## Recent Changes
+
+### URL-Based Step Navigation for Thread Creation Wizard - COMPLETE (November 17, 2025)
+
+**Goal**: Implement URL parameter-based navigation for the thread creation wizard so that the current step is reflected in the URL and browser back/forward buttons work properly.
+
+**Implementation**:
+
+1. **URL State Management** (`app/components/ThreadCreationWizard.tsx`):
+   - Added `useSearchParams` hook to read step from URL query parameters
+   - Step number now stored in URL as `?step=2` instead of just component state
+   - Step validation ensures valid range (1-4) from URL parameter
+   - Default to step 1 if no URL parameter present
+
+2. **Navigation Functions**:
+   - Created `navigateToStep()` function that uses `router.push()` to update URL
+   - Previous/Next buttons now update URL instead of just local state
+   - "Edit Thread" button on preview step navigates to `?step=1`
+   - URL updates use `scroll: false` to prevent page jumping
+
+3. **Browser Integration**:
+   - Added `useEffect` to sync local state with URL changes
+   - Browser back/forward buttons now work correctly
+   - Step changes are reflected in browser history
+   - Users can bookmark specific steps or share direct links
+
+**Benefits**:
+- Users can use browser back/forward buttons to navigate steps
+- Direct linking to specific steps (e.g., `/discussions/new?step=3`)
+- Better UX with browser history integration
+- Step state persists across page refreshes (if form data is preserved)
+- More intuitive navigation experience

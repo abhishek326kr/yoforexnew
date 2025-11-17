@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useDropzone } from "react-dropzone";
 import ReactMarkdown from "react-markdown";
@@ -241,15 +241,32 @@ export default function ThreadCreationWizard({
   categorySlug = "general",
 }: ThreadCreationWizardProps) {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+  
+  // Read step from URL, default to 1
+  const urlStep = parseInt(searchParams.get("step") || "1", 10);
+  const validStep = Math.min(Math.max(urlStep, 1), 4); // Ensure step is between 1-4
+  
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(validStep);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [autoOptimizeSeo, setAutoOptimizeSeo] = useState(true);
   const [seoData, setSeoData] = useState<SEOData | null>(null);
 
-  const router = useRouter();
-  const { toast } = useToast();
+  // Sync currentStep with URL changes (for browser back/forward)
+  useEffect(() => {
+    setCurrentStep(validStep);
+  }, [validStep]);
+  
+  // Function to navigate to a specific step
+  const navigateToStep = useCallback((step: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("step", step.toString());
+    router.push(`?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   // Fetch categories for internal link suggestions
   const { data: categories = [] } = useQuery({
@@ -1122,7 +1139,7 @@ export default function ThreadCreationWizard({
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setCurrentStep(1)}
+                        onClick={() => navigateToStep(1)}
                         data-testid="button-edit-thread"
                       >
                         <Edit className="h-4 w-4 mr-2" />
@@ -1156,9 +1173,8 @@ export default function ThreadCreationWizard({
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() =>
-                        setCurrentStep(Math.max(1, currentStep - 1))
-                      }
+                      onClick={() => navigateToStep(Math.max(1, currentStep - 1))}
+                      disabled={currentStep === 1}
                       data-testid="button-previous-step"
                     >
                       <ChevronLeft className="h-4 w-4 mr-2" />
@@ -1167,9 +1183,8 @@ export default function ThreadCreationWizard({
 
                     <Button
                       type="button"
-                      onClick={() =>
-                        setCurrentStep(Math.min(4, currentStep + 1))
-                      }
+                      onClick={() => navigateToStep(Math.min(4, currentStep + 1))}
+                      disabled={!isStepValid}
                       className={
                         !isStepValid ? "opacity-50 cursor-not-allowed" : ""
                       }
