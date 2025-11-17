@@ -91,32 +91,46 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
-### Thread Creation "Next" Button Fix - Slug Auto-Generation (November 17, 2025)
+### Thread Creation "Next" Button Fix - COMPLETE (November 17, 2025)
 
-**Issue**: User reported the "Next" button remained disabled even after fixing category and body validation.
+**Issue**: User reported the "Next" button remained disabled even after multiple fix attempts.
 
-**Root Cause**: The `slug` field was the hidden culprit:
-1. Schema requires `slug: z.string().min(1)` (cannot be empty)
-2. Slug defaulted to empty string `""`
-3. Slug auto-generation only ran when `autoOptimizeSeo === false`
-4. But `autoOptimizeSeo` defaults to `true`!
-5. Result: Slug stayed empty in Step 1, violating validation
+**Root Causes Identified**:
+1. **Missing slug validation** in `canProceedToNextStep()` function
+2. **setValue not triggering validation** - All `setValue("slug", ...)` calls were missing `{ shouldValidate: true }` parameter
 
-**Fix Applied**:
-- **ThreadCreationWizard.tsx** (lines 200-213): Changed slug auto-generation to always run
-  - Now generates slug from title immediately when title is entered
-  - Only updates if no SEO data exists yet OR not in auto-optimize mode
-  - Allows SEO optimization in Step 3 to override later
+**Complete Fix Applied**:
 
-**Previous Fixes** (same day):
+1. **Added slug validation** to `canProceedToNextStep()` (lines 359-363):
+   - Added `!errors.slug` check to ensure no slug errors
+   - Added `watchedFields.slug` check to ensure slug has a value
+
+2. **Fixed setValue calls** to trigger validation:
+   - **Line 193-196**: Added `{ shouldValidate: true }` to SEO data setValue calls
+   - **Line 210**: Added `{ shouldValidate: true }` to slug auto-generation setValue call
+   
+3. **Slug auto-generation** (lines 200-213):
+   - Generates slug from title immediately when title is entered
+   - Only updates if no SEO data exists yet OR not in auto-optimize mode
+   - Allows SEO optimization in Step 3 to override later
+
+**Previous Iterations** (same day):
 1. Changed body character requirement from 500 to 100 characters
 2. Added category validation to `canProceedToNextStep()`
+3. Fixed slug auto-generation timing
+
+**Technical Details**:
+- React Hook Form's `setValue` doesn't trigger validation by default
+- Adding `{ shouldValidate: true }` as second parameter triggers immediate re-validation
+- This clears stale validation errors and enables the Next button
 
 **Verification**:
-- ✅ Slug now auto-generates from title in Step 1
-- ✅ Form validation passes when all required fields filled
+- ✅ Slug auto-generates from title in Step 1
+- ✅ Validation triggers immediately when slug is set
+- ✅ Next button enables when all required fields are valid (title, body, category, slug)
 - ✅ SEO optimization in Step 3 can still override slug
 - ✅ Architect confirmed no race conditions or regressions
+- ✅ Debug logging removed after verification
 
 ### AuthUpdater TypeError Fix (November 17, 2025)
 
