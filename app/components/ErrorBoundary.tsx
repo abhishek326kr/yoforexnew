@@ -1,10 +1,8 @@
 'use client';
 
 import { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Bug, Send } from 'lucide-react';
-import ErrorTracker from '@/lib/errorTracking';
+import { AlertTriangle, RefreshCw, Bug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -17,14 +15,9 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
-  userDescription: string;
-  reportSent: boolean;
-  sending: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  private errorTracker: ErrorTracker | null;
-
   constructor(props: Props) {
     super(props);
     
@@ -32,12 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
       hasError: false,
       error: null,
       errorInfo: null,
-      userDescription: '',
-      reportSent: false,
-      sending: false,
     };
-
-    this.errorTracker = ErrorTracker.getInstance();
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -45,26 +33,10 @@ export class ErrorBoundary extends Component<Props, State> {
       hasError: true,
       error,
       errorInfo: null,
-      userDescription: '',
-      reportSent: false,
-      sending: false,
     };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log error to our error tracking system if available
-    if (this.errorTracker) {
-      this.errorTracker.captureError(
-        error,
-        {
-          component: errorInfo.componentStack,
-          props: this.props,
-          errorBoundary: true,
-        },
-        'critical'
-      );
-    }
-
     // Update state with error details
     this.setState({
       errorInfo,
@@ -82,47 +54,11 @@ export class ErrorBoundary extends Component<Props, State> {
     }
   };
 
-  handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
-    this.setState({ userDescription: e.target.value });
-  };
-
-  handleReport = async (): Promise<void> => {
-    this.setState({ sending: true });
-
-    try {
-      if (this.errorTracker) {
-        // Add user description to the error
-        if (this.state.userDescription) {
-          this.errorTracker.addUserDescription(this.state.userDescription);
-        }
-
-        // Force send the error batch
-        await this.errorTracker.forceFlush();
-      }
-
-      this.setState({
-        reportSent: true,
-        sending: false,
-      });
-
-      // Auto-reload after 3 seconds
-      setTimeout(() => {
-        this.handleReload();
-      }, 3000);
-    } catch (error) {
-      console.error('Failed to send error report:', error);
-      this.setState({ sending: false });
-    }
-  };
-
   handleReset = (): void => {
     this.setState({
       hasError: false,
       error: null,
       errorInfo: null,
-      userDescription: '',
-      reportSent: false,
-      sending: false,
     });
   };
 
@@ -145,7 +81,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 <div>
                   <CardTitle className="text-2xl">Something went wrong</CardTitle>
                   <CardDescription>
-                    An unexpected error occurred. The error has been logged automatically.
+                    An unexpected error occurred. You can reload the page to try again.
                   </CardDescription>
                 </div>
               </div>
@@ -172,68 +108,16 @@ export class ErrorBoundary extends Component<Props, State> {
                 </Alert>
               )}
 
-              {/* Report form */}
-              {!this.state.reportSent && (
-                <div className="space-y-3">
-                  <div>
-                    <label
-                      htmlFor="error-description"
-                      className="block text-sm font-medium mb-2"
-                    >
-                      Help us understand what happened (optional)
-                    </label>
-                    <Textarea
-                      id="error-description"
-                      data-testid="input-error-description"
-                      placeholder="What were you trying to do when this error occurred?"
-                      value={this.state.userDescription}
-                      onChange={this.handleDescriptionChange}
-                      className="min-h-[100px]"
-                      disabled={this.state.sending || this.state.reportSent}
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={this.handleReport}
-                      disabled={this.state.sending || this.state.reportSent}
-                      className="flex-1"
-                      data-testid="button-report-error"
-                    >
-                      {this.state.sending ? (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                          Sending Report...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="mr-2 h-4 w-4" />
-                          Send Report
-                        </>
-                      )}
-                    </Button>
-
-                    <Button
-                      onClick={this.handleReload}
-                      variant="outline"
-                      data-testid="button-reload-page"
-                    >
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Reload Page
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Success message */}
-              {this.state.reportSent && (
-                <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-                  <AlertDescription className="flex items-center gap-2">
-                    <span className="text-green-600 dark:text-green-400">✓</span>
-                    Thank you for your report! The page will reload automatically in a few seconds...
-                  </AlertDescription>
-                </Alert>
-              )}
+              <div className="flex gap-3">
+                <Button
+                  onClick={this.handleReload}
+                  className="flex-1"
+                  data-testid="button-reload-page"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Reload Page
+                </Button>
+              </div>
 
               {/* Alternative actions */}
               <div className="pt-4 border-t">

@@ -1,9 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { isAdminMiddleware } from "../middleware/adminAuth.js";
 import { db } from "../db.js";
-import { users, errorGroups, errorEvents, userMilestones } from "../../shared/schema.js";
+import { users, userMilestones } from "../../shared/schema.js";
 import { eq, and, sql, desc, inArray, gte, lte } from "drizzle-orm";
-import { autoResolveErrors, getResolutionRules, testResolutionRule } from "../services/errorAutoResolution.js";
 import { validateTwoFactor, generateTwoFactorSecret, enableTwoFactor, disableTwoFactor } from "../services/twoFactorService.js";
 
 // Optimized admin routes with caching and better query performance
@@ -130,38 +129,6 @@ export function setupOptimizedAdminRoutes(app: Express) {
     } catch (error) {
       console.error("[2FA] Status error:", error);
       res.status(500).json({ error: "Failed to get 2FA status" });
-    }
-  });
-
-  // Auto-resolution endpoints for Error Monitoring
-  app.post("/api/admin/errors/auto-resolve", isAdminMiddleware, async (req, res) => {
-    try {
-      const result = await autoResolveErrors();
-      res.json(result);
-    } catch (error) {
-      console.error("[ERROR] Auto-resolve error:", error);
-      res.status(500).json({ error: "Failed to auto-resolve errors" });
-    }
-  });
-
-  app.get("/api/admin/errors/resolution-rules", isAdminMiddleware, async (req, res) => {
-    try {
-      const rules = getResolutionRules();
-      res.json(rules);
-    } catch (error) {
-      console.error("[ERROR] Get rules error:", error);
-      res.status(500).json({ error: "Failed to get resolution rules" });
-    }
-  });
-
-  app.post("/api/admin/errors/test-rule", isAdminMiddleware, async (req, res) => {
-    try {
-      const { pattern } = req.body;
-      const result = await testResolutionRule(pattern);
-      res.json(result);
-    } catch (error) {
-      console.error("[ERROR] Test rule error:", error);
-      res.status(500).json({ error: "Failed to test resolution rule" });
     }
   });
 

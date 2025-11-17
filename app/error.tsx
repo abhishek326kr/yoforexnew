@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import ErrorTracker from '@/lib/errorTracking';
 
 export default function Error({
   error,
@@ -15,18 +14,9 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error to error tracking service
-    const tracker = ErrorTracker.getInstance();
-    if (tracker) {
-      tracker.captureError(
-        error,
-        {
-          component: 'NextJS Error Boundary',
-          errorType: 'ssr',
-          digest: error.digest,
-        },
-        'critical'
-      );
+    // Log the error to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('NextJS Error:', error);
     }
   }, [error]);
 
@@ -41,7 +31,7 @@ export default function Error({
             <div>
               <CardTitle className="text-2xl">Something went wrong!</CardTitle>
               <CardDescription>
-                An error occurred while rendering this page. The error has been logged.
+                An error occurred while rendering this page. You can try again below.
               </CardDescription>
             </div>
           </div>

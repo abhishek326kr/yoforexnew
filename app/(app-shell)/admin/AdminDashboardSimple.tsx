@@ -58,7 +58,6 @@ import ContentStudio from "./sections/ContentStudio";
 import Testing from "./sections/Testing";
 import SchemaValidation from "./sections/SchemaValidation";
 import SitemapManagement from "./sections/SitemapManagement";
-import ErrorMonitoring from "./sections/ErrorMonitoring";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -147,8 +146,6 @@ export function AdminDashboardClient() {
         return <ContentStudio />;
       case "/admin/testing":
         return <Testing />;
-      case "/admin/errors":
-        return <ErrorMonitoring />;
       case "/admin/settings":
         return <Settings />;
       case "/admin/security":

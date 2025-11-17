@@ -13,7 +13,6 @@ import { startBotRefundJob } from "./jobs/botRefunds";
 import { setupSecurityHeaders } from "./middleware/securityHeaders";
 import { categoryRedirectMiddleware, trackCategoryViews } from "./middleware/categoryRedirects";
 import { initializeDashboardWebSocket } from "./services/dashboardWebSocket";
-import { serverErrorTracker, errorTrackingMiddleware } from "./middleware/errorTracking";
 import { ipBanMiddleware, loginSecurityMiddleware } from './middleware/security';
 import { getSecurityService } from './services/securityService';
 import { auditLogger } from './middleware/auditLogger';
@@ -203,49 +202,19 @@ async function initializeApp() {
     expressApp.use(nextJsProxy);
     log(`[PROXY] Configured Next.js proxy to ${nextJsTarget} (filters: /api/*, /ws/*, /health, /static/*)`);
     
-    // Register error tracking middleware to capture specialized error types
-    // This middleware will capture errors and then pass them to the next error handler
-    expressApp.use(errorTrackingMiddleware);
-    
     // Add comprehensive error handling middleware AFTER routes
     expressApp.use(async (err: any, req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
       
-      // Use ServerErrorTracker to capture the error
-      try {
-        // Determine severity based on status code
-        let severity: 'critical' | 'error' | 'warning' | 'info' = 'error';
-        if (status >= 500) {
-          severity = 'critical';
-        } else if (status >= 400) {
-          severity = 'error';
-        } else {
-          severity = 'warning';
-        }
-        
-        // Use ServerErrorTracker to handle error persistence
-        await serverErrorTracker.captureError(
-          err,
-          {
-            requestId: (req as any).requestId || (req as any).session?.id || crypto.randomUUID(),
-            method: req.method,
-            path: req.path,
-            query: req.query,
-            body: req.body,
-            headers: req.headers as Record<string, string>,
-            errorType: 'internal',
-            userId: (req as any).user?.id,
-            ip: req.ip,
-            userAgent: req.get('user-agent'),
-          },
-          severity
-        );
-      } catch (trackingError) {
-        // If error tracking fails, log it but don't block the response
-        console.error('[EXPRESS ERROR HANDLER] Error tracking failed:', trackingError);
-        console.error('[ORIGINAL ERROR]', err);
-      }
+      // Log the error for debugging
+      console.error('[EXPRESS ERROR]', {
+        message,
+        status,
+        path: req.path,
+        method: req.method,
+        stack: err.stack
+      });
 
       // Send response to client
       res.status(status).json({ 

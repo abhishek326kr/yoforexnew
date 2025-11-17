@@ -131,22 +131,6 @@ export function startBackgroundJobs(storage: IStorage) {
   // MONITORING AND CLEANUP JOBS
   // ============================================
   
-  // Error Cleanup Job - Runs at 02:30 daily
-  cron.schedule('30 2 * * *', async () => {
-    try {
-      console.log('[ERROR CLEANUP] Starting error cleanup job...');
-      
-      const { runErrorCleanup } = await import('./errorCleanup.js');
-      const result = await runErrorCleanup();
-      
-      console.log(`[ERROR CLEANUP] Job completed: ${result.deletedGroups} groups, ${result.archivedEvents} events archived, ${result.errors} errors`);
-    } catch (error: any) {
-      console.error('[ERROR CLEANUP] Error during error cleanup execution:', error);
-    }
-  });
-  
-  console.log('[JOBS] Error cleanup scheduled (runs daily at 02:30 AM)');
-  
   // Coin Health Monitor - Runs at 07:00 daily (after treasurySnapshot)
   cron.schedule('0 7 * * *', async () => {
     try {
@@ -162,22 +146,6 @@ export function startBackgroundJobs(storage: IStorage) {
   });
   
   console.log('[JOBS] Coin health monitor scheduled (runs daily at 07:00 AM)');
-  
-  // Error Growth Monitor - Runs every hour
-  cron.schedule('0 * * * *', async () => {
-    try {
-      console.log('[ERROR GROWTH] Starting error growth monitor job...');
-      
-      const { runErrorGrowthMonitor } = await import('./errorGrowthMonitor.js');
-      const result = await runErrorGrowthMonitor();
-      
-      console.log(`[ERROR GROWTH] Job completed: ${result.totalEvents} events, ${result.growthRate.toFixed(2)}x growth rate, ${result.alerts} alerts`);
-    } catch (error: any) {
-      console.error('[ERROR GROWTH] Error during error growth monitor execution:', error);
-    }
-  });
-  
-  console.log('[JOBS] Error growth monitor scheduled (runs every hour)');
   
   // ============================================
   // SEO SCAN BACKGROUND JOBS
@@ -262,36 +230,10 @@ export function startBackgroundJobs(storage: IStorage) {
   console.log('[JOBS] Hourly SEO high-priority digest scheduled (runs at :30 past each hour)');
   
   // ============================================
-  // ERROR TRACKING BACKGROUND JOBS
-  // ============================================
-  
-  // Hourly error cleanup and auto-resolve - Runs every hour
-  cron.schedule('0 * * * *', async () => {
-    try {
-      console.log('[ERROR CLEANUP] Starting hourly error cleanup and auto-resolve...');
-      
-      // Auto-resolve errors that haven't occurred in 1 hour (1/24 days)
-      // Most errors repeat every 30 min if not fixed - 1 hour is aggressive cleanup
-      const resolvedResult = await storage.autoResolveInactiveErrors(1/24);
-      
-      // Delete:
-      // - All "solved" errors immediately (historical, no value)
-      // - "resolved" errors older than 7 days
-      const cleanupResult = await storage.cleanupOldErrors(30); // Parameter ignored, always uses 7 days for resolved
-      
-      console.log(`[ERROR CLEANUP] Hourly cleanup completed - Auto-resolved: ${resolvedResult.resolvedCount}, Deleted groups: ${cleanupResult.deletedGroups}, Deleted events: ${cleanupResult.deletedEvents}`);
-    } catch (error: any) {
-      console.error('[ERROR CLEANUP] Error during hourly cleanup:', error);
-    }
-  });
-  
-  console.log('[JOBS] Hourly error cleanup and auto-resolve scheduled (runs every hour)');
-  
-  // ============================================
   // SWEETS ECONOMY AUTOMATION JOBS
   // ============================================
   
-  // Coin Expiration Job - Runs daily at 4 AM (same time as error cleanup for efficiency)
+  // Coin Expiration Job - Runs daily at 4 AM
   cron.schedule('0 4 * * *', async () => {
     try {
       console.log('[COIN EXPIRATION] Starting coin expiration automation...');

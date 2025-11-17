@@ -45,16 +45,6 @@ export async function runCoinHealthMonitor(): Promise<{
     drift: number;
   }> = [];
 
-  // Create monitoring run record
-  const monitoringRun = await storage.createMonitoringRun({
-    jobName: 'coin_health',
-    status: 'running',
-    startedAt: now,
-    metadata: {
-      thresholds: DRIFT_ALERT_THRESHOLDS
-    }
-  });
-
   try {
     // 1. Fetch latest treasury snapshot
     const latestSnapshot = await storage.getLatestTreasurySnapshot();
@@ -101,31 +91,9 @@ export async function runCoinHealthMonitor(): Promise<{
           usersAffected++;
           totalDrift += drift;
 
-          // Store metric
-          await storage.createMonitoringMetric({
-            metricType: 'coin_balance_drift',
-            metricValue: drift.toString(),
-            component: 'wallet',
-            metadata: {
-              userId: wallet.userId,
-              walletBalance: actualBalance,
-              journalBalance: expectedBalance,
-              drift
-            }
-          });
-
-          // Create alerts based on severity
+          // Log alerts based on severity
           if (drift > DRIFT_ALERT_THRESHOLDS.CRITICAL) {
-            // Critical: Create alert + fraud signal
-            await storage.createMonitoringAlert({
-              alertType: 'wallet_discrepancy',
-              severity: 'critical',
-              message: `CRITICAL wallet discrepancy for user ${username}: drift of ${drift} coins (wallet=${actualBalance}, journal=${expectedBalance})`,
-              affectedEntities: {
-                userIds: [wallet.userId]
-              }
-            });
-
+            // Critical: Create fraud signal
             await storage.createFraudSignal(
               wallet.userId,
               'suspicious_pattern',
@@ -143,30 +111,11 @@ export async function runCoinHealthMonitor(): Promise<{
             alertsCreated++;
             console.warn(`[COIN HEALTH] 🚨 CRITICAL: User ${username} has ${drift} coin drift (wallet=${actualBalance}, journal=${expectedBalance})`);
           } else if (drift > DRIFT_ALERT_THRESHOLDS.HIGH) {
-            // High: Create alert
-            await storage.createMonitoringAlert({
-              alertType: 'wallet_discrepancy',
-              severity: 'high',
-              message: `High wallet discrepancy for user ${username}: drift of ${drift} coins (wallet=${actualBalance}, journal=${expectedBalance})`,
-              affectedEntities: {
-                userIds: [wallet.userId]
-              }
-            });
-
             alertsCreated++;
             console.warn(`[COIN HEALTH] ⚠️  HIGH: User ${username} has ${drift} coin drift`);
           } else {
-            // Medium: Create alert
-            await storage.createMonitoringAlert({
-              alertType: 'wallet_discrepancy',
-              severity: 'medium',
-              message: `Wallet discrepancy for user ${username}: drift of ${drift} coins (wallet=${actualBalance}, journal=${expectedBalance})`,
-              affectedEntities: {
-                userIds: [wallet.userId]
-              }
-            });
-
             alertsCreated++;
+            console.log(`[COIN HEALTH] ℹ️  MEDIUM: User ${username} has ${drift} coin drift`);
           }
         }
       } catch (error) {
@@ -204,19 +153,6 @@ export async function runCoinHealthMonitor(): Promise<{
       }
     }
 
-    // Update monitoring run as completed
-    await storage.updateMonitoringRun(monitoringRun.id, {
-      status: 'completed',
-      completedAt: new Date(),
-      metadata: {
-        totalDrift,
-        usersAffected,
-        alertsCreated,
-        discrepancies: discrepancies.length,
-        duration: Date.now() - startTime
-      }
-    });
-
     const duration = Date.now() - startTime;
     console.log(`[COIN HEALTH] Job completed in ${duration}ms: ${usersAffected} users affected, ${totalDrift} total drift, ${alertsCreated} alerts created`);
 
@@ -227,19 +163,6 @@ export async function runCoinHealthMonitor(): Promise<{
     };
   } catch (error) {
     console.error('[COIN HEALTH] Fatal error in coin health monitor job:', error);
-    
-    // Update monitoring run as failed
-    await storage.updateMonitoringRun(monitoringRun.id, {
-      status: 'failed',
-      completedAt: new Date(),
-      metadata: {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        totalDrift,
-        usersAffected,
-        alertsCreated
-      }
-    });
-    
     throw error;
   }
 }
