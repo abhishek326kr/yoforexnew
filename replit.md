@@ -166,3 +166,44 @@ useEffect(() => {
 - Browser console shows only normal HMR messages
 - No "Maximum update depth exceeded" errors
 - Auth state properly hydrates from server on page load
+
+#### 3. CoinBalanceWidget Nested TooltipProvider Fix
+
+**Issue**: "Maximum update depth exceeded" error caused by nested `TooltipProvider` in the `CoinBalanceWidget` component.
+
+**Root Cause**:
+- `TooltipProvider` is already defined at app root level in `RootProviders.tsx`
+- `CoinBalanceWidget` was creating its own `TooltipProvider` around a single `Tooltip`
+- Nested providers caused React state management conflicts, leading to infinite re-renders
+
+**Component**: `app/components/CoinBalanceWidget.tsx`
+
+**Solution**:
+- Removed the nested `TooltipProvider` wrapper from `CoinBalanceWidget`
+- Individual `Tooltip` components now use the existing provider from app root
+- Changed wrapper from `<TooltipProvider>...</TooltipProvider>` to `<>...</>`
+
+**Code Change** (lines 59-92):
+```typescript
+// Before: Nested TooltipProvider causing infinite loop
+return (
+  <TooltipProvider>
+    <Tooltip>...</Tooltip>
+    <TransactionHistoryDrawer />
+  </TooltipProvider>
+);
+
+// After: Using root-level TooltipProvider
+return (
+  <>
+    <Tooltip>...</Tooltip>
+    <TransactionHistoryDrawer />
+  </>
+);
+```
+
+**Verification**:
+- Browser console shows only HMR messages: `[Fast Refresh] done`, `[HMR] connected`
+- No "Maximum update depth exceeded" errors
+- No repeated setState() calls
+- Tooltip functionality works correctly with root-level provider

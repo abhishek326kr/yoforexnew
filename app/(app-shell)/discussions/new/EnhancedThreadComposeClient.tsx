@@ -793,7 +793,8 @@ export default function EnhancedThreadComposeClient({
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { requireAuth, AuthPrompt, isAuthenticating } = useAuthPrompt("create a thread");
+  const { requireAuth, AuthPrompt, isAuthenticating } =
+    useAuthPrompt("create a thread");
 
   const [currentStep, setCurrentStep] = useState(1);
   const [hashtagInput, setHashtagInput] = useState("");
@@ -958,26 +959,29 @@ export default function EnhancedThreadComposeClient({
   };
 
   // Navigate to a specific step by updating the URL
-  const navigateToStep = useCallback((step: number) => {
-    // Validate step is between 1-3
-    const validStep = Math.min(Math.max(step, 1), 3);
-    
-    // Build URL with step parameter, preserving category if it exists
-    const params = new URLSearchParams();
-    if (categoryParam) {
-      params.set("category", categoryParam);
-    }
-    params.set("step", validStep.toString());
-    
-    // Update URL without scrolling
-    router.push(`/discussions/new?${params.toString()}`, { scroll: false });
-  }, [router, categoryParam]);
+  const navigateToStep = useCallback(
+    (step: number) => {
+      // Validate step is between 1-3
+      const validStep = Math.min(Math.max(step, 1), 3);
+
+      // Build URL with step parameter, preserving category if it exists
+      const params = new URLSearchParams();
+      if (categoryParam) {
+        params.set("category", categoryParam);
+      }
+      params.set("step", validStep.toString());
+
+      // Update URL without scrolling
+      router.push(`/discussions/new?${params.toString()}`, { scroll: false });
+    },
+    [router, categoryParam],
+  );
 
   // Sync currentStep state with URL parameter changes
   // Also ensure URL always has a step parameter
   useEffect(() => {
     const stepParam = searchParams?.get("step");
-    
+
     // If there's no step parameter in the URL, add it using replace to avoid back-button trap
     if (!stepParam) {
       const params = new URLSearchParams();
@@ -986,10 +990,12 @@ export default function EnhancedThreadComposeClient({
       }
       params.set("step", "1");
       // Use replace instead of push to overwrite current history entry
-      router.replace(`/discussions/new?${params.toString()}`, { scroll: false });
+      router.replace(`/discussions/new?${params.toString()}`, {
+        scroll: false,
+      });
       return;
     }
-    
+
     // Otherwise sync URL step to state
     const urlStep = Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3);
     if (urlStep !== currentStep) {
