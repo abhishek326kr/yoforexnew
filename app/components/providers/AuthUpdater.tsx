@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ActivityTracker } from "@/components/ActivityTracker";
@@ -17,11 +17,15 @@ interface AuthUpdaterProps {
  */
 export function AuthUpdater({ children, initialUser }: AuthUpdaterProps) {
   const queryClient = useQueryClient();
+  const hasSetInitialUser = useRef(false);
 
   useEffect(() => {
-    if (initialUser) {
-      // Update React Query cache directly since AuthContext doesn't expose setUser
+    // Only set initial user once to avoid infinite loops
+    // The server component may re-render and pass new object references
+    // even if the user data is the same
+    if (initialUser && !hasSetInitialUser.current) {
       queryClient.setQueryData(["/api/me"], initialUser);
+      hasSetInitialUser.current = true;
     }
   }, [initialUser, queryClient]);
 

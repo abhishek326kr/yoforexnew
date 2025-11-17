@@ -85,7 +85,9 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
-### URL-Based Step Navigation for Thread Creation Wizard - COMPLETE (November 17, 2025)
+### Bug Fixes - COMPLETE (November 17, 2025)
+
+#### 1. URL-Based Step Navigation for Thread Creation Wizard
 
 **Goal**: Implement URL parameter-based navigation for the thread creation wizard so that the current step is reflected in the URL and browser back/forward buttons work properly.
 
@@ -129,3 +131,38 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 - Shareable URLs with preserved state
 - No hydration mismatch errors
 - Better UX with browser history integration
+
+#### 2. AuthUpdater Infinite Loop Fix
+
+**Issue**: "Maximum update depth exceeded" error caused by infinite render loop in AuthUpdater component.
+
+**Root Cause**: 
+- `AppShellLayout` (Server Component) fetches `initialUser` on every render
+- Each render creates a new object reference for `initialUser`, even if user data is identical
+- `AuthUpdater`'s useEffect triggered on every reference change
+- Calling `queryClient.setQueryData()` caused re-renders, creating infinite loop
+
+**Component**: `app/components/providers/AuthUpdater.tsx`
+
+**Solution**:
+- Added `useRef` to track whether initial user data has been set
+- useEffect only sets query data once on mount, preventing repeated updates
+- Prevents infinite loop while maintaining proper initial auth state hydration
+
+**Code Change** (line 19):
+```typescript
+const hasSetInitialUser = useRef(false);
+
+useEffect(() => {
+  // Only set initial user once to avoid infinite loops
+  if (initialUser && !hasSetInitialUser.current) {
+    queryClient.setQueryData(["/api/me"], initialUser);
+    hasSetInitialUser.current = true;
+  }
+}, [initialUser, queryClient]);
+```
+
+**Verification**:
+- Browser console shows only normal HMR messages
+- No "Maximum update depth exceeded" errors
+- Auth state properly hydrates from server on page load
