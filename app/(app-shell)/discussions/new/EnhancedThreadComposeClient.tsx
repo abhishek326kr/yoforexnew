@@ -805,6 +805,15 @@ export default function EnhancedThreadComposeClient({
   const [quickStartMode, setQuickStartMode] = useState(true);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [seoData, setSeoData] = useState<SEOData | null>(null);
+  
+  // Track step progression - which steps have been acknowledged/completed
+  const [stepProgress, setStepProgress] = useState({
+    step1Acknowledged: false,
+    step2Acknowledged: false,
+  });
+  
+  // Track if we've shown a redirect toast (to avoid spam)
+  const redirectToastShownRef = useRef(false);
 
   // Pre-select category from URL param
   const categoryParam = searchParams?.get("category") || "";
@@ -875,12 +884,32 @@ export default function EnhancedThreadComposeClient({
   // Validation helpers - use form values for proper reactivity
   const bodyTextLength = bodyText?.length || 0;
 
-  const canProceedStep1 =
+  // Step 1 completion: Basic fields are filled and valid
+  const isStep1Complete =
     titleLength >= 5 && // Match schema minimum
     categorySlug &&
     bodyTextLength >= 20; // Match schema minimum
 
-  const isFormValid = canProceedStep1;
+  // Step 2 completion: Step 1 is complete AND user acknowledged step 2
+  const isStep2Complete = isStep1Complete && stepProgress.step2Acknowledged;
+
+  // Calculate maximum accessible step based on completion
+  const getMaxAccessibleStep = useCallback(() => {
+    if (!isStep1Complete) {
+      return 1; // Can only access step 1
+    }
+    if (!stepProgress.step1Acknowledged) {
+      return 1; // Step 1 complete but not acknowledged yet
+    }
+    if (!stepProgress.step2Acknowledged) {
+      return 2; // Can access up to step 2
+    }
+    return 3; // Can access step 3
+  }, [isStep1Complete, stepProgress.step1Acknowledged, stepProgress.step2Acknowledged]);
+
+  // Legacy variable for backward compatibility
+  const canProceedStep1 = isStep1Complete;
+  const isFormValid = isStep1Complete;
 
   // Hashtag management
   const addHashtag = () => {
@@ -960,24 +989,35 @@ export default function EnhancedThreadComposeClient({
 
   // Navigate to a specific step by updating the URL
   const navigateToStep = useCallback(
-    (step: number) => {
-      // Validate step is between 1-3
-      const validStep = Math.min(Math.max(step, 1), 3);
+    (step: number, bypassValidation = false) => {
+      let targetStep = step;
+      
+      // Only apply validation if not bypassed (bypassed when Continue is clicked)
+      if (!bypassValidation) {
+        // Get maximum accessible step based on form completion
+        const maxStep = getMaxAccessibleStep();
+        
+        // Clamp requested step to valid range and max accessible
+        targetStep = Math.min(Math.max(step, 1), 3, maxStep);
+      } else {
+        // Even with bypass, enforce absolute bounds
+        targetStep = Math.min(Math.max(step, 1), 3);
+      }
 
       // Build URL with step parameter, preserving category if it exists
       const params = new URLSearchParams();
       if (categoryParam) {
         params.set("category", categoryParam);
       }
-      params.set("step", validStep.toString());
+      params.set("step", targetStep.toString());
 
       // Update URL without scrolling
       router.push(`/discussions/new?${params.toString()}`, { scroll: false });
     },
-    [router, categoryParam],
+    [router, categoryParam, getMaxAccessibleStep],
   );
 
-  // Sync currentStep state with URL parameter changes
+  // Sync currentStep state with URL parameter changes and enforce step validation
   // Also ensure URL always has a step parameter
   useEffect(() => {
     const stepParam = searchParams?.get("step");
@@ -996,12 +1036,54 @@ export default function EnhancedThreadComposeClient({
       return;
     }
 
-    // Otherwise sync URL step to state
-    const urlStep = Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3);
-    if (urlStep !== currentStep) {
-      setCurrentStep(urlStep);
+    // Parse and validate the requested step
+    const requestedStep = Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3);
+    const maxStep = getMaxAccessibleStep();
+
+    // If user tries to access a step beyond what's allowed, redirect to max accessible step
+    if (requestedStep > maxStep) {
+      // Show toast only once per redirect to avoid spam
+      if (!redirectToastShownRef.current) {
+        redirectToastShownRef.current = true;
+        toast({
+          title: "Complete previous steps first",
+          description: `Please complete Step ${maxStep} before proceeding.`,
+          variant: "default",
+        });
+        
+        // Reset toast flag after a delay
+        setTimeout(() => {
+          redirectToastShownRef.current = false;
+        }, 3000);
+      }
+
+      // Redirect to max accessible step
+      const params = new URLSearchParams();
+      if (categoryParam) {
+        params.set("category", categoryParam);
+      }
+      params.set("step", maxStep.toString());
+      router.replace(`/discussions/new?${params.toString()}`, {
+        scroll: false,
+      });
+      return;
     }
-  }, [searchParams, currentStep, router, categoryParam]);
+
+    // Sync URL step to state if valid
+    if (requestedStep !== currentStep) {
+      setCurrentStep(requestedStep);
+    }
+  }, [searchParams, currentStep, router, categoryParam, getMaxAccessibleStep, toast]);
+
+  // Regression effect: Auto-redirect if user clears required fields on later steps
+  useEffect(() => {
+    const maxStep = getMaxAccessibleStep();
+    
+    // If current step is beyond what's accessible, redirect back
+    if (currentStep > maxStep) {
+      navigateToStep(maxStep);
+    }
+  }, [currentStep, getMaxAccessibleStep, navigateToStep]);
 
   const handleStepClick = (step: number) => {
     if (step <= currentStep) {
@@ -1470,7 +1552,16 @@ export default function EnhancedThreadComposeClient({
                           <Button
                             type="button"
                             size="lg"
-                            onClick={() => navigateToStep(currentStep + 1)}
+                            onClick={() => {
+                              // Acknowledge current step before proceeding
+                              if (currentStep === 1 && isStep1Complete) {
+                                setStepProgress(prev => ({ ...prev, step1Acknowledged: true }));
+                              } else if (currentStep === 2 && isStep1Complete) {
+                                setStepProgress(prev => ({ ...prev, step2Acknowledged: true }));
+                              }
+                              // Bypass validation since we just acknowledged the step
+                              navigateToStep(currentStep + 1, true);
+                            }}
                             disabled={currentStep === 1 && !canProceedStep1}
                             className="gap-2 min-w-[120px]"
                           >
