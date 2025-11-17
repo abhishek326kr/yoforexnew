@@ -91,24 +91,32 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
-### Thread Creation "Next" Button Fix - Category Validation (November 17, 2025)
+### Thread Creation "Next" Button Fix - Slug Auto-Generation (November 17, 2025)
 
-**Issue**: User reported the "Next" button on the thread creation wizard (/discussions/new) remained disabled even after entering valid title and body content.
+**Issue**: User reported the "Next" button remained disabled even after fixing category and body validation.
 
-**Root Cause**: The `canProceedToNextStep()` function was missing category validation. While the form schema requires a category (`categorySlug: z.string().min(1)`), the Next button validation only checked title and body fields, ignoring the required category field.
+**Root Cause**: The `slug` field was the hidden culprit:
+1. Schema requires `slug: z.string().min(1)` (cannot be empty)
+2. Slug defaulted to empty string `""`
+3. Slug auto-generation only ran when `autoOptimizeSeo === false`
+4. But `autoOptimizeSeo` defaults to `true`!
+5. Result: Slug stayed empty in Step 1, violating validation
 
 **Fix Applied**:
-- **ThreadCreationWizard.tsx** (line 355): Added category validation checks
-  - From: `!errors.title && !errors.body && watchedFields.title && watchedFields.body.length >= 100`
-  - To: `!errors.title && !errors.body && !errors.categorySlug && watchedFields.title && watchedFields.body.length >= 100 && watchedFields.categorySlug`
+- **ThreadCreationWizard.tsx** (lines 200-213): Changed slug auto-generation to always run
+  - Now generates slug from title immediately when title is entered
+  - Only updates if no SEO data exists yet OR not in auto-optimize mode
+  - Allows SEO optimization in Step 3 to override later
 
-**Previous Fix** (same day): Changed body character requirement from 500 to 100 characters to match schema validation.
+**Previous Fixes** (same day):
+1. Changed body character requirement from 500 to 100 characters
+2. Added category validation to `canProceedToNextStep()`
 
 **Verification**:
-- ✅ Next button now requires valid category selection
-- ✅ All Step 1 required fields now properly validated
-- ✅ No regressions in other wizard steps
-- ✅ Architect confirmed no side effects expected
+- ✅ Slug now auto-generates from title in Step 1
+- ✅ Form validation passes when all required fields filled
+- ✅ SEO optimization in Step 3 can still override slug
+- ✅ Architect confirmed no race conditions or regressions
 
 ### AuthUpdater TypeError Fix (November 17, 2025)
 
