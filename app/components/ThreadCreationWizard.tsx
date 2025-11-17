@@ -349,7 +349,7 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
   const canProceedToNextStep = () => {
     switch (currentStep) {
       case 1:
-        return !errors.title && !errors.body && watchedFields.title && watchedFields.body.length >= 500;
+        return !errors.title && !errors.body && watchedFields.title && watchedFields.body.length >= 100;
       case 2:
         return true; // Optional step
       case 3:
