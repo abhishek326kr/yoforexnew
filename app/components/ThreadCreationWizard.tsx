@@ -353,11 +353,30 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
     switch (currentStep) {
       case 1:
         // All required fields for Step 1: title, body, category, slug
-        return !errors.title && !errors.body && !errors.categorySlug && !errors.slug && 
+        const canProceed = !errors.title && !errors.body && !errors.categorySlug && !errors.slug && 
                watchedFields.title && 
                watchedFields.body.length >= 100 && 
                watchedFields.categorySlug && 
                watchedFields.slug;
+        
+        // DEBUG: Log form state for troubleshooting
+        console.log('[THREAD WIZARD DEBUG] Step 1 validation:', {
+          canProceed,
+          errors: {
+            title: errors.title?.message,
+            body: errors.body?.message,
+            categorySlug: errors.categorySlug?.message,
+            slug: errors.slug?.message
+          },
+          values: {
+            titleLength: watchedFields.title?.length || 0,
+            bodyLength: watchedFields.body?.length || 0,
+            categorySlug: watchedFields.categorySlug,
+            slug: watchedFields.slug
+          }
+        });
+        
+        return canProceed;
       case 2:
         return true; // Optional step
       case 3:
