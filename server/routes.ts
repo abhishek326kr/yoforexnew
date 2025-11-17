@@ -205,6 +205,14 @@ import {
   financeExportSchema,
   filterUserRegistrationDuplicates,
 } from "./validation.js";
+import {
+  handleRouteError,
+  logWarning,
+  logInfo,
+  withErrorHandling,
+  ErrorCategory,
+  ErrorSeverity,
+} from "./utils/errorHandler.js";
 import { 
   ObjectStorageService, 
   ObjectNotFoundError,
@@ -6037,49 +6045,92 @@ export async function registerRoutes(app: Express): Promise<Express> {
       
       // Ensure user wallet exists before awarding coins
       // The getUserWallet method in storage auto-creates wallets if they don't exist
-      try {
-        const wallet = await storage.getUserWallet(authenticatedUserId);
-        if (!wallet) {
-          console.error('Failed to create/get user wallet for user:', authenticatedUserId);
-          // Try to create wallet explicitly as a fallback
-          await storage.createUserWallet(authenticatedUserId);
+      const walletResult = await withErrorHandling(
+        async () => {
+          const wallet = await storage.getUserWallet(authenticatedUserId);
+          if (!wallet) {
+            logWarning('Wallet not found, creating new wallet', {
+              operationName: 'thread-creation-wallet-check',
+              userId: authenticatedUserId,
+              category: ErrorCategory.BUSINESS_LOGIC,
+              severity: ErrorSeverity.MEDIUM,
+            }, { threadId: thread.id });
+            await storage.createUserWallet(authenticatedUserId);
+          }
+          return wallet;
+        },
+        {
+          operationName: 'ensure-wallet-exists',
+          userId: authenticatedUserId,
+          category: ErrorCategory.DATABASE,
+          severity: ErrorSeverity.HIGH,
+          additionalInfo: { threadId: thread.id },
         }
-      } catch (error) {
-        console.error('Failed to ensure user wallet exists:', error);
-        // Try to create wallet explicitly as a fallback
-        try {
-          await storage.createUserWallet(authenticatedUserId);
-          console.log('Successfully created wallet for user:', authenticatedUserId);
-        } catch (createError) {
-          console.error('Failed to create user wallet:', createError);
-        }
+      );
+
+      if (!walletResult.success) {
+        logWarning('Could not ensure wallet exists, coin reward may fail', {
+          operationName: 'thread-creation-wallet-fallback',
+          userId: authenticatedUserId,
+          category: ErrorCategory.BUSINESS_LOGIC,
+          severity: ErrorSeverity.HIGH,
+        }, { 
+          threadId: thread.id,
+          error: walletResult.error.message,
+        });
       }
       
       // Award coins for thread creation using Phase 3 CoinTransactionService
-      try {
-        const coinResult = await coinTransactionService.executeTransaction({
+      const coinResult = await withErrorHandling(
+        async () => {
+          const result = await coinTransactionService.executeTransaction({
+            userId: authenticatedUserId,
+            amount: coinReward,
+            trigger: COIN_TRIGGERS.FORUM_THREAD_CREATED,
+            channel: COIN_CHANNELS.FORUM,
+            description: hasOptionalDetails 
+              ? `Thread created with bonus details: ${thread.title}`
+              : `Thread created: ${thread.title}`,
+            metadata: {
+              threadId: thread.id,
+              threadSlug: thread.slug,
+              baseReward: 10,
+              bonusReward: hasOptionalDetails ? 2 : 0,
+              categorySlug: validated.categorySlug
+            },
+            idempotencyKey: `thread-${thread.id}`
+          });
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Coin transaction failed');
+          }
+          
+          return result;
+        },
+        {
+          operationName: 'award-thread-creation-coins',
           userId: authenticatedUserId,
-          amount: coinReward,
-          trigger: COIN_TRIGGERS.FORUM_THREAD_CREATED,
-          channel: COIN_CHANNELS.FORUM,
-          description: hasOptionalDetails 
-            ? `Thread created with bonus details: ${thread.title}`
-            : `Thread created: ${thread.title}`,
-          metadata: {
+          category: ErrorCategory.BUSINESS_LOGIC,
+          severity: ErrorSeverity.MEDIUM,
+          additionalInfo: {
             threadId: thread.id,
-            threadSlug: thread.slug,
-            baseReward: 10,
-            bonusReward: hasOptionalDetails ? 2 : 0,
-            categorySlug: validated.categorySlug
+            coinReward,
+            hasOptionalDetails,
           },
-          idempotencyKey: `thread-${thread.id}`
-        });
-        
-        if (!coinResult.success) {
-          console.error('Failed to award coins for thread creation:', coinResult.error);
         }
-      } catch (error) {
-        console.error('Failed to award coins for thread creation:', error);
+      );
+
+      if (!coinResult.success) {
+        logWarning('Failed to award coins for thread creation, user will not receive reward', {
+          operationName: 'thread-creation-coin-award-failed',
+          userId: authenticatedUserId,
+          category: ErrorCategory.BUSINESS_LOGIC,
+          severity: ErrorSeverity.MEDIUM,
+        }, {
+          threadId: thread.id,
+          coinReward,
+          error: coinResult.error.message,
+        });
       }
       
       // Create activity feed entry
@@ -6096,29 +6147,65 @@ export async function registerRoutes(app: Express): Promise<Express> {
       await storage.updateCategoryStats(validated.categorySlug);
       
       // Mark onboarding step for first thread creation
-      try {
-        await storage.markOnboardingStep(authenticatedUserId, 'firstThread');
-      } catch (error) {
-        console.error('Onboarding step failed:', error);
-      }
-      
-      // Send thread posted email notification
-      try {
-        const user = await storage.getUserById(authenticatedUserId);
-        if (user && user.username) {
-          await sendThreadPostedEmail(authenticatedUserId, {
-            id: thread.id,
-            title: thread.title,
-            slug: thread.slug,
-            categorySlug: thread.categorySlug,
-            authorUsername: user.username,
-            excerpt: thread.body.substring(0, 200) + (thread.body.length > 200 ? '...' : '')
+      await withErrorHandling(
+        async () => {
+          await storage.markOnboardingStep(authenticatedUserId, 'firstThread');
+        },
+        {
+          operationName: 'mark-onboarding-first-thread',
+          userId: authenticatedUserId,
+          category: ErrorCategory.BUSINESS_LOGIC,
+          severity: ErrorSeverity.LOW,
+          additionalInfo: { threadId: thread.id },
+        },
+        (error) => {
+          logWarning('Failed to mark onboarding step, user progress may not be tracked', {
+            operationName: 'thread-creation-onboarding-failed',
+            userId: authenticatedUserId,
+            category: ErrorCategory.BUSINESS_LOGIC,
+            severity: ErrorSeverity.LOW,
+          }, {
+            threadId: thread.id,
+            error: error.message,
           });
         }
-      } catch (error) {
-        console.error('Failed to send thread posted email:', error);
-        // Don't fail the request if email fails
-      }
+      );
+      
+      // Send thread posted email notification
+      await withErrorHandling(
+        async () => {
+          const user = await storage.getUserById(authenticatedUserId);
+          if (user && user.username) {
+            await sendThreadPostedEmail(authenticatedUserId, {
+              id: thread.id,
+              title: thread.title,
+              slug: thread.slug,
+              categorySlug: thread.categorySlug,
+              authorUsername: user.username,
+              excerpt: thread.body.substring(0, 200) + (thread.body.length > 200 ? '...' : '')
+            });
+          }
+        },
+        {
+          operationName: 'send-thread-posted-email',
+          userId: authenticatedUserId,
+          category: ErrorCategory.EXTERNAL_SERVICE,
+          severity: ErrorSeverity.LOW,
+          additionalInfo: { threadId: thread.id, threadTitle: thread.title },
+        },
+        (error) => {
+          logWarning('Failed to send thread posted email notification', {
+            operationName: 'thread-creation-email-failed',
+            userId: authenticatedUserId,
+            category: ErrorCategory.EXTERNAL_SERVICE,
+            severity: ErrorSeverity.LOW,
+          }, {
+            threadId: thread.id,
+            threadTitle: thread.title,
+            error: error.message,
+          });
+        }
+      );
       
       res.json({
         thread,
@@ -6126,64 +6213,21 @@ export async function registerRoutes(app: Express): Promise<Express> {
         message: "Posted! We'll share it around and keep things tidy for you.",
       });
     } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "User not found") {
-          return res.status(404).json({ error: "User not found" });
+      // Use comprehensive error handling utility
+      handleRouteError(
+        error,
+        req,
+        res,
+        'create thread',
+        {
+          title: req.body.title,
+          categorySlug: req.body.categorySlug,
+          subcategorySlug: req.body.subcategorySlug,
+          hasContentHtml: !!req.body.contentHtml,
+          hasAttachments: Array.isArray(req.body.attachments) && req.body.attachments.length > 0,
+          attachmentCount: Array.isArray(req.body.attachments) ? req.body.attachments.length : 0,
         }
-        if (error.message === "No authenticated user") {
-          return res.status(401).json({ error: "Not authenticated" });
-        }
-        // Handle Zod validation errors with friendly messages
-        if (error.name === "ZodError") {
-          return res.status(400).json({ error: error.message });
-        }
-        
-        // Handle database constraint errors with user-friendly messages
-        const errorMessage = error.message.toLowerCase();
-        
-        // Duplicate slug error
-        if (errorMessage.includes('duplicate key') && errorMessage.includes('slug')) {
-          return res.status(400).json({ 
-            error: "A thread with this title already exists in this category. Please use a different title." 
-          });
-        }
-        
-        // Foreign key constraint errors
-        if (errorMessage.includes('foreign key constraint')) {
-          if (errorMessage.includes('category')) {
-            return res.status(400).json({ 
-              error: "The selected category doesn't exist. Please choose a valid category." 
-            });
-          }
-          if (errorMessage.includes('user')) {
-            return res.status(401).json({ 
-              error: "Your session has expired. Please log in again." 
-            });
-          }
-          return res.status(400).json({ 
-            error: "Invalid data provided. Please check your inputs and try again." 
-          });
-        }
-        
-        // Character limit errors
-        if (errorMessage.includes('too long') || errorMessage.includes('value too long')) {
-          return res.status(400).json({ 
-            error: "One or more fields exceed the maximum character limit. Please shorten your content." 
-          });
-        }
-        
-        // Required field errors
-        if (errorMessage.includes('not null') || errorMessage.includes('violates not-null constraint')) {
-          return res.status(400).json({ 
-            error: "Required fields are missing. Please fill in all required information." 
-          });
-        }
-      }
-      
-      console.error('Thread creation error:', error);
-      res.status(400).json({ 
-        error: "Unable to create thread. Please check your input and try again." 
-      });
+      );
     }
   });
   
