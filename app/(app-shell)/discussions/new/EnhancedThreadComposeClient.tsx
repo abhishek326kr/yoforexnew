@@ -1038,7 +1038,18 @@ export default function EnhancedThreadComposeClient({
 
     // Parse and validate the requested step
     const requestedStep = Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3);
-    const maxStep = getMaxAccessibleStep();
+    
+    // Calculate max accessible step inline to avoid function reference dependency
+    let maxStep = 1;
+    if (!isStep1Complete) {
+      maxStep = 1;
+    } else if (!stepProgress.step1Acknowledged) {
+      maxStep = 1;
+    } else if (!stepProgress.step2Acknowledged) {
+      maxStep = 2;
+    } else {
+      maxStep = 3;
+    }
 
     // If user tries to access a step beyond what's allowed, redirect to max accessible step
     if (requestedStep > maxStep) {
@@ -1073,7 +1084,7 @@ export default function EnhancedThreadComposeClient({
     if (requestedStep !== currentStep) {
       setCurrentStep(requestedStep);
     }
-  }, [searchParams, currentStep, router, categoryParam, getMaxAccessibleStep, toast]);
+  }, [searchParams, currentStep, router, categoryParam, isStep1Complete, stepProgress, toast]);
 
   const handleStepClick = (step: number) => {
     if (step <= currentStep) {

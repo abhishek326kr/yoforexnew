@@ -128,11 +128,18 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
    - Solution: Added `bypassValidation` parameter to skip validation check when Continue is clicked
    - Continue button sets acknowledgement state AND bypasses validation (line 1566)
 
-2. **Infinite Loop Prevention** (November 17, 2025):
+2. **Infinite Loop Prevention - First Fix** (November 17, 2025):
    - Problem: Separate regression effect created circular dependency with URL sync effect
    - Both effects tried to manage navigation simultaneously, triggering each other infinitely
    - Solution: Removed redundant regression effect
-   - URL sync effect handles all validation scenarios automatically via `getMaxAccessibleStep` dependency
+   - URL sync effect handles all validation scenarios automatically
+
+3. **Infinite Loop Prevention - Final Fix** (November 17, 2025):
+   - Problem: `getMaxAccessibleStep` function in URL sync effect's dependency array
+   - When form fields changed → new function reference → effect re-runs → router.replace() → Next.js re-renders → new initialUser object → AuthUpdater infinite loop
+   - Solution: Inlined max step calculation in URL sync effect
+   - Replaced function dependency with underlying state dependencies: `isStep1Complete`, `stepProgress`
+   - Breaks the render cycle: form changes → effect runs once → no new router navigation unless step validation actually fails
 
 **Behavior**:
 - Step 1 → Step 2: Only allowed after title, body, and category are filled
