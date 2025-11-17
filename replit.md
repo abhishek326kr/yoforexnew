@@ -91,6 +91,22 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
 
 ## Recent Changes
 
+### React Hydration Error Fix - Google Analytics (November 17, 2025)
+
+**Issue**: React hydration mismatch error caused by Google Tag Manager scripts in `<head>` containing `Date.now()` and `new Date()` calls.
+
+**Root Cause**: GTM initialization scripts use `Date.now()` and `new Date()` which generate different values on server vs client, causing React to detect attribute mismatches during hydration.
+
+**Fix Applied**:
+- **Moved scripts** from `<head>` to `<body>` in `app/layout.tsx`
+- Scripts still load and function correctly, but now avoid hydration conflicts
+- Kept `suppressHydrationWarning` on both `<html>` and `<body>` tags
+
+**Verification**:
+- ✅ No hydration errors in browser console
+- ✅ Google Analytics and GTM scripts loading correctly
+- ✅ Application rendering without React warnings
+
 ### Authentication 500 Error Fix (November 17, 2025)
 
 **Issue**: Email authentication was returning "500: Internal Server Error" instead of proper error codes.
