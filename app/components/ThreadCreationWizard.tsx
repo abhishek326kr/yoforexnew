@@ -12,6 +12,8 @@ import dynamic from "next/dynamic";
 import { useDropzone } from "react-dropzone";
 import ReactMarkdown from "react-markdown";
 import AutoSEOPanel, { type SEOData } from "@/components/AutoSEOPanel";
+import AuthPromptDialog from "@/components/AuthPromptDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,6 +126,8 @@ interface ThreadCreationWizardProps {
 }
 
 export default function ThreadCreationWizard({ categorySlug = "general" }: ThreadCreationWizardProps) {
+  const { isAuthenticated } = useAuth();
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -348,71 +352,99 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
     }
   };
 
-  // Step navigation
-  const canProceedToNextStep = () => {
+  // Memoized step validation for reactive button state
+  const isStepValid = useMemo(() => {
     switch (currentStep) {
       case 1:
-        // All required fields for Step 1: title, body, category, slug
-        const canProceed = !errors.title && !errors.body && !errors.categorySlug && !errors.slug && 
-               watchedFields.title && 
-               watchedFields.body.length >= 100 && 
-               watchedFields.categorySlug && 
-               watchedFields.slug;
-        
-        // DEBUG: Log form state for troubleshooting
-        console.log('[THREAD WIZARD DEBUG] Step 1 validation:', {
-          canProceed,
-          errors: {
-            title: errors.title?.message,
-            body: errors.body?.message,
-            categorySlug: errors.categorySlug?.message,
-            slug: errors.slug?.message
-          },
-          values: {
-            titleLength: watchedFields.title?.length || 0,
-            bodyLength: watchedFields.body?.length || 0,
-            categorySlug: watchedFields.categorySlug,
-            slug: watchedFields.slug
-          }
-        });
-        
-        return canProceed;
+        // Step 1: title (15+ chars), body (100+ chars), category, slug
+        return (
+          !errors.title &&
+          !errors.body &&
+          !errors.categorySlug &&
+          !errors.slug &&
+          watchedFields.title &&
+          watchedFields.title.length >= 15 &&
+          watchedFields.title.length <= 90 &&
+          watchedFields.body &&
+          watchedFields.body.length >= 100 &&
+          watchedFields.categorySlug &&
+          watchedFields.slug &&
+          watchedFields.slug.length > 0
+        );
       case 2:
-        return true; // Optional step
+        // Step 2: Optional (always can proceed)
+        return true;
       case 3:
-        // In auto-optimize mode, we can proceed as long as SEO data is generated
-        // In manual mode, check for required fields
+        // Step 3: SEO validation
         if (autoOptimizeSeo) {
+          // If auto-optimize, just check that seoData exists
           return seoData !== null && seoData.primaryKeyword !== "" && seoData.seoExcerpt !== "";
         } else {
+          // If manual, check manual fields
           return watchedFields.primaryKeyword !== "" && watchedFields.seoExcerpt !== "";
         }
       case 4:
-        return true; // Final preview
+        // Step 4: Always can proceed (review step)
+        return true;
       default:
         return false;
     }
-  };
+  }, [
+    currentStep,
+    errors.title,
+    errors.body,
+    errors.categorySlug,
+    errors.slug,
+    watchedFields.title,
+    watchedFields.body,
+    watchedFields.categorySlug,
+    watchedFields.slug,
+    watchedFields.primaryKeyword,
+    watchedFields.seoExcerpt,
+    autoOptimizeSeo,
+    seoData
+  ]);
 
 
   return (
-    <Card className="w-full max-w-5xl mx-auto">
-      <CardHeader>
-        <div className="flex items-center justify-between mb-4">
-          <CardTitle className="text-2xl">Create New Thread</CardTitle>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Step {currentStep} of 4</span>
-            <Progress value={currentStep * 25} className="w-32" />
-          </div>
-        </div>
-        <CardDescription>
-          Share your knowledge, ask questions, or start a discussion with the community
-        </CardDescription>
-      </CardHeader>
+    <>
+      <AuthPromptDialog
+        open={showAuthPrompt}
+        onOpenChange={setShowAuthPrompt}
+        action="create a thread"
+      />
       
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <Card className="w-full max-w-5xl mx-auto">
+        <CardHeader>
+          <div className="flex items-center justify-between mb-4">
+            <CardTitle className="text-2xl">Create New Thread</CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Step {currentStep} of 4</span>
+              <Progress value={currentStep * 25} className="w-32" />
+            </div>
+          </div>
+          <CardDescription>
+            Share your knowledge, ask questions, or start a discussion with the community
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent>
+          <div className={!isAuthenticated ? "relative" : ""}>
+            {!isAuthenticated && (
+              <div 
+                className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center cursor-pointer rounded-lg"
+                onClick={() => setShowAuthPrompt(true)}
+                data-testid="auth-overlay"
+              >
+                <div className="text-center p-6">
+                  <h3 className="text-lg font-semibold mb-2">Sign in to create a thread</h3>
+                  <p className="text-sm text-muted-foreground">Join our community to share your knowledge and earn coins</p>
+                </div>
+              </div>
+            )}
+            
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Step 1: Core Content */}
             {currentStep === 1 && (
               <div className="space-y-6">
@@ -887,7 +919,7 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
                   type="button"
                   variant="outline"
                   onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-                  disabled={currentStep === 1}
+                  disabled={currentStep === 1 || !isAuthenticated}
                   data-testid="button-previous-step"
                 >
                   <ChevronLeft className="h-4 w-4 mr-2" />
@@ -897,7 +929,8 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
                 <Button
                   type="button"
                   onClick={() => setCurrentStep(Math.min(4, currentStep + 1))}
-                  disabled={!canProceedToNextStep()}
+                  disabled={!isStepValid || !isAuthenticated}
+                  className={!isStepValid ? "opacity-50 cursor-not-allowed" : ""}
                   data-testid="button-next-step"
                 >
                   {currentStep === 3 ? "Preview" : "Next"}
@@ -907,7 +940,9 @@ export default function ThreadCreationWizard({ categorySlug = "general" }: Threa
             )}
           </form>
         </Form>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }
