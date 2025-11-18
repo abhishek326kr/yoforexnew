@@ -814,6 +814,9 @@ export default function EnhancedThreadComposeClient({
   
   // Track if we've shown a redirect toast (to avoid spam)
   const redirectToastShownRef = useRef(false);
+  
+  // Track the last URL step we processed to prevent stale state and loops
+  const lastProcessedUrlStepRef = useRef<string | null>(null);
 
   // Pre-select category from URL param
   const categoryParam = searchParams?.get("category") || "";
@@ -1029,10 +1032,12 @@ export default function EnhancedThreadComposeClient({
         params.set("category", categoryParam);
       }
       params.set("step", "1");
-      // Use replace instead of push to overwrite current history entry
-      router.replace(`/discussions/new?${params.toString()}`, {
-        scroll: false,
-      });
+      router.replace(`/discussions/new?${params.toString()}`, { scroll: false });
+      return;
+    }
+
+    // Skip if we've already processed this exact URL step (prevents stale state and loops)
+    if (lastProcessedUrlStepRef.current === stepParam) {
       return;
     }
 
@@ -1074,17 +1079,21 @@ export default function EnhancedThreadComposeClient({
         params.set("category", categoryParam);
       }
       params.set("step", maxStep.toString());
-      router.replace(`/discussions/new?${params.toString()}`, {
-        scroll: false,
-      });
+      router.replace(`/discussions/new?${params.toString()}`, { scroll: false });
+      
+      // Mark this URL step as processed
+      lastProcessedUrlStepRef.current = maxStep.toString();
       return;
     }
 
+    // Mark this URL step as processed before updating state
+    lastProcessedUrlStepRef.current = stepParam;
+    
     // Sync URL step to state if valid
     if (requestedStep !== currentStep) {
       setCurrentStep(requestedStep);
     }
-  }, [searchParams, currentStep, router, categoryParam, isStep1Complete, stepProgress, toast]);
+  }, [searchParams, router, categoryParam, isStep1Complete, stepProgress, toast, currentStep]);
 
   const handleStepClick = (step: number) => {
     if (step <= currentStep) {

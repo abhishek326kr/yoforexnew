@@ -141,6 +141,52 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
    - Replaced function dependency with underlying state dependencies: `isStep1Complete`, `stepProgress`
    - Breaks the render cycle: form changes → effect runs once → no new router navigation unless step validation actually fails
 
+4. **Infinite Loop Prevention - Circular Dependency Fix (Final Solution)** (November 18, 2025):
+   - Problem: Two conflicting requirements:
+     - Including `currentStep` in dependencies → circular dependency → infinite loop
+     - Excluding `currentStep` from dependencies → stale state bug when URL changes
+   - Solution: **Use ref to track processed URL steps**
+   - Added `lastProcessedUrlStepRef` to track which URL step parameters have been processed
+   - Effect checks if current URL step has already been processed → if yes, skip (prevents loop)
+   - `currentStep` remains in dependencies to prevent stale state
+   - Effect only processes each unique URL step once
+   - Result: No infinite loop, no stale state, validation works correctly
+
+**Root Cause Analysis**:
+The infinite loop occurred because:
+1. User types in form → `isStep1Complete` changes (via `useWatch`)
+2. URL sync effect runs (has `isStep1Complete` in dependencies)
+3. If validation fails, calls `router.replace()`
+4. Next.js re-renders entire layout → new `initialUser` object created
+5. `currentStep` state updates → effect runs again (because `currentStep` in dependencies)
+6. Loop continues until React's safety limit is reached
+
+**The Fix**:
+```javascript
+const lastProcessedUrlStepRef = useRef<string | null>(null);
+
+useEffect(() => {
+  const stepParam = searchParams?.get("step");
+  
+  // Skip if we've already processed this exact URL step
+  if (lastProcessedUrlStepRef.current === stepParam) {
+    return;
+  }
+  
+  // ... validation and navigation logic ...
+  
+  // Mark as processed before updating state
+  lastProcessedUrlStepRef.current = stepParam;
+  setCurrentStep(requestedStep);
+}, [searchParams, router, categoryParam, isStep1Complete, stepProgress, toast, currentStep]);
+```
+
+This ensures:
+- URL changes are processed (searchParams in dependencies)
+- Form validation triggers re-evaluation (isStep1Complete, stepProgress)
+- State stays in sync with URL (currentStep in dependencies)
+- No infinite loops (ref guard prevents reprocessing same URL)
+
 **Behavior**:
 - Step 1 → Step 2: Only allowed after title, body, and category are filled
 - Step 2 → Step 3: Only allowed after clicking Continue on step 2
