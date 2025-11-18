@@ -1,32 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import DOMPurify from "isomorphic-dompurify";
-import dynamic from "next/dynamic";
-
-// Dynamically import RichTextEditor with SSR disabled to prevent TipTap module evaluation errors
-const RichTextEditor = dynamic(() => import("./RichTextEditor"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-[300px] border-2 rounded-lg bg-muted/20">
-      <div className="flex flex-col items-center gap-2">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Loading editor...</span>
-      </div>
-    </div>
-  ),
-});
-import type { ForumCategory } from "@shared/schema";
+import type { ForumCategory, Broker } from "@shared/schema";
+import {
+  INSTRUMENTS,
+  TIMEFRAMES,
+  STRATEGIES,
+  PLATFORMS,
+  POPULAR_BROKERS,
+  THREAD_TYPES,
+  extractPotentialTags,
+} from "@shared/tradingMetadata";
+import { countWords } from "@shared/threadUtils";
 import Header from "@/components/Header";
 import EnhancedFooter from "@/components/EnhancedFooter";
-import LeftEngagementSidebar from "./LeftEngagementSidebar";
-import RightEngagementSidebar from "./RightEngagementSidebar";
-import AutoSEOPanel, { type SEOData } from "@/components/AutoSEOPanel";
 import {
   Card,
   CardContent,
@@ -36,11 +28,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   Select,
   SelectContent,
@@ -57,1563 +53,1453 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthPrompt } from "@/hooks/useAuthPrompt";
-import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
-import { cn } from "@/lib/utils";
 import {
+  AlertCircle,
   ChevronLeft,
   ChevronRight,
-  AlertCircle,
+  HelpCircle,
+  MessageSquare,
+  Star,
+  BookOpen,
+  Lightbulb,
+  Code,
+  X,
+  Upload,
+  FileText,
+  Loader2,
   Check,
   Copy,
   Share2,
-  Upload,
-  X,
-  Coins,
-  Eye,
-  Save,
-  Send,
-  Hash,
-  Clock,
-  Link2,
-  FileText,
-  File,
-  Paperclip,
-  DollarSign,
-  Download,
-  MessageSquare,
-  Loader2,
-  Sparkles,
-  HelpCircle,
-  TrendingUp,
-  Users,
-  Lightbulb,
-  Code,
-  ChevronDown,
-  Settings2,
-  Zap,
-  Target,
-  Award,
-  BookOpen,
-  Globe,
-  Calendar,
-  BarChart3,
-  Shield,
-  Rocket,
-  Star,
-  Layers,
-  Filter,
-  Search,
-  ArrowRight,
-  Info,
-  Plus,
-  Minus,
-  CheckCircle,
-  Circle,
+  Bell,
 } from "lucide-react";
+import SEOPreview from "@/components/SEOPreview";
 
-// Thread types configuration with improved descriptions
-const threadTypes = [
-  {
-    value: "discussion",
-    icon: MessageSquare,
-    color:
-      "bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/30",
-    title: "Discussion",
-    description:
-      "Start a conversation about trading strategies or market trends",
-  },
-  {
-    value: "question",
-    icon: HelpCircle,
-    color:
-      "bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border-purple-500/30",
-    title: "Question",
-    description: "Ask the community for help or advice",
-  },
-  {
-    value: "ea-review",
-    icon: Code,
-    color:
-      "bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/30",
-    title: "EA Review",
-    description: "Share and review Expert Advisors or automated strategies",
-  },
-  {
-    value: "analysis",
-    icon: BarChart3,
-    color:
-      "bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-orange-500/30",
-    title: "Analysis",
-    description: "Share technical or fundamental market analysis",
-  },
-  {
-    value: "education",
-    icon: BookOpen,
-    color:
-      "bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 border-indigo-500/30",
-    title: "Education",
-    description: "Create educational content or tutorials",
-  },
-  {
-    value: "announcement",
-    icon: TrendingUp,
-    color: "bg-red-500/10 text-red-600 hover:bg-red-500/20 border-red-500/30",
-    title: "Announcement",
-    description: "Share important news or updates",
-  },
-];
-
-// File attachment interface
-interface FileAttachment {
-  id: string;
-  file: File;
-  url?: string;
-  price: number;
-  uploading?: boolean;
-  error?: string;
-}
-
-// Enhanced form validation schema
+// Form validation schema
 const threadFormSchema = z.object({
-  threadType: z.string().default("discussion"),
   title: z
     .string()
-    .min(5, "Title must be at least 5 characters")
-    .max(90, "Keep it under 90 characters")
+    .min(15, "This is a bit short—add 3–4 more words?")
+    .max(90, "Title must not exceed 90 characters")
     .refine(
       (val) => {
         const upperCount = (val.match(/[A-Z]/g) || []).length;
         const letterCount = (val.match(/[a-zA-Z]/g) || []).length;
         return letterCount === 0 || upperCount / letterCount < 0.5;
       },
-      { message: "Avoid ALL CAPS - it's easier to read in normal case" },
+      { message: "Let's tone this down a bit so more folks read it" },
     ),
-  body: z.string().min(20, "Content must be at least 20 characters"), // Plain text content
-  contentHtml: z.string().min(20, "Content must be at least 20 characters"), // Rich HTML content
+  body: z
+    .string()
+    .min(150, "Need more detail—add a few sentences? (150 characters minimum)")
+    .max(50000, "Body is too long"),
   categorySlug: z.string().min(1, "Please select a category"),
-  hashtags: z.array(z.string()).max(10).default([]),
-  attachments: z
-    .array(
-      z.object({
-        id: z.string(),
-        filename: z.string(),
-        size: z.number(),
-        url: z.string(),
-        mimeType: z.string(),
-        price: z.number().min(0).max(10000),
-        downloads: z.number().default(0),
-      }),
-    )
-    .default([]),
+  subcategorySlug: z.string().optional(),
+  threadType: z
+    .enum([
+      "question",
+      "discussion",
+      "review",
+      "journal",
+      "guide",
+      "program_sharing",
+    ])
+    .default("discussion"),
+  seoExcerpt: z.string().optional().or(z.literal("")),
+  primaryKeyword: z.string().optional().or(z.literal("")),
+  instruments: z.array(z.string()).default([]),
+  timeframes: z.array(z.string()).default([]),
+  strategies: z.array(z.string()).default([]),
+  platform: z.string().optional().or(z.literal("")),
+  broker: z.string().max(40).optional().or(z.literal("")),
+  riskNote: z.string().max(500).optional().or(z.literal("")),
+  hashtags: z.array(z.string()).max(10, "Maximum 10 hashtags").default([]),
+  reviewTarget: z.string().optional().or(z.literal("")),
+  reviewVersion: z.string().optional().or(z.literal("")),
+  reviewRating: z.number().int().min(1).max(5).optional(),
+  reviewPros: z.array(z.string()).default([]),
+  reviewCons: z.array(z.string()).default([]),
+  questionSummary: z.string().max(200).optional().or(z.literal("")),
+  attachmentUrls: z.array(z.string()).default([]),
 });
 
 type ThreadFormData = z.infer<typeof threadFormSchema>;
 
-interface EnhancedThreadComposeClientProps {
+interface ThreadComposeClientProps {
   categories: ForumCategory[];
 }
 
-// Modern chip/tag selector component
-function ChipSelector({
-  options,
-  selected,
-  onSelect,
-  placeholder = "Select items...",
-  maxItems = 10,
-  icon,
-}: {
-  options: string[];
-  selected: string[];
-  onSelect: (items: string[]) => void;
-  placeholder?: string;
-  maxItems?: number;
-  icon?: any;
-}) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
+// Auto-save draft hook
+function useThreadDraft(categorySlug: string) {
+  const [hasDraft, setHasDraft] = useState(false);
+  const draftKey = `thread_draft_${categorySlug}`;
 
-  const filteredOptions = options.filter(
-    (opt) =>
-      !selected.includes(opt) &&
-      opt.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  const toggleOption = (option: string) => {
-    if (selected.includes(option)) {
-      onSelect(selected.filter((s) => s !== option));
-    } else if (selected.length < maxItems) {
-      onSelect([...selected, option]);
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 min-h-[2.5rem] p-2 border rounded-lg bg-background">
-        {selected.length === 0 ? (
-          <span className="text-muted-foreground text-sm py-1">
-            {placeholder}
-          </span>
-        ) : (
-          selected.map((item) => (
-            <Badge
-              key={item}
-              variant="secondary"
-              className="gap-1 px-3 py-1 hover:bg-secondary/80 transition-colors animate-in fade-in-50 zoom-in-95 max-w-[200px]"
-            >
-              {icon
-                ? React.createElement(icon, {
-                    className: "w-3 h-3 flex-shrink-0",
-                  })
-                : null}
-              <span className="truncate">{item}</span>
-              <button
-                type="button"
-                onClick={() => toggleOption(item)}
-                className="ml-1 hover:text-destructive transition-colors flex-shrink-0"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </Badge>
-          ))
-        )}
-      </div>
-
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-muted-foreground hover:text-foreground"
-          >
-            {isOpen ? (
-              <Minus className="w-4 h-4" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-            <span>
-              <span>{isOpen ? "Hide" : "Show"}</span>
-              <span> available options (</span>
-              <span>{filteredOptions.length}</span>
-              <span>)</span>
-            </span>
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2">
-          <div className="space-y-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search options..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-9"
-              />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-              {filteredOptions.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => toggleOption(option)}
-                  className="text-left px-3 py-2 text-sm border rounded-lg hover:bg-accent transition-colors overflow-hidden"
-                  title={option}
-                >
-                  <span className="block truncate">{option}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
-  );
-}
-
-// Enhanced file attachment component
-function FileAttachmentSection({
-  attachments,
-  onAttachmentsChange,
-}: {
-  attachments: FileAttachment[];
-  onAttachmentsChange: React.Dispatch<React.SetStateAction<FileAttachment[]>>;
-}) {
-  const { toast } = useToast();
-  const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    if (attachments.length + files.length > 10) {
-      toast({
-        title: "Too many files",
-        description: "Maximum 10 attachments allowed",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const newAttachments: FileAttachment[] = [];
-
-    for (const file of Array.from(files)) {
-      // Check file size (20MB max)
-      const maxFileSize = 20 * 1024 * 1024; // 20MB in bytes
-      if (file.size > maxFileSize) {
-        toast({
-          title: "File too large",
-          description: `${file.name} exceeds 20MB limit`,
-          variant: "destructive",
-        });
-        continue;
-      }
-
-      const id = Math.random().toString(36).substring(7);
-      newAttachments.push({
-        id,
-        file,
-        price: 0,
-        uploading: true,
-      });
-    }
-
-    if (newAttachments.length === 0) return;
-
-    onAttachmentsChange([...attachments, ...newAttachments]);
-
-    // Upload files
-    for (const attachment of newAttachments) {
-      const formData = new FormData();
-      formData.append("files", attachment.file);
-
+  const saveDraft = useCallback(
+    (data: Partial<ThreadFormData>) => {
       try {
-        setUploadingFiles((prev) => [...prev, attachment.id]);
-
-        console.log(
-          `[FileUpload] Starting upload for: ${attachment.file.name}`,
+        localStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            ...data,
+            savedAt: new Date().toISOString(),
+          }),
         );
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
-
-        // Parse response regardless of status
-        const responseText = await res.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (parseError) {
-          console.error("[FileUpload] Failed to parse response:", responseText);
-          data = { error: responseText };
-        }
-
-        if (res.ok) {
-          console.log(
-            `[FileUpload] Upload successful for: ${attachment.file.name}`,
-            data,
-          );
-          const url = data.urls?.[0];
-
-          if (!url) {
-            console.error("[FileUpload] No URL returned from server:", data);
-            throw new Error("Server did not return file URL");
-          }
-
-          onAttachmentsChange((prev: FileAttachment[]) =>
-            prev.map((a: FileAttachment) =>
-              a.id === attachment.id ? { ...a, url, uploading: false } : a,
-            ),
-          );
-
-          toast({
-            title: "File uploaded",
-            description: `${attachment.file.name} uploaded successfully`,
-            variant: "default",
-          });
-        } else {
-          // Handle different error scenarios
-          console.error(
-            `[FileUpload] Upload failed for: ${attachment.file.name}`,
-            {
-              status: res.status,
-              statusText: res.statusText,
-              response: data,
-            },
-          );
-
-          let errorMessage = "Upload failed";
-
-          // Parse error message based on status code
-          if (res.status === 401) {
-            errorMessage = "Please log in to upload files";
-          } else if (res.status === 400) {
-            errorMessage = data.error || "Invalid file or request";
-          } else if (res.status === 413) {
-            errorMessage = "File size too large (max 20MB)";
-          } else if (res.status === 415) {
-            errorMessage = "File type not supported";
-          } else if (res.status === 500) {
-            errorMessage = data.error || "Server error - please try again";
-          } else if (data.error) {
-            errorMessage = data.error;
-          }
-
-          throw new Error(errorMessage);
-        }
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Upload failed";
-
-        console.error(
-          `[FileUpload] Error uploading ${attachment.file.name}:`,
-          error,
-        );
-
-        onAttachmentsChange((prev: FileAttachment[]) =>
-          prev.map((a: FileAttachment) =>
-            a.id === attachment.id
-              ? { ...a, uploading: false, error: errorMessage }
-              : a,
-          ),
-        );
-
-        toast({
-          title: "Upload failed",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      } finally {
-        setUploadingFiles((prev) => prev.filter((id) => id !== attachment.id));
+        console.error("Failed to save draft:", error);
       }
+    },
+    [draftKey],
+  );
+
+  const loadDraft = useCallback((): Partial<ThreadFormData> | null => {
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setHasDraft(true);
+        return parsed;
+      }
+    } catch (error) {
+      console.error("Failed to load draft:", error);
     }
-  };
+    return null;
+  }, [draftKey]);
 
-  const handlePriceChange = (id: string, price: number) => {
-    onAttachmentsChange(
-      attachments.map((a) => (a.id === id ? { ...a, price } : a)),
-    );
-  };
+  const clearDraft = useCallback(() => {
+    try {
+      localStorage.removeItem(draftKey);
+      setHasDraft(false);
+    } catch (error) {
+      console.error("Failed to clear draft:", error);
+    }
+  }, [draftKey]);
 
-  const removeAttachment = (id: string) => {
-    onAttachmentsChange(attachments.filter((a) => a.id !== id));
-  };
-
-  const totalPotentialEarnings = attachments.reduce(
-    (sum, a) => sum + a.price,
-    0,
-  );
-
-  const getFileIcon = (fileName: string) => {
-    const ext = fileName.split(".").pop()?.toLowerCase();
-    if (["pdf"].includes(ext || "")) return <FileText className="h-5 w-5" />;
-    if (["zip", "rar", "7z"].includes(ext || ""))
-      return <File className="h-5 w-5" />;
-    if (["ex4", "ex5", "mq4", "mq5"].includes(ext || ""))
-      return <Code className="h-5 w-5" />;
-    return <Paperclip className="h-5 w-5" />;
-  };
-
-  return (
-    <Card className="border-2 bg-gradient-to-br from-background to-muted/20">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Paperclip className="h-5 w-5 text-primary" />
-            File Attachments
-          </div>
-          {totalPotentialEarnings > 0 && (
-            <Badge
-              variant="secondary"
-              className="bg-yellow-500/10 text-yellow-600 animate-pulse"
-            >
-              <Coins className="h-3 w-3 mr-1" />
-              <span>Potential: </span>
-              <span>{totalPotentialEarnings}</span>
-              <span> Sweets</span>
-            </Badge>
-          )}
-        </CardTitle>
-        <CardDescription>
-          Share resources, indicators, or documentation
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-primary/30 rounded-xl p-8 text-center hover:bg-primary/5 hover:border-primary/50 transition-all cursor-pointer group"
-        >
-          <div className="flex flex-col items-center gap-3">
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:blur-2xl transition-all" />
-              <Upload className="h-12 w-12 text-primary relative z-10 group-hover:scale-110 transition-transform" />
-            </div>
-            <div>
-              <p className="text-base font-medium">Click to upload files</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                PDFs, ZIPs, EAs, indicators (max 20MB per file)
-              </p>
-            </div>
-          </div>
-          <input
-            ref={fileInputRef}
-            id="file-upload"
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleFileSelect}
-            accept=".pdf,.zip,.rar,.7z,.ex4,.ex5,.mq4,.mq5,.set,.csv"
-          />
-        </div>
-
-        {attachments.length > 0 && (
-          <div className="space-y-3">
-            {attachments.map((attachment) => (
-              <div
-                key={attachment.id}
-                className={cn(
-                  "relative p-4 border-2 rounded-xl bg-card transition-all animate-in fade-in-50 zoom-in-95",
-                  attachment.error
-                    ? "border-destructive/50 bg-destructive/5"
-                    : "hover:shadow-md",
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "p-2 rounded-lg",
-                      attachment.error ? "bg-destructive/20" : "bg-primary/10",
-                    )}
-                  >
-                    {getFileIcon(attachment.file.name)}
-                  </div>
-
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <p
-                      className="font-medium truncate"
-                      title={attachment.file.name}
-                    >
-                      {attachment.file.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {(attachment.file.size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
-
-                  {!attachment.error && !attachment.uploading && (
-                    <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-1">
-                      <Coins className="h-4 w-4 text-yellow-600" />
-                      <Input
-                        type="number"
-                        min="0"
-                        max="10000"
-                        value={attachment.price}
-                        onChange={(e) =>
-                          handlePriceChange(
-                            attachment.id,
-                            parseInt(e.target.value) || 0,
-                          )
-                        }
-                        className="w-20 h-7 text-sm bg-transparent border-0 focus-visible:ring-0"
-                        placeholder="0"
-                        disabled={attachment.uploading}
-                      />
-                    </div>
-                  )}
-
-                  {attachment.uploading && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-xs">Uploading...</span>
-                    </div>
-                  )}
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removeAttachment(attachment.id)}
-                    disabled={attachment.uploading}
-                    className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {attachment.error && (
-                  <div className="mt-2 flex items-center gap-2 text-destructive">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <p className="text-sm font-medium">{attachment.error}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+  return { saveDraft, loadDraft, clearDraft, hasDraft };
 }
 
-// Enhanced character counter with visual feedback
-function CharacterCounter({
-  current,
-  min,
-  max,
-}: {
-  current: number;
-  min?: number;
-  max: number;
-}) {
-  const percentage = (current / max) * 100;
-  const isValid = (!min || current >= min) && current <= max;
-  const isTooShort = min && current < min;
-  const isNearLimit = current > max * 0.8;
-
-  return (
-    <div className="flex items-center gap-3">
-      <div className="relative w-32 h-1.5 bg-muted rounded-full overflow-hidden">
-        <div
-          className={cn(
-            "absolute left-0 top-0 h-full transition-all duration-300",
-            isValid && !isNearLimit && "bg-green-500",
-            isNearLimit && isValid && "bg-yellow-500",
-            !isValid && "bg-red-500",
-          )}
-          style={{ width: `${Math.min(percentage, 100)}%` }}
-        />
-      </div>
-      <span
-        className={cn(
-          "text-xs font-medium transition-colors",
-          isValid && !isNearLimit && "text-green-600",
-          isNearLimit && isValid && "text-yellow-600",
-          !isValid && "text-red-600",
-        )}
-      >
-        {current}/{max}
-        {isTooShort && <span className="ml-1">({min - current} more)</span>}
-      </span>
-    </div>
-  );
-}
-
-// Enhanced progress indicator with clickable steps
-function EnhancedProgressIndicator({
-  currentStep,
-  totalSteps,
-  onStepClick,
-  steps,
-}: {
-  currentStep: number;
-  totalSteps: number;
-  onStepClick?: (step: number) => void;
-  steps: { title: string; description: string; icon: any }[];
-}) {
-  return (
-    <div className="mb-12">
-      <div className="flex items-center justify-between relative">
-        {/* Progress line */}
-        <div className="absolute left-0 right-0 top-8 h-0.5 bg-muted">
-          <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{
-              width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%`,
-            }}
-          />
-        </div>
-
-        {steps.map((step, index) => {
-          const stepNumber = index + 1;
-          const isActive = stepNumber === currentStep;
-          const isCompleted = stepNumber < currentStep;
-          const Icon = step.icon;
-
-          return (
-            <div
-              key={stepNumber}
-              className="relative z-10 flex flex-col items-center cursor-pointer group"
-              onClick={() =>
-                onStepClick &&
-                stepNumber <= currentStep &&
-                onStepClick(stepNumber)
-              }
-            >
-              <div
-                className={cn(
-                  "w-16 h-16 rounded-full flex items-center justify-center font-semibold transition-all duration-300 shadow-lg",
-                  isActive &&
-                    "bg-primary text-primary-foreground scale-110 ring-4 ring-primary/20",
-                  isCompleted && "bg-primary/20 text-primary hover:scale-105",
-                  !isActive && !isCompleted && "bg-muted text-muted-foreground",
-                )}
-              >
-                {isCompleted ? (
-                  <CheckCircle className="w-7 h-7" />
-                ) : (
-                  <Icon className="w-6 h-6" />
-                )}
-              </div>
-              <div className="mt-3 text-center">
-                <p
-                  className={cn(
-                    "font-semibold text-sm transition-colors",
-                    isActive && "text-primary",
-                    !isActive && "text-muted-foreground",
-                  )}
-                >
-                  {step.title}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-[120px]">
-                  {step.description}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-export default function EnhancedThreadComposeClient({
-  categories = [],
-}: EnhancedThreadComposeClientProps) {
+export default function ThreadComposeClient({
+  categories,
+}: ThreadComposeClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { user } = useAuth();
-  const { requireAuth, AuthPrompt, isAuthenticating } =
-    useAuthPrompt("create a thread");
+  const { requireAuth, AuthPrompt } = useAuthPrompt("create a thread");
 
   const [currentStep, setCurrentStep] = useState(1);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
-  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [quickStartMode, setQuickStartMode] = useState(true);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [seoData, setSeoData] = useState<SEOData | null>(null);
-  
-  // Track step progression - which steps have been acknowledged/completed
-  const [stepProgress, setStepProgress] = useState({
-    step1Acknowledged: false,
-    step2Acknowledged: false,
-  });
-  
-  // Track if we've shown a redirect toast (to avoid spam)
-  const redirectToastShownRef = useRef(false);
-  
-  // Track the last URL step we processed to prevent stale state and loops
-  const lastProcessedUrlStepRef = useRef<string | null>(null);
+  const [proInput, setProInput] = useState("");
+  const [conInput, setConInput] = useState("");
+  const [bodyCharCount, setBodyCharCount] = useState(0);
+  const [titleCharCount, setTitleCharCount] = useState(0);
+  const [uploadedFiles, setUploadedFiles] = useState<
+    Array<{ name: string; url: string }>
+  >([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showCustomBroker, setShowCustomBroker] = useState(false);
+  const [showCustomPlatform, setShowCustomPlatform] = useState(false);
 
   // Pre-select category from URL param
   const categoryParam = searchParams?.get("category") || "";
 
-  // Ensure categories is always an array
-  const safeCategories = Array.isArray(categories) ? categories : [];
+  // Get subcategories for selected category
+  const parentCategories = categories.filter((c) => !c.parentSlug);
+  const [selectedCategory, setSelectedCategory] =
+    useState<string>(categoryParam);
+  const subcategories = categories.filter(
+    (c) => c.parentSlug === selectedCategory,
+  );
 
-  // Group categories by parent/subcategory structure
-  const parentCategories = safeCategories.filter((c) => !c.parentSlug);
-  const getCategorySubcategories = (parentSlug: string) =>
-    safeCategories.filter((c) => c.parentSlug === parentSlug);
+  // Fetch all brokers from database using apiRequest
+  const { data: brokers, isLoading: brokersLoading } = useQuery<Broker[]>({
+    queryKey: ["/api/brokers"],
+  });
 
-  // Steps configuration
-  const steps = [
-    {
-      title: "Basics",
-      description: "Type & content",
-      icon: FileText,
-    },
-    {
-      title: "Enhance",
-      description: "Files & pricing",
-      icon: Sparkles,
-    },
-    {
-      title: "Review",
-      description: "Preview & post",
-      icon: CheckCircle,
-    },
-  ];
+  // Auto-save draft
+  const { saveDraft, loadDraft, clearDraft } = useThreadDraft(
+    selectedCategory || "general",
+  );
 
-  // Form setup
   const form = useForm<ThreadFormData>({
     resolver: zodResolver(threadFormSchema),
     defaultValues: {
-      threadType: "discussion",
       title: "",
-      body: "", // Plain text content
-      contentHtml: "", // Rich HTML content
-      categorySlug: categoryParam || "",
+      body: "",
+      categorySlug: categoryParam,
+      subcategorySlug: "",
+      threadType: "discussion",
+      seoExcerpt: "",
+      primaryKeyword: "",
+      instruments: [],
+      timeframes: [],
+      strategies: [],
+      platform: "",
+      broker: "",
+      riskNote: "",
       hashtags: [],
-      attachments: [],
+      reviewTarget: "",
+      reviewVersion: "",
+      reviewPros: [],
+      reviewCons: [],
+      questionSummary: "",
+      attachmentUrls: [],
     },
   });
 
-  // Use useWatch to subscribe to form values efficiently - include body for validation
-  // When passing an array of field names, useWatch returns an array of values in the same order
-  const [title, body, contentHtml, categorySlug, hashtags, threadType] =
-    useWatch({
-      control: form.control,
-      name: [
-        "title",
-        "body",
-        "contentHtml",
-        "categorySlug",
-        "hashtags",
-        "threadType",
-      ],
-    }) as [string, string, string, string, string[], string];
+  const watchedValues = form.watch();
+  const watchedThreadType = form.watch("threadType");
 
-  const titleLength = title?.length || 0;
-  const bodyText = body || "";
-  const contentHtmlValue = contentHtml || "";
-  const categorySlugValue = categorySlug || "";
-  const hashtagsList = hashtags || [];
-  const threadTypeValue = threadType || "discussion";
-
-  // Validation helpers - use form values for proper reactivity
-  const bodyTextLength = bodyText?.length || 0;
-
-  // Step 1 completion: Basic fields are filled and valid
-  const isStep1Complete =
-    titleLength >= 5 && // Match schema minimum
-    categorySlug &&
-    bodyTextLength >= 20; // Match schema minimum
-
-  // Step 2 completion: Step 1 is complete AND user acknowledged step 2
-  const isStep2Complete = isStep1Complete && stepProgress.step2Acknowledged;
-
-  // Calculate maximum accessible step based on completion
-  const getMaxAccessibleStep = useCallback(() => {
-    if (!isStep1Complete) {
-      return 1; // Can only access step 1
+  // Load draft on mount
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft) {
+      const shouldRestore = window.confirm("Restore previous draft?");
+      if (shouldRestore && draft) {
+        Object.keys(draft).forEach((key) => {
+          if (key !== "savedAt") {
+            form.setValue(key as any, (draft as any)[key]);
+          }
+        });
+      } else {
+        clearDraft();
+      }
     }
-    if (!stepProgress.step1Acknowledged) {
-      return 1; // Step 1 complete but not acknowledged yet
+  }, []);
+
+  // Auto-save every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const values = form.getValues();
+      if (values.title || values.body) {
+        saveDraft(values);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [form, saveDraft]);
+
+  // Auto-suggest tags based on title and body
+  useEffect(() => {
+    const text = `${watchedValues.title} ${watchedValues.body}`;
+    if (text.trim().length > 20) {
+      const tags = extractPotentialTags(text);
+      setSuggestedTags(tags);
+    } else {
+      setSuggestedTags([]);
     }
-    if (!stepProgress.step2Acknowledged) {
-      return 2; // Can access up to step 2
+  }, [watchedValues.title, watchedValues.body]);
+
+  // Update character counts
+  useEffect(() => {
+    setBodyCharCount((watchedValues.body || "").length);
+    setTitleCharCount((watchedValues.title || "").length);
+  }, [watchedValues.body, watchedValues.title]);
+
+  // Skip step 1 if no subcategories
+  useEffect(() => {
+    if (currentStep === 1 && subcategories.length === 0) {
+      setCurrentStep(2);
     }
-    return 3; // Can access step 3
-  }, [isStep1Complete, stepProgress.step1Acknowledged, stepProgress.step2Acknowledged]);
+  }, [currentStep, subcategories.length]);
 
-  // Legacy variable for backward compatibility
-  const canProceedStep1 = isStep1Complete;
-  const isFormValid = isStep1Complete;
-
-  // Hashtag management
-  const addHashtag = () => {
-    const tag = hashtagInput.trim().replace(/^#/, "");
-    const currentHashtags = form.getValues("hashtags");
-    if (tag && !currentHashtags.includes(tag) && currentHashtags.length < 10) {
-      form.setValue("hashtags", [...currentHashtags, tag]);
-      setHashtagInput("");
-    }
-  };
-
-  const removeHashtag = (tag: string) => {
-    const currentHashtags = form.getValues("hashtags");
-    form.setValue(
-      "hashtags",
-      currentHashtags.filter((t) => t !== tag),
-    );
-  };
-
-  // Create thread mutation
   const createThreadMutation = useMutation({
     mutationFn: async (data: ThreadFormData) => {
-      // Wrap requireAuth in a promise to work with async/await
-      await new Promise<void>((resolve) => {
-        requireAuth(() => resolve());
-      });
+      const res = await apiRequest("POST", "/api/threads", data);
+      return (await res.json()) as {
+        thread: any;
+        coinsEarned: number;
+        message: string;
+      };
+    },
+    onSuccess: (response) => {
+      clearDraft();
 
-      // Use the body field directly from the form data (already extracted by editor.getText())
-      const threadData = {
-        ...data,
-        body: data.body, // Plain text content from editor.getText()
-        contentHtml: data.contentHtml, // Rich HTML content from editor.getHTML()
-        attachments: attachments.map((a) => ({
-          id: a.id,
-          filename: a.file.name,
-          size: a.file.size,
-          url: a.url || "",
-          mimeType: a.file.type,
-          price: a.price,
-          downloads: 0,
-        })),
+      const threadUrl = `${window.location.origin}/thread/${response.thread.slug}`;
+
+      const copyLink = async () => {
+        try {
+          await navigator.clipboard.writeText(threadUrl);
+          toast({
+            title: "Link copied!",
+            description: "Thread URL copied to clipboard",
+          });
+        } catch (error) {
+          toast({
+            title: "Failed to copy",
+            description: "Please copy the link manually",
+            variant: "destructive",
+          });
+        }
       };
 
-      const response = await apiRequest("POST", "/api/threads", threadData);
-      return await response.json();
-    },
-    onSuccess: (data) => {
+      const shareThread = async () => {
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: response.thread.title,
+              text: "Check out this thread on YoForex",
+              url: threadUrl,
+            });
+          } catch (error) {
+            // User cancelled or share failed, fall back to copy
+            copyLink();
+          }
+        } else {
+          // Fallback to copy link
+          copyLink();
+        }
+      };
+
+      const followThread = async () => {
+        try {
+          // TODO: Implement follow thread API call when available
+          toast({
+            title: "Following thread",
+            description: "You'll get notified of new replies",
+          });
+        } catch (error) {
+          toast({
+            title: "Failed to follow",
+            description: "Please try again later",
+            variant: "destructive",
+          });
+        }
+      };
+
       toast({
-        title: "Thread created!",
-        description: "Your thread has been published successfully.",
+        title: "Posted!",
+        description: (
+          <div className="space-y-3">
+            <p>
+              {response.message} (+{response.coinsEarned} coins)
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={copyLink}
+                data-testid="button-copy-link"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy link
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={shareThread}
+                data-testid="button-share"
+              >
+                <Share2 className="h-3 w-3 mr-1" />
+                Share
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={followThread}
+                data-testid="button-follow"
+              >
+                <Bell className="h-3 w-3 mr-1" />
+                Follow
+              </Button>
+            </div>
+          </div>
+        ),
+        duration: 10000, // Extended duration to allow interaction with buttons
       });
 
-      // Redirect to the newly created thread
-      if (data.thread?.slug && data.thread?.categorySlug) {
-        router.push(`/thread/${data.thread.categorySlug}/${data.thread.slug}`);
-      } else if (data.thread?.slug) {
-        // Fallback if categorySlug is missing
-        router.push(`/thread/${data.thread.slug}`);
-      } else {
-        // Fallback to discussions page
-        router.push("/discussions");
-      }
+      // Navigate after a short delay to allow toast interaction
+      setTimeout(() => {
+        router.push(`/thread/${response.thread.slug}`);
+      }, 1000);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Failed to create thread",
-        description:
-          error instanceof Error ? error.message : "Something went wrong",
+        description: error.message || "Please try again",
         variant: "destructive",
       });
     },
   });
 
-  const onSubmit = (data: ThreadFormData) => {
-    createThreadMutation.mutate(data);
+  const onSubmit = async (data: ThreadFormData) => {
+    requireAuth(() => {
+      // Add uploaded file URLs to form data
+      data.attachmentUrls = uploadedFiles.map((f) => f.url);
+
+      createThreadMutation.mutate(data);
+    });
   };
 
-  // Navigate to a specific step by updating the URL
-  const navigateToStep = useCallback(
-    (step: number, bypassValidation = false) => {
-      let targetStep = step;
-      
-      // Only apply validation if not bypassed (bypassed when Continue is clicked)
-      if (!bypassValidation) {
-        // Get maximum accessible step based on form completion
-        const maxStep = getMaxAccessibleStep();
-        
-        // Clamp requested step to valid range and max accessible
-        targetStep = Math.min(Math.max(step, 1), 3, maxStep);
-      } else {
-        // Even with bypass, enforce absolute bounds
-        targetStep = Math.min(Math.max(step, 1), 3);
-      }
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
-      // Build URL with step parameter, preserving category if it exists
-      const params = new URLSearchParams();
-      if (categoryParam) {
-        params.set("category", categoryParam);
-      }
-      params.set("step", targetStep.toString());
-
-      // Update URL without scrolling
-      router.push(`/discussions/new?${params.toString()}`, { scroll: false });
-    },
-    [router, categoryParam, getMaxAccessibleStep],
-  );
-
-  // Sync currentStep state with URL parameter changes and enforce step validation
-  // Also ensure URL always has a step parameter
-  useEffect(() => {
-    const stepParam = searchParams?.get("step");
-
-    // If there's no step parameter in the URL, add it using replace to avoid back-button trap
-    if (!stepParam) {
-      const params = new URLSearchParams();
-      if (categoryParam) {
-        params.set("category", categoryParam);
-      }
-      params.set("step", "1");
-      router.replace(`/discussions/new?${params.toString()}`, { scroll: false });
+    // Validate file count
+    if (uploadedFiles.length + files.length > 10) {
+      toast({
+        title: "Too many files",
+        description: "Maximum 10 files allowed",
+        variant: "destructive",
+      });
       return;
     }
 
-    // Skip if we've already processed this exact URL step (prevents stale state and loops)
-    if (lastProcessedUrlStepRef.current === stepParam) {
-      return;
-    }
-
-    // Parse and validate the requested step
-    const requestedStep = Math.min(Math.max(parseInt(stepParam, 10) || 1, 1), 3);
-    
-    // Calculate max accessible step inline to avoid function reference dependency
-    let maxStep = 1;
-    if (!isStep1Complete) {
-      maxStep = 1;
-    } else if (!stepProgress.step1Acknowledged) {
-      maxStep = 1;
-    } else if (!stepProgress.step2Acknowledged) {
-      maxStep = 2;
-    } else {
-      maxStep = 3;
-    }
-
-    // If user tries to access a step beyond what's allowed, redirect to max accessible step
-    if (requestedStep > maxStep) {
-      // Show toast only once per redirect to avoid spam
-      if (!redirectToastShownRef.current) {
-        redirectToastShownRef.current = true;
+    // Validate file sizes
+    for (const file of Array.from(files)) {
+      if (file.size > 5 * 1024 * 1024) {
         toast({
-          title: "Complete previous steps first",
-          description: `Please complete Step ${maxStep} before proceeding.`,
-          variant: "default",
+          title: "File too large",
+          description: `${file.name} exceeds 5MB limit`,
+          variant: "destructive",
         });
-        
-        // Reset toast flag after a delay
-        setTimeout(() => {
-          redirectToastShownRef.current = false;
-        }, 3000);
+        return;
+      }
+    }
+
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => {
+        formData.append("files", file);
+      });
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Upload failed");
       }
 
-      // Redirect to max accessible step
-      const params = new URLSearchParams();
-      if (categoryParam) {
-        params.set("category", categoryParam);
-      }
-      params.set("step", maxStep.toString());
-      router.replace(`/discussions/new?${params.toString()}`, { scroll: false });
-      
-      // Mark this URL step as processed
-      lastProcessedUrlStepRef.current = maxStep.toString();
-      return;
-    }
+      const response = (await res.json()) as {
+        urls: string[];
+        message: string;
+      };
 
-    // Mark this URL step as processed before updating state
-    lastProcessedUrlStepRef.current = stepParam;
-    
-    // Sync URL step to state if valid
-    if (requestedStep !== currentStep) {
-      setCurrentStep(requestedStep);
-    }
-  }, [searchParams, router, categoryParam, isStep1Complete, stepProgress, toast, currentStep]);
+      const newFiles = response.urls.map((url: string, idx: number) => ({
+        name: files[idx].name,
+        url: url,
+      }));
 
-  const handleStepClick = (step: number) => {
-    if (step <= currentStep) {
-      navigateToStep(step);
+      setUploadedFiles([...uploadedFiles, ...newFiles]);
+
+      toast({
+        title: "Files uploaded!",
+        description: response.message,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload files",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      event.target.value = "";
     }
+  };
+
+  const removeUploadedFile = (index: number) => {
+    setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
+  };
+
+  const toggleTag = (
+    field: "instruments" | "timeframes" | "strategies",
+    value: string,
+  ) => {
+    const current = form.getValues(field) || [];
+    if (current.includes(value)) {
+      form.setValue(
+        field,
+        current.filter((v) => v !== value),
+      );
+    } else {
+      form.setValue(field, [...current, value]);
+    }
+  };
+
+  const addHashtag = () => {
+    if (!hashtagInput.trim()) return;
+    const normalized = hashtagInput.trim().replace(/^#/, "").toLowerCase();
+    const current = form.getValues("hashtags") || [];
+    if (!current.includes(normalized) && current.length < 10) {
+      form.setValue("hashtags", [...current, normalized]);
+    }
+    setHashtagInput("");
+  };
+
+  const removeHashtag = (tag: string) => {
+    const current = form.getValues("hashtags") || [];
+    form.setValue(
+      "hashtags",
+      current.filter((t) => t !== tag),
+    );
+  };
+
+  const addPro = () => {
+    if (!proInput.trim()) return;
+    const current = form.getValues("reviewPros") || [];
+    form.setValue("reviewPros", [...current, proInput.trim()]);
+    setProInput("");
+  };
+
+  const addCon = () => {
+    if (!conInput.trim()) return;
+    const current = form.getValues("reviewCons") || [];
+    form.setValue("reviewCons", [...current, conInput.trim()]);
+    setConInput("");
+  };
+
+  const totalTags =
+    (watchedValues.instruments?.length || 0) +
+    (watchedValues.timeframes?.length || 0) +
+    (watchedValues.strategies?.length || 0) +
+    (watchedValues.hashtags?.length || 0);
+
+  const threadTypeIcon = {
+    question: HelpCircle,
+    discussion: MessageSquare,
+    review: Star,
+    journal: BookOpen,
+    guide: Lightbulb,
+    program_sharing: Code,
   };
 
   return (
     <>
       <Header />
-      <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
-        <div className="container max-w-7xl mx-auto px-4 py-8">
-          {/* Main Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent animate-in fade-in-50 zoom-in-95">
-              Create New Thread
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-4xl mx-auto px-4 py-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">
+              Start a Thread
             </h1>
             <p className="text-muted-foreground mt-2">
-              Share your knowledge and connect with the trading community
+              Share your knowledge, ask questions, and connect with traders
             </p>
-
-            {/* Quick Start Toggle */}
-            <div className="flex items-center justify-center gap-2 mt-6">
-              <Label htmlFor="quick-start" className="text-sm font-medium">
-                Quick Start Mode
-              </Label>
-              <Button
-                id="quick-start"
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setQuickStartMode(!quickStartMode)}
-                className={cn(
-                  "relative w-12 h-6 rounded-full transition-colors",
-                  quickStartMode ? "bg-primary" : "bg-muted",
-                )}
-              >
-                <div
-                  className={cn(
-                    "absolute w-5 h-5 bg-background rounded-full transition-transform",
-                    quickStartMode ? "translate-x-6" : "translate-x-0.5",
-                  )}
-                />
-              </Button>
-            </div>
           </div>
 
-          {/* Progress Indicator */}
-          <EnhancedProgressIndicator
-            currentStep={currentStep}
-            totalSteps={3}
-            onStepClick={handleStepClick}
-            steps={steps}
-          />
-
-          <div className="grid grid-cols-1 lg:grid-cols-[240px,1fr,320px] gap-6 max-w-[1600px] mx-auto">
-            {/* Left Sidebar */}
-            <div className="hidden lg:block">
-              <div className="lg:sticky lg:top-[88px]">
-                <LeftEngagementSidebar />
-              </div>
-            </div>
-
-            {/* Main Form */}
-            <div className="w-full">
-              <Form {...form}>
-                <form
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="space-y-8"
-                >
-                  {/* STEP 1: Basic Information */}
-                  {currentStep === 1 && (
-                    <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2">
-                      {/* Basic Fields Card */}
-                      <Card className="border-2 shadow-lg">
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            <FileText className="h-5 w-5 text-primary" />
-                            Thread Details
-                          </CardTitle>
-                          <CardDescription>
-                            Add a compelling title and rich content
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                          {/* Category Selection */}
-                          <FormField
-                            control={form.control}
-                            name="categorySlug"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="flex items-center gap-2">
-                                  <Target className="h-4 w-4" />
-                                  Category
-                                </FormLabel>
-                                <Select
-                                  onValueChange={field.onChange}
-                                  value={field.value}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="h-11 text-base">
-                                      <SelectValue placeholder="Select a category..." />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent className="max-h-[300px]">
-                                    {parentCategories
-                                      .map((parent) => {
-                                        const subcategories =
-                                          getCategorySubcategories(parent.slug);
-
-                                        return [
-                                          <SelectItem
-                                            key={parent.slug}
-                                            value={parent.slug}
-                                            className="py-3"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <Globe className="h-4 w-4" />
-                                              <span className="font-medium">
-                                                {parent.name}
-                                              </span>
-                                            </div>
-                                          </SelectItem>,
-                                          ...subcategories.map((subcat) => (
-                                            <SelectItem
-                                              key={subcat.slug}
-                                              value={subcat.slug}
-                                              className="pl-8 py-2"
-                                            >
-                                              <div>
-                                                <span className="font-medium">
-                                                  ↳ {subcat.name}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground block">
-                                                  {subcat.description}
-                                                </span>
-                                              </div>
-                                            </SelectItem>
-                                          )),
-                                        ];
-                                      })
-                                      .flat()}
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          {/* Title */}
-                          <FormField
-                            control={form.control}
-                            name="title"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="flex items-center justify-between">
-                                  <span className="flex items-center gap-2">
-                                    <Sparkles className="h-4 w-4" />
-                                    Title
-                                  </span>
-                                  <CharacterCounter
-                                    current={titleLength}
-                                    min={5}
-                                    max={90}
-                                  />
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    placeholder="What's your XAUUSD scalping rule that actually works?"
-                                    className="text-lg h-12 overflow-wrap-anywhere"
-                                    data-testid="input-title"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          {/* Rich Text Editor */}
-                          <FormField
-                            control={form.control}
-                            name="contentHtml"
-                            render={({ field, fieldState }) => (
-                              <FormItem>
-                                <FormLabel className="flex items-center gap-2">
-                                  <BookOpen className="h-4 w-4" />
-                                  Your story or question
-                                </FormLabel>
-                                <FormControl>
-                                  <RichTextEditor
-                                    value={field.value}
-                                    onChange={(html, plainText) => {
-                                      field.onChange(html);
-                                      form.setValue("body", plainText);
-                                    }}
-                                    onBlur={field.onBlur}
-                                    error={!!fieldState.error}
-                                    placeholder="Share your thoughts, analysis, or questions with the community..."
-                                    minLength={20}
-                                    maxLength={50000}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          {/* Advanced Options */}
-                          {!quickStartMode && (
-                            <Collapsible
-                              open={showAdvancedOptions}
-                              onOpenChange={setShowAdvancedOptions}
-                            >
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="w-full justify-between"
-                                >
-                                  <span className="flex items-center gap-2">
-                                    <Settings2 className="h-4 w-4" />
-                                    Advanced Options
-                                  </span>
-                                  <ChevronDown
-                                    className={cn(
-                                      "h-4 w-4 transition-transform",
-                                      showAdvancedOptions && "rotate-180",
-                                    )}
-                                  />
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="mt-4 space-y-4">
-                                {/* Hashtags */}
-                                <div className="space-y-3">
-                                  <Label className="flex items-center gap-2">
-                                    <Hash className="h-4 w-4" />
-                                    Hashtags (optional)
-                                  </Label>
-                                  <div className="flex gap-2">
-                                    <Input
-                                      value={hashtagInput}
-                                      onChange={(e) =>
-                                        setHashtagInput(e.target.value)
-                                      }
-                                      onKeyPress={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault();
-                                          addHashtag();
-                                        }
-                                      }}
-                                      placeholder="Add hashtag..."
-                                      className="flex-1"
-                                    />
-                                    <Button
-                                      type="button"
-                                      onClick={addHashtag}
-                                      variant="secondary"
-                                    >
-                                      <Plus className="w-4 h-4 mr-1" />
-                                      Add
-                                    </Button>
-                                  </div>
-                                  {hashtagsList.length > 0 && (
-                                    <div className="flex flex-wrap gap-2">
-                                      {hashtagsList.map((tag: string) => (
-                                        <Badge
-                                          key={tag}
-                                          variant="secondary"
-                                          className="hashtag-badge gap-1 px-3 py-1 animate-in fade-in-50 zoom-in-95"
-                                        >
-                                          <span className="truncate">
-                                            #{tag}
-                                          </span>
-                                          <button
-                                            type="button"
-                                            onClick={() => removeHashtag(tag)}
-                                            className="ml-1 hover:text-destructive transition-colors flex-shrink-0"
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </button>
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          )}
-                        </CardContent>
-                      </Card>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* STEP 1: Where (Subcategory Selection) */}
+              {currentStep === 1 && subcategories.length > 0 && (
+                <Card data-testid="card-step-where">
+                  <CardHeader>
+                    <CardTitle>Where does this fit?</CardTitle>
+                    <CardDescription>
+                      Choose the best subcategory for your thread
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="subcategorySlug"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {subcategories.map((sub) => (
+                              <Button
+                                key={sub.slug}
+                                type="button"
+                                variant={
+                                  field.value === sub.slug
+                                    ? "default"
+                                    : "outline"
+                                }
+                                className="h-auto py-4 px-4 flex-col items-start gap-1"
+                                onClick={() => field.onChange(sub.slug)}
+                                data-testid={`button-subcategory-${sub.slug}`}
+                              >
+                                <span className="font-semibold text-sm">
+                                  {sub.name}
+                                </span>
+                                <span className="text-xs opacity-80">
+                                  {sub.description}
+                                </span>
+                              </Button>
+                            ))}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        onClick={() => setCurrentStep(2)}
+                        data-testid="button-next-step"
+                      >
+                        Next <ChevronRight className="ml-2 h-4 w-4" />
+                      </Button>
                     </div>
-                  )}
+                  </CardContent>
+                </Card>
+              )}
 
-                  {/* STEP 2: Enhance with SEO & File Attachments */}
-                  {currentStep === 2 && (
-                    <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2">
-                      {/* SEO Optimization Section */}
-                      <AutoSEOPanel
-                        title={title || ""}
-                        body={bodyText || ""}
-                        imageUrls={[]}
-                        categories={categories.map((c) => c.slug)}
-                        onSEOUpdate={(data) => setSeoData(data)}
-                      />
-
-                      {/* File Attachments Section */}
-                      <FileAttachmentSection
-                        attachments={attachments}
-                        onAttachmentsChange={setAttachments}
-                      />
-                    </div>
-                  )}
-
-                  {/* STEP 3: Preview & Submit */}
-                  {currentStep === 3 && (
-                    <div className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2">
-                      <Card className="border-2 shadow-lg">
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            <Eye className="h-5 w-5 text-primary" />
-                            Preview Your Thread
-                          </CardTitle>
-                          <CardDescription>
-                            Review your thread before posting
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-6">
-                            <div>
-                              <Badge variant="secondary" className="mb-2">
-                                {threadTypeValue}
-                              </Badge>
-                              <h2 className="text-2xl font-bold">{title}</h2>
-                            </div>
-
-                            <Separator />
-
-                            <div
-                              className="prose prose-sm dark:prose-invert max-w-none"
-                              dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(contentHtmlValue),
-                              }}
+              {/* STEP 2: Write (Main Content) */}
+              {currentStep === 2 && (
+                <Card data-testid="card-step-write">
+                  <CardHeader>
+                    <CardTitle>What's on your mind?</CardTitle>
+                    <CardDescription>
+                      Tell your story or ask your question
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Title */}
+                    <FormField
+                      control={form.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Title</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder="What's your topic? e.g., 'XAUUSD M5 scalping rules that worked for me'"
+                              data-testid="input-title"
                             />
-
-                            {hashtagsList.length > 0 && (
-                              <>
-                                <Separator />
-                                <div className="flex flex-wrap gap-2">
-                                  {hashtagsList.map((tag: string) => (
-                                    <Badge key={tag} variant="outline">
-                                      #{tag}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-
-                            {attachments.length > 0 && (
-                              <>
-                                <Separator />
-                                <div className="space-y-3">
-                                  <Label>
-                                    <span>Attachments (</span>
-                                    <span>{attachments.length}</span>
-                                    <span>)</span>
-                                  </Label>
-                                  {attachments.map((attachment) => (
-                                    <div
-                                      key={attachment.id}
-                                      className="flex items-center justify-between p-3 border rounded-lg bg-muted/30"
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <FileText className="h-5 w-5 text-muted-foreground" />
-                                        <span className="text-sm font-medium">
-                                          {attachment.file.name}
-                                        </span>
-                                      </div>
-                                      <Badge
-                                        variant={
-                                          attachment.price > 0
-                                            ? "default"
-                                            : "secondary"
-                                        }
-                                      >
-                                        {attachment.price > 0 ? (
-                                          <>
-                                            <Coins className="h-3 w-3 mr-1" />
-                                            <span>
-                                              {attachment.price} Sweets
-                                            </span>
-                                          </>
-                                        ) : (
-                                          <span>Free</span>
-                                        )}
-                                      </Badge>
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
-                            )}
+                          </FormControl>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Short and clear works best</span>
+                            <span data-testid="text-char-count">
+                              {titleCharCount} characters (15-90 required)
+                            </span>
                           </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  {/* Navigation */}
-                  <div className="flex flex-col gap-4">
-                    {/* Requirements feedback for Step 1 */}
-                    {currentStep === 1 && !canProceedStep1 && (
-                      <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-                        <div className="flex items-start gap-2">
-                          <Info className="h-4 w-4 mt-0.5 text-orange-500" />
-                          <div className="space-y-1">
-                            <p className="font-medium text-orange-600">
-                              Complete these to continue:
-                            </p>
-                            <ul className="space-y-0.5">
-                              {!categorySlug && (
-                                <li className="flex items-center gap-1">
-                                  <Circle className="h-2 w-2" />
-                                  <span>Select a category</span>
-                                </li>
-                              )}
-                              {titleLength < 5 && (
-                                <li className="flex items-center gap-1">
-                                  <Circle className="h-2 w-2" />
-                                  <span>
-                                    Add {5 - titleLength} more characters to
-                                    title
-                                  </span>
-                                </li>
-                              )}
-                              {bodyTextLength < 20 && (
-                                <li className="flex items-center gap-1">
-                                  <Circle className="h-2 w-2" />
-                                  <span>
-                                    Add {20 - bodyTextLength} more characters to
-                                    content
-                                  </span>
-                                </li>
-                              )}
-                            </ul>
+                    {/* Body */}
+                    <FormField
+                      control={form.control}
+                      name="body"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Body</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              {...field}
+                              rows={10}
+                              placeholder="Tell your story. What pair? timeframe? broker? results? What do you need help with?"
+                              data-testid="textarea-body"
+                            />
+                          </FormControl>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>
+                              Share the basics: pair, timeframe, broker, your
+                              rules/results, and what you need
+                            </span>
+                            <span data-testid="text-body-char-count">
+                              {bodyCharCount} characters (150-50,000 required)
+                            </span>
                           </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Auto-suggested Tags */}
+                    {suggestedTags.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm">Looks right?</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {suggestedTags.map((tag) => {
+                            const isInstrument = INSTRUMENTS.some(
+                              (i) => i.value.toLowerCase() === tag,
+                            );
+                            const isTimeframe = TIMEFRAMES.some(
+                              (t) => t.value.toLowerCase() === tag,
+                            );
+                            const isStrategy = STRATEGIES.some(
+                              (s) => s.value.toLowerCase() === tag,
+                            );
+
+                            let field:
+                              | "instruments"
+                              | "timeframes"
+                              | "strategies" = "instruments";
+                            if (isTimeframe) field = "timeframes";
+                            else if (isStrategy) field = "strategies";
+
+                            const isSelected = (
+                              form.getValues(field) || []
+                            ).includes(tag);
+
+                            return (
+                              <Badge
+                                key={tag}
+                                variant={isSelected ? "default" : "outline"}
+                                className="cursor-pointer hover-elevate"
+                                onClick={() => toggleTag(field, tag)}
+                                data-testid={`badge-suggested-tag-${tag}`}
+                              >
+                                {tag.toUpperCase()}
+                              </Badge>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
 
+                    {/* Optional Details Accordion */}
+                    <Accordion type="single" collapsible>
+                      <AccordionItem value="details">
+                        <AccordionTrigger data-testid="button-toggle-details">
+                          Add details (optional)
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-4 pt-4">
+                          {/* Instruments */}
+                          <FormField
+                            control={form.control}
+                            name="instruments"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Instruments</FormLabel>
+                                <div className="flex flex-wrap gap-2">
+                                  {INSTRUMENTS.slice(0, 15).map((inst) => (
+                                    <Badge
+                                      key={inst.value}
+                                      variant={
+                                        (field.value || []).includes(inst.value)
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      className="cursor-pointer hover-elevate"
+                                      onClick={() =>
+                                        toggleTag("instruments", inst.value)
+                                      }
+                                      data-testid={`badge-instrument-${inst.value}`}
+                                    >
+                                      {inst.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Timeframes */}
+                          <FormField
+                            control={form.control}
+                            name="timeframes"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Timeframes</FormLabel>
+                                <div className="flex flex-wrap gap-2">
+                                  {TIMEFRAMES.map((tf) => (
+                                    <Badge
+                                      key={tf.value}
+                                      variant={
+                                        (field.value || []).includes(tf.value)
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      className="cursor-pointer hover-elevate"
+                                      onClick={() =>
+                                        toggleTag("timeframes", tf.value)
+                                      }
+                                      data-testid={`badge-timeframe-${tf.value}`}
+                                    >
+                                      {tf.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Strategies */}
+                          <FormField
+                            control={form.control}
+                            name="strategies"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Strategies</FormLabel>
+                                <div className="flex flex-wrap gap-2">
+                                  {STRATEGIES.slice(0, 12).map((strat) => (
+                                    <Badge
+                                      key={strat.value}
+                                      variant={
+                                        (field.value || []).includes(
+                                          strat.value,
+                                        )
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      className="cursor-pointer hover-elevate"
+                                      onClick={() =>
+                                        toggleTag("strategies", strat.value)
+                                      }
+                                      data-testid={`badge-strategy-${strat.value}`}
+                                    >
+                                      {strat.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Platform */}
+                          <FormField
+                            control={form.control}
+                            name="platform"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Platform</FormLabel>
+                                <Select
+                                  onValueChange={(value) => {
+                                    if (value === "Other") {
+                                      setShowCustomPlatform(true);
+                                      field.onChange("");
+                                    } else {
+                                      setShowCustomPlatform(false);
+                                      field.onChange(value);
+                                    }
+                                  }}
+                                  value={
+                                    showCustomPlatform ? "Other" : field.value
+                                  }
+                                >
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-platform">
+                                      <SelectValue placeholder="Select platform" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {PLATFORMS.map((plat) => (
+                                      <SelectItem
+                                        key={plat.value}
+                                        value={plat.value}
+                                      >
+                                        {plat.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {showCustomPlatform && (
+                                  <FormControl>
+                                    <Input
+                                      value={field.value}
+                                      onChange={(e) => {
+                                        field.onChange(e.target.value);
+                                      }}
+                                      placeholder="Enter platform name manually"
+                                      data-testid="input-custom-platform"
+                                      className="mt-2"
+                                    />
+                                  </FormControl>
+                                )}
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Broker */}
+                          <FormField
+                            control={form.control}
+                            name="broker"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Broker</FormLabel>
+                                {brokersLoading ? (
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading brokers...
+                                  </div>
+                                ) : (
+                                  <>
+                                    <Select
+                                      onValueChange={(value) => {
+                                        if (value === "other") {
+                                          setShowCustomBroker(true);
+                                          field.onChange("");
+                                        } else {
+                                          setShowCustomBroker(false);
+                                          field.onChange(value);
+                                        }
+                                      }}
+                                      value={
+                                        showCustomBroker ? "other" : field.value
+                                      }
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger data-testid="select-broker">
+                                          <SelectValue placeholder="Select broker" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {brokers && brokers.length > 0 ? (
+                                          <>
+                                            {brokers.map((broker) => (
+                                              <SelectItem
+                                                key={broker.id}
+                                                value={broker.name}
+                                              >
+                                                {broker.name}
+                                              </SelectItem>
+                                            ))}
+                                            <SelectItem value="other">
+                                              Other
+                                            </SelectItem>
+                                          </>
+                                        ) : (
+                                          <SelectItem value="other">
+                                            Other
+                                          </SelectItem>
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                    {showCustomBroker && (
+                                      <FormControl>
+                                        <Input
+                                          value={field.value}
+                                          onChange={(e) => {
+                                            field.onChange(e.target.value);
+                                          }}
+                                          placeholder="Enter broker name manually"
+                                          data-testid="input-custom-broker"
+                                          className="mt-2"
+                                        />
+                                      </FormControl>
+                                    )}
+                                  </>
+                                )}
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Risk Note */}
+                          <FormField
+                            control={form.control}
+                            name="riskNote"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Risk Note</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder="e.g., risk 1% per trade"
+                                    data-testid="input-risk-note"
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+
                     <div className="flex justify-between">
-                      {currentStep > 1 && (
+                      {subcategories.length > 0 && (
                         <Button
                           type="button"
                           variant="outline"
-                          size="lg"
-                          onClick={() => navigateToStep(currentStep - 1)}
-                          className="gap-2"
+                          onClick={() => setCurrentStep(1)}
+                          data-testid="button-back"
                         >
-                          <ChevronLeft className="w-4 h-4" />
-                          <span>Previous</span>
+                          <ChevronLeft className="mr-2 h-4 w-4" /> Back
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        onClick={() => setCurrentStep(3)}
+                        className="ml-auto"
+                        data-testid="button-next-step"
+                      >
+                        Next <ChevronRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-                      <div className="ml-auto flex gap-3">
-                        {currentStep < 3 ? (
-                          <Button
-                            type="button"
-                            size="lg"
-                            onClick={() => {
-                              // Acknowledge current step before proceeding
-                              if (currentStep === 1 && isStep1Complete) {
-                                setStepProgress(prev => ({ ...prev, step1Acknowledged: true }));
-                              } else if (currentStep === 2 && isStep1Complete) {
-                                setStepProgress(prev => ({ ...prev, step2Acknowledged: true }));
-                              }
-                              // Bypass validation since we just acknowledged the step
-                              navigateToStep(currentStep + 1, true);
-                            }}
-                            disabled={currentStep === 1 && !canProceedStep1}
-                            className="gap-2 min-w-[120px]"
-                          >
-                            <span>Next</span>
-                            <ArrowRight className="w-4 h-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            type="submit"
-                            size="lg"
-                            disabled={
-                              !isFormValid || createThreadMutation.isPending
-                            }
-                            className="gap-2 min-w-[140px] bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-                          >
-                            {createThreadMutation.isPending ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span>Creating...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Rocket className="w-4 h-4" />
-                                <span>Post Thread (+3 coins)</span>
-                              </>
+              {/* STEP 3: Finish (Thread Type, Conditional Fields, SEO, Hashtags) */}
+              {currentStep === 3 && (
+                <Card data-testid="card-step-finish">
+                  <CardHeader>
+                    <CardTitle>Finish up</CardTitle>
+                    <CardDescription>
+                      Choose thread type and add final details
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Thread Type Selection */}
+                    <FormField
+                      control={form.control}
+                      name="threadType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Thread Type</FormLabel>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {THREAD_TYPES.map((type) => {
+                              const Icon =
+                                threadTypeIcon[
+                                  type.value as keyof typeof threadTypeIcon
+                                ];
+                              return (
+                                <Button
+                                  key={type.value}
+                                  type="button"
+                                  variant={
+                                    field.value === type.value
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                  className="h-auto py-4 px-4 flex-col items-center gap-2"
+                                  onClick={() => field.onChange(type.value)}
+                                  data-testid={`button-thread-type-${type.value}`}
+                                >
+                                  <Icon className="h-6 w-6" />
+                                  <span className="font-semibold text-sm">
+                                    {type.label}
+                                  </span>
+                                  <span className="text-xs opacity-80 text-center">
+                                    {type.description}
+                                  </span>
+                                </Button>
+                              );
+                            })}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Conditional: Question Summary */}
+                    {watchedThreadType === "question" && (
+                      <FormField
+                        control={form.control}
+                        name="questionSummary"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>What do you want solved?</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                rows={2}
+                                placeholder="Summarize your question in 1-2 sentences"
+                                data-testid="textarea-question-summary"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    {/* Conditional: Review Fields */}
+                    {watchedThreadType === "review" && (
+                      <div className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="reviewTarget"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>What are you reviewing? *</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  placeholder="EA/Indicator/Broker name"
+                                  data-testid="input-review-target"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="reviewVersion"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Version (optional)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  placeholder="e.g., v2.3"
+                                  data-testid="input-review-version"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="reviewRating"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Rating (1-5 stars) *</FormLabel>
+                              <div className="flex gap-2">
+                                {[1, 2, 3, 4, 5].map((rating) => (
+                                  <Button
+                                    key={rating}
+                                    type="button"
+                                    variant={
+                                      field.value === rating
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    size="icon"
+                                    onClick={() => field.onChange(rating)}
+                                    data-testid={`button-rating-${rating}`}
+                                  >
+                                    <Star
+                                      className={`h-4 w-4 ${field.value && field.value >= rating ? "fill-current" : ""}`}
+                                    />
+                                  </Button>
+                                ))}
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* Pros */}
+                        <FormField
+                          control={form.control}
+                          name="reviewPros"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Pros (optional)</FormLabel>
+                              <div className="space-y-2">
+                                <div className="flex gap-2">
+                                  <Input
+                                    value={proInput}
+                                    onChange={(e) =>
+                                      setProInput(e.target.value)
+                                    }
+                                    placeholder="Add a pro"
+                                    data-testid="input-pro"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        addPro();
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    onClick={addPro}
+                                    data-testid="button-add-pro"
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {(field.value || []).map((pro, idx) => (
+                                    <Badge
+                                      key={idx}
+                                      variant="default"
+                                      className="gap-1"
+                                    >
+                                      ✓ {pro}
+                                      <X
+                                        className="h-3 w-3 cursor-pointer"
+                                        onClick={() => {
+                                          form.setValue(
+                                            "reviewPros",
+                                            (field.value || []).filter(
+                                              (_, i) => i !== idx,
+                                            ),
+                                          );
+                                        }}
+                                      />
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* Cons */}
+                        <FormField
+                          control={form.control}
+                          name="reviewCons"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Cons (optional)</FormLabel>
+                              <div className="space-y-2">
+                                <div className="flex gap-2">
+                                  <Input
+                                    value={conInput}
+                                    onChange={(e) =>
+                                      setConInput(e.target.value)
+                                    }
+                                    placeholder="Add a con"
+                                    data-testid="input-con"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        addCon();
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    onClick={addCon}
+                                    data-testid="button-add-con"
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {(field.value || []).map((con, idx) => (
+                                    <Badge
+                                      key={idx}
+                                      variant="destructive"
+                                      className="gap-1"
+                                    >
+                                      ✗ {con}
+                                      <X
+                                        className="h-3 w-3 cursor-pointer"
+                                        onClick={() => {
+                                          form.setValue(
+                                            "reviewCons",
+                                            (field.value || []).filter(
+                                              (_, i) => i !== idx,
+                                            ),
+                                          );
+                                        }}
+                                      />
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {/* Optional SEO Section */}
+                    <Accordion type="single" collapsible defaultValue="seo">
+                      <AccordionItem value="seo">
+                        <AccordionTrigger data-testid="button-toggle-seo">
+                          Help others find this (optional)
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-4 pt-4">
+                          <FormField
+                            control={form.control}
+                            name="primaryKeyword"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  Primary Keyword (1-6 words)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder="e.g., xauusd m5 scalping"
+                                    data-testid="input-primary-keyword"
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  Short phrase that describes your topic
+                                </FormDescription>
+                              </FormItem>
                             )}
-                          </Button>
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="seoExcerpt"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  SEO Excerpt (120-160 chars)
+                                </FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    rows={2}
+                                    placeholder="One sentence summary for search engines"
+                                    data-testid="textarea-seo-excerpt"
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {(field.value || "").length}/160 chars
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* SEO Preview Component */}
+                          <SEOPreview
+                            title={watchedValues.title || ""}
+                            seoExcerpt={watchedValues.seoExcerpt || ""}
+                            primaryKeyword={watchedValues.primaryKeyword || ""}
+                            body={watchedValues.body || ""}
+                          />
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+
+                    {/* Hashtags */}
+                    <FormField
+                      control={form.control}
+                      name="hashtags"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Hashtags (max 10)</FormLabel>
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <Input
+                                value={hashtagInput}
+                                onChange={(e) =>
+                                  setHashtagInput(e.target.value)
+                                }
+                                placeholder="#xauusd #m5 #scalping"
+                                data-testid="input-hashtag"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addHashtag();
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                onClick={addHashtag}
+                                data-testid="button-add-hashtag"
+                              >
+                                Add
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {(field.value || []).map((tag, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant="secondary"
+                                  className="gap-1"
+                                  data-testid={`badge-hashtag-${tag}`}
+                                >
+                                  #{tag}
+                                  <X
+                                    className="h-3 w-3 cursor-pointer"
+                                    onClick={() => removeHashtag(tag)}
+                                  />
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* File Attachments */}
+                    <div className="space-y-3">
+                      <FormLabel>Attachments (optional)</FormLabel>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="file"
+                            multiple
+                            accept=".jpg,.jpeg,.png,.webp,.pdf,.set,.csv"
+                            onChange={handleFileUpload}
+                            disabled={isUploading || uploadedFiles.length >= 10}
+                            className="flex-1"
+                            data-testid="input-file-upload"
+                          />
+                          {isUploading && (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Screenshots, PDFs, SET files, CSV. Max 5MB each, 10
+                          files total.
+                        </p>
+
+                        {uploadedFiles.length > 0 && (
+                          <div className="space-y-2">
+                            {uploadedFiles.map((file, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between p-3 rounded-md border bg-card"
+                                data-testid={`uploaded-file-${idx}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">{file.name}</span>
+                                  <Check className="h-4 w-4 text-green-500" />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeUploadedFile(idx)}
+                                  data-testid={`button-remove-file-${idx}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                </form>
-              </Form>
-            </div>
 
-            {/* Right Sidebar */}
-            <div className="hidden lg:block">
-              <div className="lg:sticky lg:top-[88px]">
-                <RightEngagementSidebar />
-              </div>
-            </div>
-          </div>
+                    {/* Tag Count Warning */}
+                    {totalTags > 12 && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          You have {totalTags} tags. Maximum is 12. Please
+                          remove {totalTags - 12} tags.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {totalTags > 0 && totalTags <= 12 && (
+                      <div
+                        className="text-sm text-muted-foreground"
+                        data-testid="text-tag-count"
+                      >
+                        Total tags: {totalTags}/12
+                      </div>
+                    )}
+
+                    <div className="flex justify-between pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setCurrentStep(2)}
+                        data-testid="button-back"
+                      >
+                        <ChevronLeft className="mr-2 h-4 w-4" /> Back
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={
+                          createThreadMutation.isPending || totalTags > 12
+                        }
+                        data-testid="button-submit"
+                      >
+                        {createThreadMutation.isPending
+                          ? "Posting..."
+                          : "Post Thread"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </form>
+          </Form>
         </div>
       </div>
       <EnhancedFooter />
