@@ -77,6 +77,12 @@ import {
   Bell,
 } from "lucide-react";
 import SEOPreview from "@/components/SEOPreview";
+import RichTextEditor from "@/components/RichTextEditor";
+
+// Helper function to strip HTML tags and get plain text length
+function stripHtmlTags(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+}
 
 // Form validation schema
 const threadFormSchema = z.object({
@@ -293,7 +299,9 @@ export default function ThreadComposeClient({
 
   // Update character counts
   useEffect(() => {
-    setBodyCharCount((watchedValues.body || "").length);
+    // Strip HTML tags from body content for accurate character counting
+    const plainTextBody = stripHtmlTags(watchedValues.body || "");
+    setBodyCharCount(plainTextBody.length);
     setTitleCharCount((watchedValues.title || "").length);
   }, [watchedValues.body, watchedValues.title]);
 
@@ -688,11 +696,11 @@ export default function ThreadComposeClient({
                         <FormItem>
                           <FormLabel>Body</FormLabel>
                           <FormControl>
-                            <Textarea
-                              {...field}
-                              rows={10}
+                            <RichTextEditor
+                              value={field.value}
+                              onChange={field.onChange}
                               placeholder="Tell your story. What pair? timeframe? broker? results? What do you need help with?"
-                              data-testid="textarea-body"
+                              minHeight={400}
                             />
                           </FormControl>
                           <div className="flex justify-between text-xs text-muted-foreground">
