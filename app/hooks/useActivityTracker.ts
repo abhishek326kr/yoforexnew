@@ -101,7 +101,7 @@ export function useActivityTracker(enabled = true) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [enabled, isActive]);
+  }, [enabled]);
 
   return {
     isActive,
