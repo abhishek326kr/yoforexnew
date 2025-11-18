@@ -14,6 +14,9 @@ function ThreadComposeLoading() {
   );
 }
 
+// Use a static date to avoid hydration mismatch
+const STATIC_DATE = new Date('2024-01-01T00:00:00Z');
+
 const defaultCategories: ForumCategory[] = [
   {
     slug: "general-discussion",
@@ -26,8 +29,8 @@ const defaultCategories: ForumCategory[] = [
     postCount: 0,
     sortOrder: 1,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: STATIC_DATE,
+    updatedAt: STATIC_DATE
   },
   {
     slug: "forex-strategies",
@@ -40,8 +43,8 @@ const defaultCategories: ForumCategory[] = [
     postCount: 0,
     sortOrder: 2,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: STATIC_DATE,
+    updatedAt: STATIC_DATE
   },
   {
     slug: "expert-advisors",
@@ -54,8 +57,8 @@ const defaultCategories: ForumCategory[] = [
     postCount: 0,
     sortOrder: 3,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: STATIC_DATE,
+    updatedAt: STATIC_DATE
   },
   {
     slug: "forex-indicators-mt4-mt5",
@@ -68,8 +71,8 @@ const defaultCategories: ForumCategory[] = [
     postCount: 0,
     sortOrder: 4,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: STATIC_DATE,
+    updatedAt: STATIC_DATE
   },
   {
     slug: "binary-options",
@@ -82,8 +85,8 @@ const defaultCategories: ForumCategory[] = [
     postCount: 0,
     sortOrder: 5,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: STATIC_DATE,
+    updatedAt: STATIC_DATE
   }
 ];
 

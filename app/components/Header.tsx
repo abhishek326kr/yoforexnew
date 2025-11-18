@@ -75,6 +75,7 @@ export default function Header() {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
+  const [isMounted, setIsMounted] = useState(false);
   
   const pathname = usePathname();
   const router = useRouter();
@@ -111,13 +112,10 @@ export default function Header() {
   const userCoins = coinsData?.totalCoins ?? 0;
   const userCoinsUSD = coinsToUSD(userCoins);
 
-  // Conditionally show "Release EA" dropdown only on marketplace/content/publish pages
-  const showReleaseEA = pathname === "/marketplace" || 
-                        pathname?.startsWith("/content/") || 
-                        pathname === "/publish";
-
-  // Show "New Thread" button only on category pages
-  const showNewThread = pathname?.startsWith("/category/");
+  // Set mounted state to avoid hydration mismatch
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   // Fetch search suggestions
   useQuery({
@@ -189,7 +187,7 @@ export default function Header() {
   }, [searchSuggestions]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" suppressHydrationWarning>
       <div className="container flex h-16 items-center justify-between gap-4 max-w-7xl mx-auto px-4">
         <div className="flex items-center gap-6">
           <Link href="/">
@@ -201,100 +199,64 @@ export default function Header() {
             </div>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-1" suppressHydrationWarning>
             <Link href="/categories">
               <Button 
-                variant={pathname === "/categories" ? "default" : "ghost"} 
+                variant={isMounted && pathname === "/categories" ? "default" : "ghost"} 
                 size="sm" 
                 data-testid="button-categories"
-                aria-current={pathname === "/categories" ? "page" : undefined}
+                aria-current={isMounted && pathname === "/categories" ? "page" : undefined}
               >
                 Categories
               </Button>
             </Link>
             <Link href="/discussions">
               <Button 
-                variant={pathname === "/discussions" ? "default" : "ghost"} 
+                variant={isMounted && pathname === "/discussions" ? "default" : "ghost"} 
                 size="sm" 
                 data-testid="button-discussions"
-                aria-current={pathname === "/discussions" ? "page" : undefined}
+                aria-current={isMounted && pathname === "/discussions" ? "page" : undefined}
               >
                 Discussions
               </Button>
             </Link>
             
-            {/* Release EA Dropdown - Only visible on marketplace/content/publish pages */}
-            {showReleaseEA && (
-              <NavigationMenu>
-                <NavigationMenuList>
-                  <NavigationMenuItem>
-                    <NavigationMenuTrigger className="h-9 text-sm font-medium" data-testid="button-release-ea">
-                      Release EA
-                    </NavigationMenuTrigger>
-                    <NavigationMenuContent>
-                      <ul className="grid w-[500px] gap-2 p-4 md:grid-cols-2" data-testid="menu-release-categories">
-                        {publishCategories.map((cat) => (
-                          <li key={cat.slug}>
-                            <NavigationMenuLink asChild>
-                              <Link
-                                href={`/publish?category=${cat.slug}`}
-                                className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                                data-testid={`link-publish-${cat.slug}`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <cat.icon className="h-4 w-4" />
-                                  <div className="text-sm font-medium leading-none">{cat.name}</div>
-                                </div>
-                                <p className="line-clamp-1 text-xs leading-snug text-muted-foreground">
-                                  {cat.hint}
-                                </p>
-                              </Link>
-                            </NavigationMenuLink>
-                          </li>
-                        ))}
-                      </ul>
-                    </NavigationMenuContent>
-                  </NavigationMenuItem>
-                </NavigationMenuList>
-              </NavigationMenu>
-            )}
-            
             <Link href="/brokers">
               <Button 
-                variant={pathname === "/brokers" ? "default" : "ghost"} 
+                variant={isMounted && pathname === "/brokers" ? "default" : "ghost"} 
                 size="sm" 
                 data-testid="button-broker-reviews"
-                aria-current={pathname === "/brokers" ? "page" : undefined}
+                aria-current={isMounted && pathname === "/brokers" ? "page" : undefined}
               >
                 Broker Reviews
               </Button>
             </Link>
             <Link href="/marketplace">
               <Button 
-                variant={pathname === "/marketplace" ? "default" : "ghost"} 
+                variant={isMounted && pathname === "/marketplace" ? "default" : "ghost"} 
                 size="sm" 
                 data-testid="button-marketplace"
-                aria-current={pathname === "/marketplace" ? "page" : undefined}
+                aria-current={isMounted && pathname === "/marketplace" ? "page" : undefined}
               >
                 Marketplace
               </Button>
             </Link>
             <Link href="/marketplace/publish">
               <Button 
-                variant={pathname === "/marketplace/publish" || pathname === "/publish-ea" || pathname?.startsWith("/publish-ea/") || pathname?.startsWith("/ea/") ? "default" : "ghost"} 
+                variant={isMounted && (pathname === "/marketplace/publish" || pathname === "/publish-ea" || pathname?.startsWith("/publish-ea/") || pathname?.startsWith("/ea/")) ? "default" : "ghost"} 
                 size="sm" 
                 data-testid="button-publish-ea"
-                aria-current={pathname === "/marketplace/publish" || pathname === "/publish-ea" || pathname?.startsWith("/publish-ea/") ? "page" : undefined}
+                aria-current={isMounted && (pathname === "/marketplace/publish" || pathname === "/publish-ea" || pathname?.startsWith("/publish-ea/")) ? "page" : undefined}
               >
                 Publish EA
               </Button>
             </Link>
             <Link href="/members">
               <Button 
-                variant={pathname === "/members" ? "default" : "ghost"} 
+                variant={isMounted && pathname === "/members" ? "default" : "ghost"} 
                 size="sm" 
                 data-testid="button-members"
-                aria-current={pathname === "/members" ? "page" : undefined}
+                aria-current={isMounted && pathname === "/members" ? "page" : undefined}
               >
                 Members
               </Button>

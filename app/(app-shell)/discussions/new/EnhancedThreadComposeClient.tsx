@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import type { ForumCategory, Broker } from "@shared/schema";
 import {
   INSTRUMENTS,
@@ -17,7 +18,6 @@ import {
   extractPotentialTags,
 } from "@shared/tradingMetadata";
 import { countWords } from "@shared/threadUtils";
-import Header from "@/components/Header";
 import EnhancedFooter from "@/components/EnhancedFooter";
 import {
   Card,
@@ -77,7 +77,17 @@ import {
   Bell,
 } from "lucide-react";
 import SEOPreview from "@/components/SEOPreview";
-import RichTextEditor from "@/components/RichTextEditor";
+
+// Dynamic import to avoid SSR issues with Tiptap
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="border rounded-md overflow-hidden">
+      <div className="border-b bg-muted/30 p-2 h-10" />
+      <div className="p-4 bg-muted/10 animate-pulse" style={{ minHeight: "400px" }} />
+    </div>
+  ),
+});
 
 // Helper function to strip HTML tags and get plain text length
 function stripHtmlTags(html: string): string {
@@ -145,6 +155,7 @@ function useThreadDraft(categorySlug: string) {
 
   const saveDraft = useCallback(
     (data: Partial<ThreadFormData>) => {
+      if (typeof window === 'undefined') return;
       try {
         localStorage.setItem(
           draftKey,
@@ -161,6 +172,7 @@ function useThreadDraft(categorySlug: string) {
   );
 
   const loadDraft = useCallback((): Partial<ThreadFormData> | null => {
+    if (typeof window === 'undefined') return null;
     try {
       const saved = localStorage.getItem(draftKey);
       if (saved) {
@@ -175,6 +187,7 @@ function useThreadDraft(categorySlug: string) {
   }, [draftKey]);
 
   const clearDraft = useCallback(() => {
+    if (typeof window === 'undefined') return;
     try {
       localStorage.removeItem(draftKey);
       setHasDraft(false);
@@ -194,7 +207,25 @@ export default function ThreadComposeClient({
   const { toast } = useToast();
   const { requireAuth, AuthPrompt } = useAuthPrompt("create a thread");
 
-  const [currentStep, setCurrentStep] = useState(1);
+  // Pre-select category from URL param
+  const categoryParam = searchParams?.get("category") || "";
+
+  // Get subcategories for selected category
+  const parentCategories = categories.filter((c) => !c.parentSlug);
+  const [selectedCategory, setSelectedCategory] =
+    useState<string>(categoryParam);
+  const subcategories = categories.filter(
+    (c) => c.parentSlug === selectedCategory,
+  );
+
+  // Initialize currentStep to 2 if no subcategories, otherwise 1
+  const [currentStep, setCurrentStep] = useState(() => {
+    const initialSubcategories = categories.filter(
+      (c) => c.parentSlug === (categoryParam || ""),
+    );
+    return initialSubcategories.length === 0 ? 2 : 1;
+  });
+
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [hashtagInput, setHashtagInput] = useState("");
   const [proInput, setProInput] = useState("");
@@ -207,17 +238,6 @@ export default function ThreadComposeClient({
   const [isUploading, setIsUploading] = useState(false);
   const [showCustomBroker, setShowCustomBroker] = useState(false);
   const [showCustomPlatform, setShowCustomPlatform] = useState(false);
-
-  // Pre-select category from URL param
-  const categoryParam = searchParams?.get("category") || "";
-
-  // Get subcategories for selected category
-  const parentCategories = categories.filter((c) => !c.parentSlug);
-  const [selectedCategory, setSelectedCategory] =
-    useState<string>(categoryParam);
-  const subcategories = categories.filter(
-    (c) => c.parentSlug === selectedCategory,
-  );
 
   // Fetch all brokers from database using apiRequest
   const { data: brokers, isLoading: brokersLoading } = useQuery<Broker[]>({
@@ -584,7 +604,6 @@ export default function ThreadComposeClient({
 
   return (
     <>
-      <Header />
       <div className="min-h-screen bg-background">
         <div className="container max-w-4xl mx-auto px-4 py-8">
           <div className="mb-6">
