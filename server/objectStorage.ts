@@ -27,9 +27,35 @@ interface MockFile {
 
 export class ObjectStorageService {
   private s3Client: S3Client | null = null;
+  private r2Available: boolean = false;
+  private credentialsChecked: boolean = false;
 
   constructor() {
     // Initialize S3Client on first use via getS3Client()
+  }
+
+  private checkR2Credentials(): boolean {
+    if (this.credentialsChecked) {
+      return this.r2Available;
+    }
+
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const bucketName = process.env.R2_BUCKET_NAME;
+
+    this.credentialsChecked = true;
+    this.r2Available = !!(accountId && accessKeyId && secretAccessKey && bucketName);
+
+    if (!this.r2Available) {
+      console.warn('[ObjectStorage] R2 credentials not configured - will use in-memory storage as fallback');
+    }
+
+    return this.r2Available;
+  }
+
+  public isR2Available(): boolean {
+    return this.checkR2Credentials();
   }
 
   private getS3Client(): S3Client {
@@ -37,21 +63,13 @@ export class ObjectStorageService {
       return this.s3Client;
     }
 
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-
-    if (!accountId || !accessKeyId || !secretAccessKey) {
-      throw new Error(
-        'Cloudflare R2 credentials not configured.\n' +
-        'Required environment variables:\n' +
-        '  - CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID\n' +
-        '  - R2_ACCESS_KEY_ID: R2 access key ID\n' +
-        '  - R2_SECRET_ACCESS_KEY: R2 secret access key\n' +
-        '  - R2_BUCKET_NAME: R2 bucket name\n' +
-        'Please set these environment variables to use object storage.'
-      );
+    if (!this.checkR2Credentials()) {
+      throw new Error('R2 credentials not available');
     }
+
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID!;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID!;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY!;
 
     try {
       this.s3Client = new S3Client({

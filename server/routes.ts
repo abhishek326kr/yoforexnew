@@ -1314,7 +1314,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
 
-  // Simple file upload endpoint for images (without complex object storage)
+  // Simple file upload endpoint for images (persisted to R2 storage with in-memory fallback)
   app.post("/api/upload/simple", isAuthenticated, uploadSingle.single('files'), async (req, res) => {
     try {
       if (!req.file) {
@@ -1367,26 +1367,47 @@ export async function registerRoutes(app: Express): Promise<Express> {
         // Use original buffer if processing fails
       }
 
-      // Generate a public URL path for the image
-      // Store it in memory or a temporary location since we don't have a proper file storage configured
-      const publicUrl = `/api/images/${filename}`;
+      // Try uploading to R2 storage, fall back to memory if unavailable
+      let publicUrl: string;
+      let useR2 = false;
       
-      // Store in memory (in production, you'd want to use proper storage)
-      if (!global.uploadedImages) {
-        global.uploadedImages = new Map();
-      }
-      global.uploadedImages.set(filename, {
-        buffer: processedBuffer,
-        mimeType: file.mimetype,
-        originalName: file.originalname,
-        uploadedAt: new Date(),
-      });
-
-      // Clean up old images (keep only last 100)
-      if (global.uploadedImages.size > 100) {
-        const entries = Array.from(global.uploadedImages.entries());
-        const toDelete = entries.slice(0, entries.length - 100);
-        toDelete.forEach(([key]) => global.uploadedImages.delete(key));
+      try {
+        const objectStorageService = new ObjectStorageService();
+        
+        if (objectStorageService.isR2Available()) {
+          // Upload to R2 storage
+          const privateDir = objectStorageService.getPrivateObjectDir();
+          const fullPath = `${privateDir}/uploads/${filename}`;
+          
+          await objectStorageService.uploadFromBuffer(
+            fullPath,
+            processedBuffer,
+            file.mimetype
+          );
+          
+          publicUrl = `/api/images/${filename}`;
+          useR2 = true;
+          console.log(`[Upload] Image uploaded to R2: ${filename}`);
+        } else {
+          throw new Error('R2 not available');
+        }
+      } catch (r2Error: any) {
+        // Fall back to in-memory storage
+        console.warn(`[Upload] R2 upload failed, falling back to in-memory storage: ${r2Error.message}`);
+        
+        if (!global.uploadedImages) {
+          global.uploadedImages = new Map();
+        }
+        
+        global.uploadedImages.set(filename, {
+          buffer: processedBuffer,
+          mimeType: file.mimetype,
+          originalName: file.originalname,
+          uploadedAt: new Date(),
+        });
+        
+        publicUrl = `/api/images/${filename}`;
+        console.log(`[Upload] Image stored in memory: ${filename}`);
       }
 
       res.json({
@@ -1397,6 +1418,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
           size: processedBuffer.length,
           url: publicUrl,
           mimeType: file.mimetype,
+          storage: useR2 ? 'r2' : 'memory',
         }],
       });
     } catch (error: any) {
@@ -1407,18 +1429,74 @@ export async function registerRoutes(app: Express): Promise<Express> {
     }
   });
 
-  // Serve uploaded images from memory
-  app.get("/api/images/:filename", (req, res) => {
-    const { filename } = req.params;
-    
-    if (!global.uploadedImages || !global.uploadedImages.has(filename)) {
-      return res.status(404).json({ error: "Image not found" });
+  // Serve uploaded images from memory or R2 storage (with backward compatibility)
+  app.get("/api/images/:filename(*)", async (req, res) => {
+    try {
+      const { filename } = req.params;
+      
+      if (!filename) {
+        return res.status(400).json({ error: "Filename is required" });
+      }
+      
+      console.log(`[Image Serve] Requested filename: ${filename}`);
+      
+      // STEP 1: Check in-memory storage first (backward compatibility for legacy files)
+      if (global.uploadedImages && global.uploadedImages.has(filename)) {
+        console.log(`[Image Serve] Found in memory: ${filename}`);
+        const fileData = global.uploadedImages.get(filename)!;
+        
+        res.setHeader('Content-Type', fileData.mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        return res.send(fileData.buffer);
+      }
+      
+      // STEP 2: Try R2 storage if not in memory
+      try {
+        const objectStorageService = new ObjectStorageService();
+        
+        if (!objectStorageService.isR2Available()) {
+          console.log(`[Image Serve] R2 not available and file not in memory: ${filename}`);
+          return res.status(404).json({ error: "Image not found" });
+        }
+        
+        // Normalize path for R2: /api/images/${filename} -> /objects/uploads/${filename}
+        // Handle both direct filenames and paths with uploads/ prefix
+        let objectPath: string;
+        if (filename.startsWith('uploads/')) {
+          // Already has uploads/ prefix
+          objectPath = `/objects/${filename}`;
+        } else {
+          // Add uploads/ prefix for R2
+          objectPath = `/objects/uploads/${filename}`;
+        }
+        
+        console.log(`[Image Serve] Trying R2 with path: ${objectPath}`);
+        
+        const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+        
+        // Stream the image from R2 storage with 1-year cache
+        await objectStorageService.downloadObject(objectFile, res, 31536000);
+        console.log(`[Image Serve] Successfully served from R2: ${filename}`);
+      } catch (r2Error: any) {
+        console.error(`[Image Serve] R2 error for ${filename}:`, r2Error.message);
+        
+        // Return 404 for not found errors
+        if (r2Error instanceof ObjectNotFoundError || r2Error.message?.includes('not found')) {
+          return res.status(404).json({ error: "Image not found" });
+        }
+        
+        // Return 500 for other errors
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to serve image" });
+        }
+      }
+    } catch (error: any) {
+      console.error('[Image Serve] Unexpected error:', error);
+      
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to serve image" });
+      }
     }
-    
-    const imageData = global.uploadedImages.get(filename);
-    res.setHeader('Content-Type', imageData.mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-    res.send(imageData.buffer);
   });
 
   // Serve uploaded EA files from memory
@@ -1450,7 +1528,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
     res.send(fileData.buffer);
   });
 
-  // EA FILE UPLOAD ENDPOINT - specifically for EA .ex4/.ex5 files
+  // EA FILE UPLOAD ENDPOINT - specifically for EA .ex4/.ex5 files (persisted to R2 storage with in-memory fallback)
   app.post("/api/upload/ea", isAuthenticated, uploadSingle.single('file'), async (req, res) => {
     try {
       if (!req.file) {
@@ -1479,24 +1557,48 @@ export async function registerRoutes(app: Express): Promise<Express> {
       const timestamp = Date.now();
       const randomString = crypto.randomBytes(8).toString('hex');
       const filename = `ea_${timestamp}_${randomString}${ext}`;
-      const publicUrl = `/api/images/${filename}`;
       
-      // Store in memory (temporary solution - in production use proper storage)
-      if (!global.uploadedImages) {
-        global.uploadedImages = new Map();
-      }
-      global.uploadedImages.set(filename, {
-        buffer: file.buffer,
-        mimeType: file.mimetype || 'application/octet-stream',
-        originalName: file.originalname,
-        uploadedAt: new Date(),
-      });
-
-      // Clean up old files (keep only last 100)
-      if (global.uploadedImages.size > 100) {
-        const entries = Array.from(global.uploadedImages.entries());
-        const toDelete = entries.slice(0, entries.length - 100);
-        toDelete.forEach(([key]) => global.uploadedImages.delete(key));
+      // Try uploading to R2 storage, fall back to memory if unavailable
+      let publicUrl: string;
+      let useR2 = false;
+      
+      try {
+        const objectStorageService = new ObjectStorageService();
+        
+        if (objectStorageService.isR2Available()) {
+          // Upload to R2 storage
+          const privateDir = objectStorageService.getPrivateObjectDir();
+          const fullPath = `${privateDir}/uploads/${filename}`;
+          
+          await objectStorageService.uploadFromBuffer(
+            fullPath,
+            file.buffer,
+            file.mimetype || 'application/octet-stream'
+          );
+          
+          publicUrl = `/api/images/${filename}`;
+          useR2 = true;
+          console.log(`[Upload] EA file uploaded to R2: ${filename}`);
+        } else {
+          throw new Error('R2 not available');
+        }
+      } catch (r2Error: any) {
+        // Fall back to in-memory storage
+        console.warn(`[Upload] R2 upload failed, falling back to in-memory storage: ${r2Error.message}`);
+        
+        if (!global.uploadedImages) {
+          global.uploadedImages = new Map();
+        }
+        
+        global.uploadedImages.set(filename, {
+          buffer: file.buffer,
+          mimeType: file.mimetype || 'application/octet-stream',
+          originalName: file.originalname,
+          uploadedAt: new Date(),
+        });
+        
+        publicUrl = `/api/images/${filename}`;
+        console.log(`[Upload] EA file stored in memory: ${filename}`);
       }
 
       res.json({
@@ -1504,6 +1606,7 @@ export async function registerRoutes(app: Express): Promise<Express> {
         fileUrl: publicUrl,
         originalName: file.originalname,
         size: file.size,
+        storage: useR2 ? 'r2' : 'memory',
       });
     } catch (error: any) {
       console.error('[EA Upload] Error:', error);

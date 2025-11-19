@@ -49,13 +49,24 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 
 ## Recent Changes
 
-### Object Storage Simplification (November 19, 2025)
+### Object Storage Simplification & File Upload Persistence Fix (November 19, 2025)
+
+**Object Storage Simplification:**
 -   **Simplified to R2-only storage:** Removed Replit Object Storage and GCS implementations, reducing `server/objectStorage.ts` from ~1130 lines to ~570 lines (~50% reduction)
 -   **Removed dependencies:** Uninstalled `@replit/object-storage` and `@google-cloud/storage` packages
 -   **Fixed HEAD request signing:** Corrected signR2URL to use HeadObjectCommand for HEAD requests instead of GetObjectCommand
 -   **Maintained backward compatibility:** All existing file paths in database continue to work with path normalization
--   **Required environment variables:** CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
+-   **Required environment variables:** CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, PRIVATE_OBJECT_DIR
 -   **Metadata storage:** All file metadata (filePath, fileUrl, imageUrls) continues to be stored in Postgres as before
+
+**File Upload Persistence Fix:**
+-   **Fixed /api/upload/simple:** Now persists images to R2 storage instead of volatile memory
+-   **Fixed /api/upload/ea:** Now persists EA files (.ex4, .ex5, .mq4, .mq5, .zip) to R2 storage
+-   **Fixed /api/images/:filename:** Downloads from R2 with backward compatibility for legacy in-memory files
+-   **Graceful fallback:** When R2 credentials are missing (local dev), falls back to in-memory storage with console warnings
+-   **Production requirement:** R2 credentials MUST be configured in production for file persistence
+-   **Path consistency:** Upload returns `/api/images/${filename}`, download accepts same format
+-   **Storage indicator:** Upload response includes `storage: 'r2' | 'memory'` field to indicate storage location
 
 ## System Architecture
 
