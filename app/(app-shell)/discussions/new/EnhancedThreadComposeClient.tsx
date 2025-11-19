@@ -115,6 +115,7 @@ const threadFormSchema = z.object({
     .string()
     .min(150, "Need more detail—add a few sentences? (150 characters minimum)")
     .max(50000, "Body is too long"),
+  contentHtml: z.string().optional(),
   categorySlug: z.string().min(1, "Please select a category"),
   subcategorySlug: z.string().optional(),
   threadType: z
@@ -142,7 +143,7 @@ const threadFormSchema = z.object({
   reviewPros: z.array(z.string()).default([]),
   reviewCons: z.array(z.string()).default([]),
   questionSummary: z.string().max(200).optional().or(z.literal("")),
-  attachmentUrls: z.array(z.string()).default([]),
+  attachments: z.array(z.any()).optional(),
 });
 
 type ThreadFormData = z.infer<typeof threadFormSchema>;
@@ -236,7 +237,7 @@ export default function ThreadComposeClient({
   const [bodyCharCount, setBodyCharCount] = useState(0);
   const [titleCharCount, setTitleCharCount] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<
-    Array<{ name: string; url: string }>
+    Array<{ filename: string; url: string; size: number; mimeType: string }>
   >([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showCustomBroker, setShowCustomBroker] = useState(false);
@@ -258,6 +259,7 @@ export default function ThreadComposeClient({
     defaultValues: {
       title: "",
       body: "",
+      contentHtml: "",
       categorySlug: categoryParam,
       subcategorySlug: "",
       threadType: "discussion",
@@ -275,7 +277,7 @@ export default function ThreadComposeClient({
       reviewPros: [],
       reviewCons: [],
       questionSummary: "",
-      attachmentUrls: [],
+      attachments: [],
     },
   });
 
@@ -303,7 +305,7 @@ export default function ThreadComposeClient({
   useEffect(() => {
     const interval = setInterval(() => {
       const values = form.getValues();
-      if (values.title || values.body) {
+      if (values.title || values.body || values.contentHtml) {
         saveDraft(values);
       }
     }, 5000);
@@ -457,10 +459,17 @@ export default function ThreadComposeClient({
 
   const onSubmit = async (data: ThreadFormData) => {
     requireAuth(() => {
-      // Add uploaded file URLs to form data
-      data.attachmentUrls = uploadedFiles.map((f) => f.url);
+      // Add price and downloads to file objects from upload response
+      const attachments = uploadedFiles.map((f) => ({
+        ...f,  // Use all fields from upload response (filename, size, url, mimeType)
+        price: 0,
+        downloads: 0,
+      }));
 
-      createThreadMutation.mutate(data);
+      createThreadMutation.mutate({
+        ...data,
+        attachments,
+      });
     });
   };
 
@@ -513,15 +522,21 @@ export default function ThreadComposeClient({
 
       const response = (await res.json()) as {
         urls: string[];
+        files: Array<{
+          originalName: string;
+          filename: string;
+          size: number;
+          url: string;
+          mimeType: string;
+          storage: string;
+        }>;
         message: string;
       };
 
-      const newFiles = response.urls.map((url: string, idx: number) => ({
-        name: files[idx].name,
-        url: url,
-      }));
-
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
+      // Use the files array from upload response
+      if (response.files && Array.isArray(response.files)) {
+        setUploadedFiles([...uploadedFiles, ...response.files]);
+      }
 
       toast({
         title: "Files uploaded!",
@@ -745,8 +760,15 @@ export default function ThreadComposeClient({
                               <FormLabel>Body</FormLabel>
                               <FormControl>
                                 <RichTextEditor
-                                  value={field.value}
-                                  onChange={field.onChange}
+                                  value={form.watch("contentHtml") || ""}
+                                  onChange={(html) => {
+                                    // Set contentHtml
+                                    form.setValue("contentHtml", html);
+                                    
+                                    // Extract and set body (plain text)
+                                    const plainText = stripHtmlTags(html);
+                                    field.onChange(plainText);
+                                  }}
                                   placeholder="Tell your story. What pair? timeframe? broker? results? What do you need help with?"
                                   minHeight={400}
                                 />
@@ -1513,7 +1535,7 @@ export default function ThreadComposeClient({
                               >
                                 <div className="flex items-center gap-2">
                                   <FileText className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm">{file.name}</span>
+                                  <span className="text-sm">{file.filename}</span>
                                   <Check className="h-4 w-4 text-green-500" />
                                 </div>
                                 <Button

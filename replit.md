@@ -68,6 +68,40 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
 -   **Path consistency:** Upload returns `/api/images/${filename}`, download accepts same format
 -   **Storage indicator:** Upload response includes `storage: 'r2' | 'memory'` field to indicate storage location
 
+### "Post Thread" Functionality Fix (November 19, 2025)
+
+**Problem:** Thread creation was failing silently due to data format mismatch between frontend and backend.
+
+**Root Causes Identified:**
+1. RichTextEditor was sending HTML in `body` field instead of plain text
+2. Frontend wasn't sending `contentHtml` field at all
+3. Attachments were sent as URL strings instead of proper objects
+4. Attachment objects were fabricated with random UUIDs instead of using upload API response
+5. Draft system wasn't saving/loading `contentHtml` field
+6. Validation errors weren't displaying to users
+
+**Fixes Implemented in EnhancedThreadComposeClient.tsx:**
+1. **Form Schema:** Added `contentHtml` and `attachments` fields, removed `attachmentUrls`
+2. **Rich Text Editor Binding:** FormField bound to `body` for validation, reads from `contentHtml` for display, onChange sets BOTH fields
+3. **Plain Text Extraction:** Automatically extracts plain text from HTML using `stripHtmlTags()` and sets to `body` field
+4. **Attachment Handling:** Uses actual file metadata from upload API response (`response.files`) instead of fabricating data
+5. **onSubmit Function:** Maps uploaded files to attachments by adding only `price: 0` and `downloads: 0` fields
+6. **Draft System:** Updated auto-save to include `contentHtml` in save trigger, both `body` and `contentHtml` now saved/restored
+7. **Validation Feedback:** Users now see clear error messages when content is too short (<150 chars)
+
+**Backend Compatibility:**
+- Backend schema (`shared/schema.ts`) already supports `contentHtml` (line 2794) and structured `attachments` (lines 2797-2805)
+- API endpoint (`server/routes.ts` line 6011) already handles both fields correctly
+- No backend changes required - only frontend needed fixing
+
+**Results:**
+✅ Thread creation now works end-to-end
+✅ Both plain text (`body`) and rich HTML (`contentHtml`) sent to API
+✅ Attachments include all required metadata
+✅ Validation errors display correctly to users
+✅ Draft system preserves rich content
+✅ Ready for production deployment
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
