@@ -75,8 +75,11 @@ import {
   Copy,
   Share2,
   Bell,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import SEOPreview from "@/components/SEOPreview";
+import ThreadPreview from "@/components/ThreadPreview";
 
 // Dynamic import to avoid SSR issues with Tiptap
 const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
@@ -238,6 +241,7 @@ export default function ThreadComposeClient({
   const [isUploading, setIsUploading] = useState(false);
   const [showCustomBroker, setShowCustomBroker] = useState(false);
   const [showCustomPlatform, setShowCustomPlatform] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Fetch all brokers from database using apiRequest
   const { data: brokers, isLoading: brokersLoading } = useQuery<Broker[]>({
@@ -676,65 +680,112 @@ export default function ThreadComposeClient({
               {currentStep === 2 && (
                 <Card data-testid="card-step-write">
                   <CardHeader>
-                    <CardTitle>What's on your mind?</CardTitle>
-                    <CardDescription>
-                      Tell your story or ask your question
-                    </CardDescription>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <CardTitle>What's on your mind?</CardTitle>
+                        <CardDescription>
+                          Tell your story or ask your question
+                        </CardDescription>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowPreview(!showPreview)}
+                        data-testid="button-toggle-preview"
+                      >
+                        {showPreview ? (
+                          <>
+                            <EyeOff className="h-4 w-4 mr-2" />
+                            Hide Preview
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-2" />
+                            Show Preview
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {/* Title */}
-                    <FormField
-                      control={form.control}
-                      name="title"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Title</FormLabel>
-                          <FormControl>
-                            <Input
-                              {...field}
-                              placeholder="What's your topic? e.g., 'XAUUSD M5 scalping rules that worked for me'"
-                              data-testid="input-title"
-                            />
-                          </FormControl>
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Short and clear works best</span>
-                            <span data-testid="text-char-count">
-                              {titleCharCount} characters (15-90 required)
-                            </span>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    <div className={showPreview ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : ""}>
+                      <div className="space-y-6">
+                        {/* Title */}
+                        <FormField
+                          control={form.control}
+                          name="title"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Title</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  placeholder="What's your topic? e.g., 'XAUUSD M5 scalping rules that worked for me'"
+                                  data-testid="input-title"
+                                />
+                              </FormControl>
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Short and clear works best</span>
+                                <span data-testid="text-char-count">
+                                  {titleCharCount} characters (15-90 required)
+                                </span>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                    {/* Body */}
-                    <FormField
-                      control={form.control}
-                      name="body"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Body</FormLabel>
-                          <FormControl>
-                            <RichTextEditor
-                              value={field.value}
-                              onChange={field.onChange}
-                              placeholder="Tell your story. What pair? timeframe? broker? results? What do you need help with?"
-                              minHeight={400}
-                            />
-                          </FormControl>
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>
-                              Share the basics: pair, timeframe, broker, your
-                              rules/results, and what you need
-                            </span>
-                            <span data-testid="text-body-char-count">
-                              {bodyCharCount} characters (150-50,000 required)
-                            </span>
+                        {/* Body */}
+                        <FormField
+                          control={form.control}
+                          name="body"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Body</FormLabel>
+                              <FormControl>
+                                <RichTextEditor
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  placeholder="Tell your story. What pair? timeframe? broker? results? What do you need help with?"
+                                  minHeight={400}
+                                />
+                              </FormControl>
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>
+                                  Share the basics: pair, timeframe, broker, your
+                                  rules/results, and what you need
+                                </span>
+                                <span data-testid="text-body-char-count">
+                                  {bodyCharCount} characters (150-50,000 required)
+                                </span>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {/* Live Preview Panel */}
+                      {showPreview && (
+                        <div className="lg:border-l lg:pl-6">
+                          <div className="sticky top-4">
+                            <div className="mb-4">
+                              <h3 className="text-lg font-semibold">Live Preview</h3>
+                              <p className="text-sm text-muted-foreground">
+                                See how your thread will look
+                              </p>
+                            </div>
+                            <Card className="overflow-hidden max-h-[600px]">
+                              <ThreadPreview
+                                title={watchedValues.title}
+                                body={watchedValues.body}
+                              />
+                            </Card>
                           </div>
-                          <FormMessage />
-                        </FormItem>
+                        </div>
                       )}
-                    />
+                    </div>
 
                     {/* Auto-suggested Tags */}
                     {suggestedTags.length > 0 && (

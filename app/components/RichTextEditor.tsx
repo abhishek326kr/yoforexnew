@@ -61,8 +61,13 @@ export default function RichTextEditor({
       throw new Error(error.error || 'Upload failed');
     }
 
-    const { urls } = await response.json();
-    return urls[0];
+    const data = await response.json();
+    
+    if (!data.urls || !Array.isArray(data.urls) || data.urls.length === 0) {
+      throw new Error('Invalid response from upload server');
+    }
+
+    return data.urls[0];
   }, []);
 
   const handleImageUpload = useCallback(async (file: File) => {
