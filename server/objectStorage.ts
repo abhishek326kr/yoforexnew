@@ -154,8 +154,13 @@ export class ObjectStorageService {
     
     switch (method) {
       case 'GET':
-      case 'HEAD':
         command = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: objectName,
+        });
+        break;
+      case 'HEAD':
+        command = new HeadObjectCommand({
           Bucket: bucketName,
           Key: objectName,
         });

@@ -47,6 +47,16 @@ YoForex is a comprehensive trading community platform for forex traders, offerin
     -   Fix any issues architect identifies
     -   Only mark tasks complete after architect approval
 
+## Recent Changes
+
+### Object Storage Simplification (November 19, 2025)
+-   **Simplified to R2-only storage:** Removed Replit Object Storage and GCS implementations, reducing `server/objectStorage.ts` from ~1130 lines to ~570 lines (~50% reduction)
+-   **Removed dependencies:** Uninstalled `@replit/object-storage` and `@google-cloud/storage` packages
+-   **Fixed HEAD request signing:** Corrected signR2URL to use HeadObjectCommand for HEAD requests instead of GetObjectCommand
+-   **Maintained backward compatibility:** All existing file paths in database continue to work with path normalization
+-   **Required environment variables:** CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
+-   **Metadata storage:** All file metadata (filePath, fileUrl, imageUrls) continues to be stored in Postgres as before
+
 ## System Architecture
 
 YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js backend, with PostgreSQL for data persistence.
@@ -71,6 +81,7 @@ YoForex utilizes a hybrid frontend built with Next.js and a robust Express.js ba
     -   **EA Publishing System:** A complete Expert Advisor marketplace with a multi-step publishing form, secure file uploads, preview functionality, SEO optimization, and download management.
     -   **Search System:** Global omnisearch across threads, users, marketplace, brokers, with real-time autocomplete, advanced filtering, and optimized performance.
     -   **Members System:** Member directory with individual profiles, statistics, badges, search, filter, and a secure follow system.
+    -   **Object Storage Architecture:** R2-only implementation with all file metadata stored in Postgres (filePath, fileUrl, imageUrls columns). Supports HEAD requests for metadata validation, backward compatible with legacy paths.
     -   **Autoscale Deployment Architecture:** Lightweight Express app for immediate health checks and asynchronous loading of the full application for rapid port binding and health check compliance in production.
     -   **Build & Deployment Architecture:** Route group structure (`(public)`, `(app-shell)`), build-safe auth fetching, SSR-safe fetch layer for data fetching during builds, and consistent `@` aliases for import paths.
     -   **Error Handling Infrastructure:** Comprehensive error handling with structured logging, error categorization (6 types), severity levels (4 levels), context-aware logging with sensitive data sanitization, user-friendly messages, and transaction safety for critical operations.
