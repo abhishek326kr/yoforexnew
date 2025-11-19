@@ -215,9 +215,7 @@ import {
 } from "./utils/errorHandler.js";
 import { 
   ObjectStorageService, 
-  ObjectNotFoundError,
-  parseObjectPath,
-  objectStorageClient
+  ObjectNotFoundError
 } from "./objectStorage.js";
 import { ObjectPermission, ObjectAccessGroupType } from "./objectAcl.js";
 import {

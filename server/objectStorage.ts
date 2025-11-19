@@ -1,21 +1,14 @@
 // Object Storage Service for YoForex EA file uploads
-// Supports Replit sidecar, direct GCS authentication, and Cloudflare R2
-import { Storage, File } from "@google-cloud/storage";
+// Cloudflare R2 storage implementation only
 import { Response } from "express";
 import { randomUUID } from "crypto";
-import { Client as ReplitStorageClient } from "@replit/object-storage";
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Readable } from "stream";
 import {
   ObjectAclPolicy,
   ObjectPermission,
-  canAccessObject,
-  getObjectAclPolicy,
-  setObjectAclPolicy,
 } from "./objectAcl";
-
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -25,124 +18,38 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
-interface SignURLParams {
-  bucketName: string;
-  objectName: string;
-  method: "GET" | "PUT" | "DELETE" | "HEAD";
-  ttlSec: number;
+// Mock File interface for backward compatibility with existing code
+// R2 uses S3Client directly, but routes.ts expects File objects
+interface MockFile {
+  name: string; // Stores the R2 key
+  exists: () => Promise<[boolean]>;
 }
 
-interface StorageSigner {
-  signURL(params: SignURLParams): Promise<string>;
-}
-
-class ReplitSidecarSigner implements StorageSigner {
-  async signURL(params: SignURLParams): Promise<string> {
-    console.log(`[ReplitSidecarSigner] Signing URL via Storage SDK for bucket: ${params.bucketName}, object: ${params.objectName}`);
-    
-    // Access objectStorageClient (only used in Replit mode, never null)
-    if (!objectStorageClient) {
-      throw new Error('Storage client not initialized for Replit mode');
-    }
-    const bucket = objectStorageClient.bucket(params.bucketName);
-    const file = bucket.file(params.objectName);
-
-    const actionMap: Record<string, 'read' | 'write' | 'delete'> = {
-      GET: 'read',
-      HEAD: 'read',
-      PUT: 'write',
-      DELETE: 'delete',
-    };
-
-    try {
-      const [url] = await file.getSignedUrl({
-        version: 'v4',
-        action: actionMap[params.method] || 'read',
-        expires: Date.now() + (params.ttlSec * 1000),
-      });
-
-      return url;
-    } catch (error: any) {
-      console.error('[ReplitSidecarSigner] Error signing URL:', error.message);
-      throw new Error(
-        `Failed to sign URL via Replit sidecar: ${error.message}\n` +
-        `Bucket: ${params.bucketName}, Object: ${params.objectName}`
-      );
-    }
-  }
-}
-
-class DirectGCSSigner implements StorageSigner {
-  private storage: Storage;
+export class ObjectStorageService {
+  private s3Client: S3Client | null = null;
 
   constructor() {
-    const projectId = process.env.GCS_PROJECT_ID;
-    const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-
-    if (!projectId && !keyFilename) {
-      console.warn(
-        "[ObjectStorage] Warning: Running in GCS mode but credentials not configured. " +
-        "Set GOOGLE_APPLICATION_CREDENTIALS and GCS_PROJECT_ID environment variables."
-      );
-      console.warn(
-        "[ObjectStorage] Falling back to default Google Cloud credentials (Application Default Credentials)."
-      );
-    }
-
-    try {
-      this.storage = new Storage({
-        projectId: projectId || undefined,
-        keyFilename: keyFilename || undefined,
-      });
-    } catch (error: any) {
-      console.error(
-        "[ObjectStorage] Failed to initialize Google Cloud Storage client:",
-        error.message
-      );
-      throw new Error(
-        "Failed to initialize Google Cloud Storage. " +
-        "Ensure GOOGLE_APPLICATION_CREDENTIALS and GCS_PROJECT_ID are set correctly. " +
-        "Error: " + error.message
-      );
-    }
+    // Initialize S3Client on first use via getS3Client()
   }
 
-  async signURL(params: SignURLParams): Promise<string> {
-    const bucket = this.storage.bucket(params.bucketName);
-    const file = bucket.file(params.objectName);
+  private getS3Client(): S3Client {
+    if (this.s3Client) {
+      return this.s3Client;
+    }
 
-    const actionMap: Record<string, 'read' | 'write' | 'delete'> = {
-      GET: 'read',
-      HEAD: 'read',
-      PUT: 'write',
-      DELETE: 'delete',
-    };
-
-    const [url] = await file.getSignedUrl({
-      version: 'v4',
-      action: actionMap[params.method] || 'read',
-      expires: Date.now() + (params.ttlSec * 1000),
-    });
-
-    return url;
-  }
-}
-
-class R2Signer implements StorageSigner {
-  private s3Client: S3Client;
-
-  constructor() {
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
-      console.error(
-        "[ObjectStorage] R2 mode requires CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY"
-      );
       throw new Error(
-        "R2 credentials not configured. " +
-        "Set CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY environment variables."
+        'Cloudflare R2 credentials not configured.\n' +
+        'Required environment variables:\n' +
+        '  - CLOUDFLARE_ACCOUNT_ID: Your Cloudflare account ID\n' +
+        '  - R2_ACCESS_KEY_ID: R2 access key ID\n' +
+        '  - R2_SECRET_ACCESS_KEY: R2 secret access key\n' +
+        '  - R2_BUCKET_NAME: R2 bucket name\n' +
+        'Please set these environment variables to use object storage.'
       );
     }
 
@@ -155,7 +62,7 @@ class R2Signer implements StorageSigner {
           secretAccessKey,
         },
       });
-      console.log(`[R2Signer] Initialized S3Client for account: ${accountId}`);
+      console.log(`[ObjectStorage] Initialized R2 S3Client for account: ${accountId}`);
     } catch (error: any) {
       console.error("[ObjectStorage] Failed to initialize R2 S3Client:", error.message);
       throw new Error(
@@ -164,260 +71,125 @@ class R2Signer implements StorageSigner {
         "Error: " + error.message
       );
     }
+
+    return this.s3Client;
   }
 
-  async signURL(params: SignURLParams): Promise<string> {
+  private getBucketName(): string {
     const bucketName = process.env.R2_BUCKET_NAME;
-    
     if (!bucketName) {
-      throw new Error("R2_BUCKET_NAME environment variable not set");
-    }
-
-    console.log(`[R2Signer] Signing URL for bucket: ${bucketName}, object: ${params.objectName}, method: ${params.method}`);
-
-    let command;
-    
-    switch (params.method) {
-      case 'GET':
-      case 'HEAD':
-        command = new GetObjectCommand({
-          Bucket: bucketName,
-          Key: params.objectName,
-        });
-        break;
-      case 'PUT':
-        command = new PutObjectCommand({
-          Bucket: bucketName,
-          Key: params.objectName,
-        });
-        break;
-      case 'DELETE':
-        command = new DeleteObjectCommand({
-          Bucket: bucketName,
-          Key: params.objectName,
-        });
-        break;
-      default:
-        throw new Error(`Unsupported method: ${params.method}`);
-    }
-
-    try {
-      const url = await getSignedUrl(this.s3Client, command, {
-        expiresIn: params.ttlSec,
-      });
-      
-      console.log(`[R2Signer] Successfully signed URL for ${params.method} ${params.objectName}`);
-      return url;
-    } catch (error: any) {
-      console.error('[R2Signer] Error signing URL:', error.message);
       throw new Error(
-        `Failed to sign URL for R2: ${error.message}\n` +
-        `Bucket: ${bucketName}, Object: ${params.objectName}`
+        'R2_BUCKET_NAME environment variable not set.\n' +
+        'Please set R2_BUCKET_NAME to your Cloudflare R2 bucket name.'
       );
     }
-  }
-}
-
-function detectStorageMode(): 'replit' | 'gcs' | 'r2' {
-  const explicitMode = process.env.STORAGE_MODE?.toLowerCase();
-  
-  if (explicitMode === 'replit' || explicitMode === 'gcs' || explicitMode === 'r2') {
-    console.log(`[ObjectStorage] Using explicit STORAGE_MODE: ${explicitMode}`);
-    return explicitMode;
-  }
-
-  const hasR2Credentials = !!(
-    process.env.CLOUDFLARE_ACCOUNT_ID &&
-    process.env.R2_ACCESS_KEY_ID
-  );
-
-  if (hasR2Credentials) {
-    console.log('[ObjectStorage] Auto-detected R2 credentials, using r2 mode');
-    return 'r2';
-  }
-
-  const isReplit = !!(
-    process.env.REPL_ID ||
-    process.env.REPL_SLUG ||
-    process.env.REPLIT_DEPLOYMENT ||
-    process.env.REPLIT_DB_URL
-  );
-
-  const mode = isReplit ? 'replit' : 'gcs';
-  console.log(`[ObjectStorage] Auto-detected storage mode: ${mode} (REPL_ID=${!!process.env.REPL_ID})`);
-  
-  return mode;
-}
-
-function createStorageClient(): Storage | null {
-  const mode = detectStorageMode();
-
-  if (mode === 'r2') {
-    console.log('[ObjectStorage] R2 mode - Storage client intentionally null (R2 uses S3Client)');
-    console.log('[ObjectStorage] R2 code paths should never use objectStorageClient');
-    // Return null - R2 code should never use objectStorageClient
-    return null as any;
-  } else if (mode === 'replit') {
-    console.log('[ObjectStorage] Initializing Replit sidecar storage client');
-    return new Storage({
-      credentials: {
-        audience: "replit",
-        subject_token_type: "access_token",
-        token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-        type: "external_account",
-        credential_source: {
-          url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-          format: {
-            type: "json",
-            subject_token_field_name: "access_token",
-          },
-        },
-        universe_domain: "googleapis.com",
-      },
-      projectId: "",
-    });
-  } else {
-    const projectId = process.env.GCS_PROJECT_ID;
-    const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-
-    if (!projectId || !keyFilename) {
-      console.warn(
-        '[ObjectStorage] GCS mode detected but credentials not configured. ' +
-        'Set GCS_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS environment variables. ' +
-        'Falling back to default credentials.'
-      );
-      return new Storage();
-    }
-
-    console.log('[ObjectStorage] Initializing direct GCS storage client');
-    return new Storage({
-      projectId,
-      keyFilename,
-    });
-  }
-}
-
-export const objectStorageClient = createStorageClient();
-
-export class ObjectStorageService {
-  private signer: StorageSigner | null = null;
-  private r2Client: S3Client | null = null;
-
-  constructor() {}
-
-  private getR2Client(): S3Client {
-    if (this.r2Client) {
-      return this.r2Client;
-    }
-
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-
-    if (!accountId || !accessKeyId || !secretAccessKey) {
-      throw new Error(
-        'R2 credentials not configured. ' +
-        'Set CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY environment variables.'
-      );
-    }
-
-    this.r2Client = new S3Client({
-      region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
-
-    return this.r2Client;
+    return bucketName;
   }
 
   private async checkR2ObjectExists(key: string): Promise<boolean> {
-    const bucketName = process.env.R2_BUCKET_NAME;
-    if (!bucketName) {
-      throw new Error('R2_BUCKET_NAME environment variable not set');
-    }
-
     try {
-      const client = this.getR2Client();
+      const client = this.getS3Client();
+      const bucketName = this.getBucketName();
+      
       const command = new HeadObjectCommand({
         Bucket: bucketName,
         Key: key,
       });
       
       await client.send(command);
-      console.log(`[R2Helper] Object exists: ${key}`);
+      console.log(`[ObjectStorage] Object exists: ${key}`);
       return true;
     } catch (error: any) {
       if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-        console.log(`[R2Helper] Object not found: ${key}`);
+        console.log(`[ObjectStorage] Object not found: ${key}`);
         return false;
       }
-      console.error(`[R2Helper] Error checking object existence:`, error);
+      console.error(`[ObjectStorage] Error checking object existence:`, error);
       throw error;
     }
   }
 
   private async getR2Object(key: string) {
-    const bucketName = process.env.R2_BUCKET_NAME;
-    if (!bucketName) {
-      throw new Error('R2_BUCKET_NAME environment variable not set');
-    }
-
-    const client = this.getR2Client();
+    const client = this.getS3Client();
+    const bucketName = this.getBucketName();
+    
     const command = new GetObjectCommand({
       Bucket: bucketName,
       Key: key,
     });
     
     const response = await client.send(command);
-    console.log(`[R2Helper] Retrieved object: ${key}, ContentType: ${response.ContentType}, Size: ${response.ContentLength}`);
+    console.log(`[ObjectStorage] Retrieved object: ${key}, ContentType: ${response.ContentType}, Size: ${response.ContentLength}`);
     return response;
   }
 
   private async deleteR2Object(key: string): Promise<void> {
-    const bucketName = process.env.R2_BUCKET_NAME;
-    if (!bucketName) {
-      throw new Error('R2_BUCKET_NAME environment variable not set');
-    }
-
-    const client = this.getR2Client();
+    const client = this.getS3Client();
+    const bucketName = this.getBucketName();
+    
     const command = new DeleteObjectCommand({
       Bucket: bucketName,
       Key: key,
     });
     
     await client.send(command);
-    console.log(`[R2Helper] Deleted object: ${key}`);
+    console.log(`[ObjectStorage] Deleted object: ${key}`);
   }
 
-  private getStorageSigner(): StorageSigner {
-    if (this.signer) {
-      return this.signer;
-    }
+  private async signR2URL({
+    objectName,
+    method,
+    ttlSec,
+  }: {
+    objectName: string;
+    method: "GET" | "PUT" | "DELETE" | "HEAD";
+    ttlSec: number;
+  }): Promise<string> {
+    const client = this.getS3Client();
+    const bucketName = this.getBucketName();
 
-    const mode = detectStorageMode();
+    console.log(`[ObjectStorage] Signing R2 URL for bucket: ${bucketName}, object: ${objectName}, method: ${method}`);
+
+    let command;
+    
+    switch (method) {
+      case 'GET':
+      case 'HEAD':
+        command = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: objectName,
+        });
+        break;
+      case 'PUT':
+        command = new PutObjectCommand({
+          Bucket: bucketName,
+          Key: objectName,
+        });
+        break;
+      case 'DELETE':
+        command = new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: objectName,
+        });
+        break;
+      default:
+        throw new Error(`Unsupported method: ${method}`);
+    }
 
     try {
-      if (mode === 'r2') {
-        console.log('[ObjectStorage] Creating R2Signer');
-        this.signer = new R2Signer();
-      } else if (mode === 'replit') {
-        console.log('[ObjectStorage] Creating ReplitSidecarSigner');
-        this.signer = new ReplitSidecarSigner();
-      } else {
-        console.log('[ObjectStorage] Creating DirectGCSSigner');
-        this.signer = new DirectGCSSigner();
-      }
+      const url = await getSignedUrl(client, command, {
+        expiresIn: ttlSec,
+      });
+      
+      console.log(`[ObjectStorage] Successfully signed URL for ${method} ${objectName}`);
+      return url;
     } catch (error: any) {
-      console.error('[ObjectStorage] Failed to initialize signer:', error.message);
+      console.error('[ObjectStorage] Error signing URL:', error.message);
       throw new Error(
-        `Failed to initialize storage signer in ${mode} mode: ${error.message}`
+        `Failed to sign R2 URL: ${error.message}\n` +
+        `Bucket: ${bucketName}, Object: ${objectName}`
       );
     }
-
-    return this.signer;
   }
 
   getPublicObjectSearchPaths(): Array<string> {
@@ -443,163 +215,81 @@ export class ObjectStorageService {
     const dir = process.env.PRIVATE_OBJECT_DIR || "";
     if (!dir) {
       throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var.\n" +
-          "On Replit: Use bucket ID format (e.g., /xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/content)\n" +
-          "On other servers: Use bucket name format (e.g., /your-bucket-name/content)"
+        "PRIVATE_OBJECT_DIR not set.\n" +
+        "Set PRIVATE_OBJECT_DIR environment variable to your R2 storage directory.\n" +
+        "Example: /my-app/content"
       );
     }
-    
-    // Validate bucket ID format on Replit
-    const mode = detectStorageMode();
-    if (mode === 'replit') {
-      const { bucketName } = parseObjectPath(dir);
-      const isBucketIdFormat = /^[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(bucketName);
-      
-      if (!isBucketIdFormat) {
-        console.error(
-          `[ObjectStorage] ERROR: PRIVATE_OBJECT_DIR must use bucket ID on Replit.\n` +
-          `Current value: "${dir}"\n` +
-          `Bucket extracted: "${bucketName}" (invalid - looks like display name)\n` +
-          `Required format: /xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/content\n` +
-          `Fix: Update PRIVATE_OBJECT_DIR in Replit Secrets with your bucket ID from the Object Storage panel.`
-        );
-        throw new Error(
-          `Invalid PRIVATE_OBJECT_DIR: Must use bucket ID (not display name) on Replit.\n` +
-          `Current: "${bucketName}" → Expected: "xxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"`
-        );
-      }
-    }
-    
     return dir;
   }
 
-  async searchPublicObject(filePath: string): Promise<File | null> {
+  async searchPublicObject(filePath: string): Promise<MockFile | null> {
     const searchPaths = this.getPublicObjectSearchPaths();
     if (searchPaths.length === 0) {
       return null;
     }
 
-    const mode = detectStorageMode();
-    console.log('[searchPublicObject] Storage mode:', mode, 'filePath:', filePath);
-
-    if (mode === 'r2') {
-      // R2 implementation - NO objectStorageClient usage
-      console.log('[searchPublicObject] R2 mode - using S3Client directly');
-      
-      for (const searchPath of searchPaths) {
-        const fullPath = `${searchPath}/${filePath}`;
-        // Extract R2 key without using parseObjectPath (which assumes GCS format)
-        const key = fullPath.replace(/^\//, '');  // Remove leading slash for R2 key
-        
-        console.log('[searchPublicObject] R2 checking key:', key);
-        
-        const exists = await this.checkR2ObjectExists(key);
-        if (exists) {
-          console.log('[searchPublicObject] R2 object found:', key);
-          // Return a minimal mock File object with the key stored in name property
-          // R2 operations will extract this key and use S3Client
-          return {
-            name: key,
-            exists: () => Promise.resolve([true]),
-          } as any;
-        }
-      }
-      
-      console.log('[searchPublicObject] No R2 object found for:', filePath);
-      return null;
-    }
-
-    // GCS/Replit implementation using objectStorageClient
-    if (!objectStorageClient) {
-      throw new Error('Storage client not initialized for GCS/Replit mode');
-    }
+    console.log('[ObjectStorage] Searching for public object:', filePath);
     
     for (const searchPath of searchPaths) {
       const fullPath = `${searchPath}/${filePath}`;
-      console.log('[searchPublicObject] Checking path:', fullPath);
-
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-
-      const [exists] = await file.exists();
+      // Extract R2 key (remove leading slash)
+      const key = fullPath.replace(/^\//, '');
+      
+      console.log('[ObjectStorage] Checking R2 key:', key);
+      
+      const exists = await this.checkR2ObjectExists(key);
       if (exists) {
-        console.log('[searchPublicObject] GCS/Replit object found:', objectName);
-        return file;
+        console.log('[ObjectStorage] Public object found:', key);
+        // Return a mock File object with the key stored in name property
+        return {
+          name: key,
+          exists: () => Promise.resolve([true]),
+        };
       }
     }
-
-    console.log('[searchPublicObject] No public object found for:', filePath);
+    
+    console.log('[ObjectStorage] No public object found for:', filePath);
     return null;
   }
 
-  async downloadObject(file: File, res: Response, cacheTtlSec: number = 3600) {
-    const mode = detectStorageMode();
-    console.log('[downloadObject] Storage mode:', mode);
+  async downloadObject(file: MockFile, res: Response, cacheTtlSec: number = 3600) {
+    console.log('[ObjectStorage] Downloading R2 object');
     
     try {
-      if (mode === 'r2') {
-        console.log('[downloadObject] Using R2 mode for download');
-        
-        const objectKey = file.name;
-        console.log('[downloadObject] R2 object key:', objectKey);
-        
-        const r2Response = await this.getR2Object(objectKey);
-        
-        const contentType = r2Response.ContentType || 'application/octet-stream';
-        const contentLength = r2Response.ContentLength || 0;
-        
-        console.log('[downloadObject] R2 ContentType:', contentType);
-        console.log('[downloadObject] R2 ContentLength:', contentLength);
-        
-        res.set({
-          'Content-Type': contentType,
-          'Content-Length': contentLength.toString(),
-          'Cache-Control': `private, max-age=${cacheTtlSec}`,
-        });
-        
-        if (r2Response.Body) {
-          const stream = r2Response.Body as Readable;
-          
-          stream.on('error', (err) => {
-            console.error('[downloadObject] R2 stream error:', err);
-            if (!res.headersSent) {
-              res.status(500).json({ error: 'Error streaming file from R2' });
-            }
-          });
-          
-          stream.pipe(res);
-          console.log('[downloadObject] R2 stream started');
-        } else {
-          console.error('[downloadObject] R2 response has no body');
-          res.status(500).json({ error: 'R2 object has no body' });
-        }
-        return;
-      }
+      const objectKey = file.name;
+      console.log('[ObjectStorage] R2 object key:', objectKey);
       
-      const [metadata] = await file.getMetadata();
-      const aclPolicy = await getObjectAclPolicy(file);
-      const isPublic = aclPolicy?.visibility === "public";
+      const r2Response = await this.getR2Object(objectKey);
+      
+      const contentType = r2Response.ContentType || 'application/octet-stream';
+      const contentLength = r2Response.ContentLength || 0;
+      
+      console.log('[ObjectStorage] ContentType:', contentType);
+      console.log('[ObjectStorage] ContentLength:', contentLength);
       
       res.set({
-        "Content-Type": metadata.contentType || "application/octet-stream",
-        "Content-Length": metadata.size,
-        "Cache-Control": `${
-          isPublic ? "public" : "private"
-        }, max-age=${cacheTtlSec}`,
+        'Content-Type': contentType,
+        'Content-Length': contentLength.toString(),
+        'Cache-Control': `private, max-age=${cacheTtlSec}`,
       });
-
-      const stream = file.createReadStream();
-
-      stream.on("error", (err) => {
-        console.error("Stream error:", err);
-        if (!res.headersSent) {
-          res.status(500).json({ error: "Error streaming file" });
-        }
-      });
-
-      stream.pipe(res);
+      
+      if (r2Response.Body) {
+        const stream = r2Response.Body as Readable;
+        
+        stream.on('error', (err) => {
+          console.error('[ObjectStorage] Stream error:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Error streaming file from R2' });
+          }
+        });
+        
+        stream.pipe(res);
+        console.log('[ObjectStorage] Stream started');
+      } else {
+        console.error('[ObjectStorage] R2 response has no body');
+        res.status(500).json({ error: 'R2 object has no body' });
+      }
     } catch (error) {
       console.error("Error downloading file:", error);
       if (!res.headersSent) {
@@ -621,12 +311,9 @@ export class ObjectStorageService {
     });
   }
 
-  async getObjectEntityFile(objectPath: string): Promise<File> {
-    console.log('[getObjectEntityFile] ========== START ==========');
-    console.log('[getObjectEntityFile] Input objectPath:', objectPath);
-    
-    const mode = detectStorageMode();
-    console.log('[getObjectEntityFile] Storage mode:', mode);
+  async getObjectEntityFile(objectPath: string): Promise<MockFile> {
+    console.log('[ObjectStorage] ========== getObjectEntityFile START ==========');
+    console.log('[ObjectStorage] Input objectPath:', objectPath);
     
     // Get private directory for path normalization
     let privateDir = this.getPrivateObjectDir();
@@ -639,19 +326,19 @@ export class ObjectStorageService {
     // Handle normalized paths (/objects/...)
     if (objectPath.startsWith("/objects/")) {
       const parts = objectPath.slice(1).split("/");
-      console.log('[getObjectEntityFile] Path parts (normalized):', parts);
+      console.log('[ObjectStorage] Path parts (normalized):', parts);
       
       if (parts.length < 2) {
-        console.log('[getObjectEntityFile] ERROR: Not enough path parts');
+        console.log('[ObjectStorage] ERROR: Not enough path parts');
         throw new ObjectNotFoundError();
       }
       
       entityId = parts.slice(1).join("/");
-      console.log('[getObjectEntityFile] Entity ID from normalized path:', entityId);
+      console.log('[ObjectStorage] Entity ID from normalized path:', entityId);
     }
     // Handle legacy paths with private directory prefix
     else if (objectPath.startsWith(privateDir) || objectPath.startsWith(privateDir.replace(/\/$/, ''))) {
-      console.log('[getObjectEntityFile] Path contains private directory prefix (legacy format)');
+      console.log('[ObjectStorage] Path contains private directory prefix (legacy format)');
       // Strip the private directory prefix to get entityId
       const normalizedPrivateDir = privateDir.replace(/\/$/, '');
       if (objectPath.startsWith(normalizedPrivateDir + '/')) {
@@ -659,191 +346,115 @@ export class ObjectStorageService {
       } else {
         entityId = objectPath.substring(normalizedPrivateDir.length);
       }
-      console.log('[getObjectEntityFile] Entity ID from legacy path:', entityId);
+      console.log('[ObjectStorage] Entity ID from legacy path:', entityId);
     }
     else {
-      console.log('[getObjectEntityFile] ERROR: Path does not start with /objects/ or private directory');
-      console.log('[getObjectEntityFile] Expected: /objects/... or', privateDir);
+      console.log('[ObjectStorage] ERROR: Path does not start with /objects/ or private directory');
+      console.log('[ObjectStorage] Expected: /objects/... or', privateDir);
       throw new ObjectNotFoundError();
     }
     
-    if (mode === 'r2') {
-      // R2 implementation - NO objectStorageClient usage
-      console.log('[getObjectEntityFile] R2 mode - using S3Client directly');
-      
-      // Build R2 key: remove leading slash from privateDir and append entityId
-      // entityId already has the path after private directory (e.g., "uploads/filename.jpg")
-      const r2Key = `${privateDir.replace(/^\//, '')}${entityId}`;
-      
-      console.log('[getObjectEntityFile] R2 Key:', r2Key);
-      console.log('[getObjectEntityFile] Checking if R2 object exists...');
-      
-      const exists = await this.checkR2ObjectExists(r2Key);
-      
-      if (!exists) {
-        console.log('[getObjectEntityFile] ERROR: R2 object not found');
-        console.log('[getObjectEntityFile] ========== END (NOT FOUND) ==========');
-        throw new ObjectNotFoundError();
-      }
-      
-      console.log('[getObjectEntityFile] R2 object exists, creating mock File object');
-      
-      // Return a minimal mock File that won't be used for actual operations
-      // R2 operations use S3Client directly, not File objects
-      // Store the R2 key in the name property for downloadObject to use
-      const mockFile = {
-        name: r2Key,
-        exists: () => Promise.resolve([true]),
-      } as any;
-      
-      console.log('[getObjectEntityFile] ========== END (SUCCESS - R2) ==========');
-      return mockFile;
-    }
+    // Build R2 key: remove leading slash from privateDir and append entityId
+    const r2Key = `${privateDir.replace(/^\//, '')}${entityId}`;
     
-    // GCS/Replit implementation using objectStorageClient
-    if (!objectStorageClient) {
-      throw new Error('Storage client not initialized for GCS/Replit mode');
-    }
+    console.log('[ObjectStorage] R2 Key:', r2Key);
+    console.log('[ObjectStorage] Checking if R2 object exists...');
     
-    // Use the same entityId extracted above (works for both normalized and legacy paths)
-    console.log('[getObjectEntityFile] Building object entity path for GCS/Replit');
-    
-    const objectEntityPath = `${privateDir}${entityId}`;
-    console.log('[getObjectEntityFile] Full object entity path:', objectEntityPath);
-    
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    console.log('[getObjectEntityFile] Bucket name:', bucketName);
-    console.log('[getObjectEntityFile] Object name:', objectName);
-    
-    const bucket = objectStorageClient.bucket(bucketName);
-    const objectFile = bucket.file(objectName);
-    
-    console.log('[getObjectEntityFile] Checking if file exists...');
-    const [exists] = await objectFile.exists();
-    console.log('[getObjectEntityFile] File exists:', exists);
+    const exists = await this.checkR2ObjectExists(r2Key);
     
     if (!exists) {
-      console.log('[getObjectEntityFile] ERROR: File not found');
-      console.log('[getObjectEntityFile] ========== END (NOT FOUND) ==========');
+      console.log('[ObjectStorage] ERROR: R2 object not found');
+      console.log('[ObjectStorage] ========== END (NOT FOUND) ==========');
       throw new ObjectNotFoundError();
     }
     
-    console.log('[getObjectEntityFile] ========== END (SUCCESS) ==========');
-    return objectFile;
+    console.log('[ObjectStorage] R2 object exists, creating mock File object');
+    
+    // Return a mock File object with R2 key
+    const mockFile: MockFile = {
+      name: r2Key,
+      exists: () => Promise.resolve([true]),
+    };
+    
+    console.log('[ObjectStorage] ========== END (SUCCESS) ==========');
+    return mockFile;
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
-    const mode = detectStorageMode();
+    console.log('[ObjectStorage] Normalizing path:', rawPath);
     
-    if (mode === 'r2') {
-      // R2 implementation - NO parseObjectPath usage
-      console.log('[normalizeObjectEntityPath] R2 mode - path:', rawPath);
-      
-      // Already normalized
-      if (rawPath.startsWith('/objects/')) {
-        return rawPath;
-      }
-      
-      // Extract private object directory (without using parseObjectPath)
-      let objectEntityDir = this.getPrivateObjectDir();
-      if (!objectEntityDir.endsWith("/")) {
-        objectEntityDir = `${objectEntityDir}/`;
-      }
-      
-      // Remove leading slash for comparison
-      const normalizedDir = objectEntityDir.replace(/^\//, '');
-      const normalizedPath = rawPath.replace(/^\//, '');
-      
-      // Check if path starts with the private directory
-      if (normalizedPath.startsWith(normalizedDir)) {
-        const entityId = normalizedPath.slice(normalizedDir.length);
-        const normalized = `/objects/${entityId}`;
-        console.log('[normalizeObjectEntityPath] R2 normalized:', rawPath, '->', normalized);
-        return normalized;
-      }
-      
-      console.log('[normalizeObjectEntityPath] R2 path unchanged:', rawPath);
+    // Already normalized
+    if (rawPath.startsWith('/objects/')) {
       return rawPath;
     }
     
-    // GCS/Replit implementation
-    if (!rawPath.startsWith("https://storage.googleapis.com/")) {
-      return rawPath;
-    }
-
-    const url = new URL(rawPath);
-    const rawObjectPath = url.pathname;
-
+    // Extract private object directory
     let objectEntityDir = this.getPrivateObjectDir();
     if (!objectEntityDir.endsWith("/")) {
       objectEntityDir = `${objectEntityDir}/`;
     }
-
-    if (!rawObjectPath.startsWith(objectEntityDir)) {
-      return rawObjectPath;
+    
+    // Remove leading slash for comparison
+    const normalizedDir = objectEntityDir.replace(/^\//, '');
+    const normalizedPath = rawPath.replace(/^\//, '');
+    
+    // Check if path starts with the private directory
+    if (normalizedPath.startsWith(normalizedDir)) {
+      const entityId = normalizedPath.slice(normalizedDir.length);
+      const normalized = `/objects/${entityId}`;
+      console.log('[ObjectStorage] Normalized:', rawPath, '->', normalized);
+      return normalized;
     }
-
-    const entityId = rawObjectPath.slice(objectEntityDir.length);
-    return `/objects/${entityId}`;
+    
+    console.log('[ObjectStorage] Path unchanged:', rawPath);
+    return rawPath;
   }
 
   /**
-   * Normalizes any object path (GCS URL or local path) to /objects/... format
+   * Normalizes any object path to /objects/... format
    * This is used after uploads to ensure consistent path format in database.
    * 
    * Examples:
-   * - Input: https://storage.googleapis.com/bucket-id/content/ea-files/file.ex5
+   * - Input: /my-app/content/ea-files/file.ex5
    *   Output: /objects/ea-files/file.ex5
    * 
-   * - Input: /e119.../content/ea-files/file.ex5
-   *   Output: /objects/ea-files/file.ex5
-   * 
-   * @param rawPath - The raw path from upload (GCS URL or local path)
+   * @param rawPath - The raw path from upload
    * @returns Normalized path in /objects/... format
    */
   private normalizeToObjectsPath(rawPath: string): string {
-    console.log('[normalizeToObjectsPath] ========== START ==========');
-    console.log('[normalizeToObjectsPath] Input rawPath:', rawPath);
+    console.log('[ObjectStorage] ========== normalizeToObjectsPath START ==========');
+    console.log('[ObjectStorage] Input rawPath:', rawPath);
     
-    let pathToNormalize = rawPath;
-    
-    // If it's a GCS URL, extract the pathname
-    if (rawPath.startsWith("https://storage.googleapis.com/")) {
-      const url = new URL(rawPath);
-      pathToNormalize = url.pathname;
-      console.log('[normalizeToObjectsPath] Extracted pathname from GCS URL:', pathToNormalize);
-    }
-    
-    // Get the private object directory (e.g., /e119.../content)
+    // Get the private object directory (e.g., /my-app/content)
     let objectEntityDir = this.getPrivateObjectDir();
-    console.log('[normalizeToObjectsPath] Private object dir (before slash):', objectEntityDir);
+    console.log('[ObjectStorage] Private object dir (before slash):', objectEntityDir);
     
     if (!objectEntityDir.endsWith("/")) {
       objectEntityDir = `${objectEntityDir}/`;
     }
-    console.log('[normalizeToObjectsPath] Private object dir (after slash):', objectEntityDir);
+    console.log('[ObjectStorage] Private object dir (after slash):', objectEntityDir);
     
     // Check if the path starts with the private object directory
-    if (!pathToNormalize.startsWith(objectEntityDir)) {
+    if (!rawPath.startsWith(objectEntityDir)) {
       // Path doesn't match expected format, return as-is
       console.warn(
-        `[normalizeToObjectsPath] ERROR: Path doesn't start with private object dir.\n` +
+        `[ObjectStorage] ERROR: Path doesn't start with private object dir.\n` +
         `  Expected prefix: ${objectEntityDir}\n` +
-        `  Actual path: ${pathToNormalize}\n` +
+        `  Actual path: ${rawPath}\n` +
         `  This indicates the upload path was not constructed correctly!`
       );
-      console.log('[normalizeToObjectsPath] ========== END (ERROR) ==========');
-      return pathToNormalize;
+      console.log('[ObjectStorage] ========== END (ERROR) ==========');
+      return rawPath;
     }
     
     // Extract the entity ID (everything after the private directory)
-    const entityId = pathToNormalize.slice(objectEntityDir.length);
-    console.log('[normalizeToObjectsPath] Extracted entityId:', entityId);
+    const entityId = rawPath.slice(objectEntityDir.length);
+    console.log('[ObjectStorage] Extracted entityId:', entityId);
     
     // Return normalized path
     const normalized = `/objects/${entityId}`;
-    console.log('[normalizeToObjectsPath] Normalized path:', normalized);
-    console.log('[normalizeToObjectsPath] ========== END (SUCCESS) ==========');
+    console.log('[ObjectStorage] Normalized path:', normalized);
+    console.log('[ObjectStorage] ========== END (SUCCESS) ==========');
     
     return normalized;
   }
@@ -852,22 +463,13 @@ export class ObjectStorageService {
     rawPath: string,
     aclPolicy: ObjectAclPolicy
   ): Promise<string> {
-    const mode = detectStorageMode();
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
     
-    if (!normalizedPath.startsWith("/")) {
-      return normalizedPath;
-    }
-
-    if (mode === 'r2') {
-      console.log('[trySetObjectEntityAclPolicy] R2 mode - skipping ACL policy set (R2 uses bucket-level permissions)');
-      console.log('[trySetObjectEntityAclPolicy] ACL policy would be:', JSON.stringify(aclPolicy));
-      console.log('[trySetObjectEntityAclPolicy] Note: For R2, use presigned URLs with expiration for access control');
-      return normalizedPath;
-    }
-
-    const objectFile = await this.getObjectEntityFile(normalizedPath);
-    await setObjectAclPolicy(objectFile, aclPolicy);
+    console.log('[ObjectStorage] trySetObjectEntityAclPolicy called');
+    console.log('[ObjectStorage] R2 uses bucket-level permissions - ACL policy not applied');
+    console.log('[ObjectStorage] ACL policy would be:', JSON.stringify(aclPolicy));
+    console.log('[ObjectStorage] Note: For R2, use presigned URLs with expiration for access control');
+    
     return normalizedPath;
   }
 
@@ -877,22 +479,18 @@ export class ObjectStorageService {
     requestedPermission,
   }: {
     userId?: string;
-    objectFile: File;
+    objectFile: MockFile;
     requestedPermission?: ObjectPermission;
   }): Promise<boolean> {
-    const mode = detectStorageMode();
+    console.log('[ObjectStorage] canAccessObjectEntity called');
+    console.log('[ObjectStorage] R2 mode - ACL not supported, allowing access');
+    console.log('[ObjectStorage] Note: R2 relies on presigned URLs and bucket-level permissions');
+    console.log('[ObjectStorage] User ID:', userId);
+    console.log('[ObjectStorage] Requested permission:', requestedPermission);
     
-    if (mode === 'r2') {
-      console.log('[canAccessObjectEntity] R2 mode - ACL not supported, allowing access');
-      console.log('[canAccessObjectEntity] Note: R2 relies on presigned URLs and bucket-level permissions');
-      return true;
-    }
-    
-    return canAccessObject({
-      userId,
-      objectFile,
-      requestedPermission: requestedPermission ?? ObjectPermission.READ,
-    });
+    // R2 access control is handled via presigned URLs
+    // Always return true here; actual access control happens at URL signing time
+    return true;
   }
 
   async signObjectURL({
@@ -904,32 +502,12 @@ export class ObjectStorageService {
     method: "GET" | "PUT" | "DELETE" | "HEAD";
     ttlSec?: number;
   }): Promise<string> {
-    const mode = detectStorageMode();
-    const signer = this.getStorageSigner();
+    // Extract R2 key (remove leading slash)
+    const objectName = objectPath.replace(/^\//, '');
     
-    if (mode === 'r2') {
-      // R2 implementation - NO parseObjectPath usage
-      // R2Signer will use R2_BUCKET_NAME from env
-      // objectPath should be the R2 key (remove leading slash)
-      const objectName = objectPath.replace(/^\//, '');
-      
-      console.log('[signObjectURL] R2 mode - key:', objectName);
-      
-      // R2Signer doesn't use bucketName parameter (gets it from env)
-      // But we need to pass something to satisfy the interface
-      return signer.signURL({
-        bucketName: '', // Not used by R2Signer
-        objectName,
-        method,
-        ttlSec,
-      });
-    }
+    console.log('[ObjectStorage] Signing URL for R2 key:', objectName);
     
-    // GCS/Replit implementation using parseObjectPath
-    const { bucketName, objectName } = parseObjectPath(objectPath);
-    
-    return signer.signURL({
-      bucketName,
+    return this.signR2URL({
       objectName,
       method,
       ttlSec,
@@ -941,189 +519,82 @@ export class ObjectStorageService {
     buffer: Buffer,
     contentType: string
   ): Promise<string> {
-    console.log('[uploadFromBuffer] ========== START ==========');
-    console.log('[uploadFromBuffer] Object path:', objectPath);
-    console.log('[uploadFromBuffer] Content type:', contentType);
-    console.log('[uploadFromBuffer] Buffer size:', buffer.length);
+    console.log('[ObjectStorage] ========== uploadFromBuffer START ==========');
+    console.log('[ObjectStorage] Object path:', objectPath);
+    console.log('[ObjectStorage] Content type:', contentType);
+    console.log('[ObjectStorage] Buffer size:', buffer.length);
     
-    const mode = detectStorageMode();
-    console.log('[uploadFromBuffer] Storage mode:', mode);
+    const bucketName = this.getBucketName();
+    console.log('[ObjectStorage] R2 bucket name:', bucketName);
     
-    let uploadedPath: string;
-    
-    if (mode === 'r2') {
-      // R2 implementation - NO parseObjectPath usage, use S3Client directly
-      console.log('[uploadFromBuffer] ========== R2 MODE UPLOAD ==========');
-      console.log('[uploadFromBuffer] Input objectPath:', objectPath);
+    try {
+      const s3Client = this.getS3Client();
       
-      const bucketName = process.env.R2_BUCKET_NAME;
-      if (!bucketName) {
-        throw new Error('R2_BUCKET_NAME environment variable not set');
-      }
-      console.log('[uploadFromBuffer] R2 bucket name:', bucketName);
+      // Extract R2 key from objectPath (remove leading slash and bucket prefix if present)
+      let objectKey = objectPath.replace(/^\//, '');
+      console.log('[ObjectStorage] Object key (after removing leading slash):', objectKey);
       
-      try {
-        // Use the shared R2 client from getR2Client()
-        const s3Client = this.getR2Client();
-        
-        // Extract R2 key from objectPath without using parseObjectPath
-        // Remove leading slash and any bucket prefix
-        let objectKey = objectPath.replace(/^\//, '');
-        console.log('[uploadFromBuffer] Object key (after removing leading slash):', objectKey);
-        
-        // If path starts with bucket name, remove it
-        if (objectKey.startsWith(bucketName + '/')) {
-          const beforeStrip = objectKey;
-          objectKey = objectKey.slice(bucketName.length + 1);
-          console.log('[uploadFromBuffer] Stripped bucket prefix:', beforeStrip, '->', objectKey);
-        }
-        
-        console.log('[uploadFromBuffer] Uploading to R2...');
-        console.log('[uploadFromBuffer]   Bucket:', bucketName);
-        console.log('[uploadFromBuffer]   Key:', objectKey);
-        console.log('[uploadFromBuffer]   Content-Type:', contentType);
-        console.log('[uploadFromBuffer]   Buffer size:', buffer.length);
-        
-        const command = new PutObjectCommand({
-          Bucket: bucketName,
-          Key: objectKey,
-          Body: buffer,
-          ContentType: contentType,
-        });
-        
-        await s3Client.send(command);
-        console.log('[uploadFromBuffer] R2 upload successful to key:', objectKey);
-        
-        // CRITICAL: Preserve the original objectPath for normalization
-        // This must be the FULL path with private dir prefix so normalization can work
-        // Example: /e119.../content/uploads/filename.jpg
-        uploadedPath = objectPath;
-        console.log('[uploadFromBuffer] Set uploadedPath for normalization:', uploadedPath);
-      } catch (error: any) {
-        console.error('[uploadFromBuffer] ========== R2 UPLOAD ERROR ==========');
-        console.error('[uploadFromBuffer] Error name:', error.name);
-        console.error('[uploadFromBuffer] Error message:', error.message);
-        console.error('[uploadFromBuffer] Error stack:', error.stack);
-        console.error('[uploadFromBuffer] Input objectPath:', objectPath);
-        console.error('[uploadFromBuffer] Bucket:', bucketName);
-        throw error;
-      }
-    } else if (mode === 'replit') {
-      // On Replit: Use official Replit SDK with contentType support
-      console.log('[uploadFromBuffer] Using Replit SDK for upload...');
-      
-      try {
-        // The Replit SDK handles bucket mapping internally - we just pass the full path
-        // Path format: /bucket-id/content/... → SDK translates bucket-id to actual GCS bucket
-        const client = new ReplitStorageClient();
-        
-        console.log('[uploadFromBuffer] Uploading via Replit SDK...');
-        console.log('[uploadFromBuffer] Path:', objectPath);
-        console.log('[uploadFromBuffer] Content-Type:', contentType);
-        console.log('[uploadFromBuffer] Note: Replit SDK does not support setting contentType during upload');
-        
-        // Upload the buffer using Replit SDK
-        // Note: UploadOptions only supports compress option, not contentType
-        const result = await client.uploadFromBytes(objectPath, buffer);
-        
-        console.log('[uploadFromBuffer] Replit SDK upload returned:', result);
-        
-        // CRITICAL: Verify file actually exists after upload
-        // Replit SDK claims success but files may not exist
-        if (!objectStorageClient) {
-          throw new Error('Storage client not initialized for Replit mode');
-        }
-        
-        const { bucketName, objectName } = parseObjectPath(objectPath);
-        const bucket = objectStorageClient.bucket(bucketName);
-        const file = bucket.file(objectName);
-        
-        console.log('[uploadFromBuffer] Verifying upload...');
-        console.log('[uploadFromBuffer] Checking bucket:', bucketName);
-        console.log('[uploadFromBuffer] Checking object:', objectName);
-        
-        const [exists] = await file.exists();
-        console.log('[uploadFromBuffer] File exists after upload:', exists);
-        
-        if (!exists) {
-          throw new Error('Upload claimed success but file does not exist in storage');
-        }
-        
-        console.log('[uploadFromBuffer] Upload verified successfully!');
-        
-        // Use the object path for normalization
-        uploadedPath = objectPath;
-      } catch (error: any) {
-        console.error('[uploadFromBuffer] ERROR in Replit mode:');
-        console.error('[uploadFromBuffer] Error name:', error.name);
-        console.error('[uploadFromBuffer] Error message:', error.message);
-        console.error('[uploadFromBuffer] Error stack:', error.stack);
-        throw error;
-      }
-    } else {
-      // On non-Replit: Use Storage SDK directly
-      console.log('[uploadFromBuffer] Using GCS SDK direct upload...');
-      
-      if (!objectStorageClient) {
-        throw new Error('Storage client not initialized for GCS mode');
+      // If path starts with bucket name, remove it
+      if (objectKey.startsWith(bucketName + '/')) {
+        const beforeStrip = objectKey;
+        objectKey = objectKey.slice(bucketName.length + 1);
+        console.log('[ObjectStorage] Stripped bucket prefix:', beforeStrip, '->', objectKey);
       }
       
-      const { bucketName, objectName } = parseObjectPath(objectPath);
+      console.log('[ObjectStorage] Uploading to R2...');
+      console.log('[ObjectStorage]   Bucket:', bucketName);
+      console.log('[ObjectStorage]   Key:', objectKey);
+      console.log('[ObjectStorage]   Content-Type:', contentType);
+      console.log('[ObjectStorage]   Buffer size:', buffer.length);
       
-      try {
-        const bucket = objectStorageClient.bucket(bucketName);
-        const file = bucket.file(objectName);
-
-        await file.save(buffer, {
-          contentType,
-          metadata: {
-            contentType,
-          },
-        });
-
-        // Use GCS URL for normalization
-        uploadedPath = `https://storage.googleapis.com/${bucketName}/${objectName}`;
-        console.log('[uploadFromBuffer] GCS upload successful! URL:', uploadedPath);
-      } catch (error: any) {
-        console.error('[uploadFromBuffer] Upload FAILED:');
-        console.error('[uploadFromBuffer] Error name:', error.name);
-        console.error('[uploadFromBuffer] Error message:', error.message);
-        console.error('[uploadFromBuffer] Error stack:', error.stack);
-        throw error;
-      }
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+        Body: buffer,
+        ContentType: contentType,
+      });
+      
+      await s3Client.send(command);
+      console.log('[ObjectStorage] R2 upload successful to key:', objectKey);
+      
+      // Use the original objectPath for normalization
+      const uploadedPath = objectPath;
+      console.log('[ObjectStorage] Set uploadedPath for normalization:', uploadedPath);
+      
+      // Normalize the path to /objects/... format
+      // This ensures consistent database storage and download endpoint compatibility
+      const normalizedPath = this.normalizeToObjectsPath(uploadedPath);
+      
+      console.log('[ObjectStorage] ========== PATH NORMALIZATION ==========');
+      console.log('[ObjectStorage]   Raw uploaded path:', uploadedPath);
+      console.log('[ObjectStorage]   Normalized path:', normalizedPath);
+      console.log('[ObjectStorage]   Private object dir:', this.getPrivateObjectDir());
+      console.log('[ObjectStorage] ========== END ==========');
+      
+      return normalizedPath;
+    } catch (error: any) {
+      console.error('[ObjectStorage] ========== R2 UPLOAD ERROR ==========');
+      console.error('[ObjectStorage] Error name:', error.name);
+      console.error('[ObjectStorage] Error message:', error.message);
+      console.error('[ObjectStorage] Error stack:', error.stack);
+      console.error('[ObjectStorage] Input objectPath:', objectPath);
+      console.error('[ObjectStorage] Bucket:', bucketName);
+      throw error;
     }
-    
-    // Normalize the path to /objects/... format for both modes
-    // This ensures consistent database storage and download endpoint compatibility
-    const normalizedPath = this.normalizeToObjectsPath(uploadedPath);
-    
-    console.log('[uploadFromBuffer] ========== PATH NORMALIZATION ==========');
-    console.log('[uploadFromBuffer]   Raw uploaded path:', uploadedPath);
-    console.log('[uploadFromBuffer]   Normalized path:', normalizedPath);
-    console.log('[uploadFromBuffer]   Private object dir:', this.getPrivateObjectDir());
-    console.log('[uploadFromBuffer] ========== END ==========');
-    
-    return normalizedPath;
-  }
-}
-
-export function parseObjectPath(path: string): {
-  bucketName: string;
-  objectName: string;
-} {
-  if (!path.startsWith("/")) {
-    path = `/${path}`;
-  }
-  const pathParts = path.split("/");
-  if (pathParts.length < 3) {
-    throw new Error("Invalid path: must contain at least a bucket name");
   }
 
-  const bucketName = pathParts[1];
-  const objectName = pathParts.slice(2).join("/");
-
-  return {
-    bucketName,
-    objectName,
-  };
+  async deleteObject(objectPath: string): Promise<void> {
+    console.log('[ObjectStorage] ========== deleteObject START ==========');
+    console.log('[ObjectStorage] Object path:', objectPath);
+    
+    // Get the R2 key from the object path
+    const mockFile = await this.getObjectEntityFile(objectPath);
+    const objectKey = mockFile.name;
+    
+    console.log('[ObjectStorage] Deleting R2 object:', objectKey);
+    
+    await this.deleteR2Object(objectKey);
+    
+    console.log('[ObjectStorage] ========== deleteObject END ==========');
+  }
 }
